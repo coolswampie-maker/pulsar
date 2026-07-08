@@ -40,28 +40,30 @@ class OrderAdmin(admin.ModelAdmin):
     inlines = [BookingLineInline]
     actions = ['mark_confirmed', 'mark_rejected']
 
+    def save_related(self, request, form, formsets, change):
+        # позиции сохраняются после заявки — синхронизируем календарь уже с ними
+        super().save_related(request, form, formsets, change)
+        form.instance.sync_busy_slots()
+
     @admin.action(description='Подтвердить выбранные заявки')
     def mark_confirmed(self, request, queryset):
-        # при подтверждении переносим слоты в общий календарь занятости
         for order in queryset:
             order.status = 'confirmed'
-            order.save(update_fields=['status'])
-            for line in order.lines.all():
-                if line.date:
-                    BusySlot.objects.get_or_create(
-                        resource=line.resource, date=line.date,
-                        slot_start=line.slot_start, slot_end=line.slot_end,
-                        defaults={'note': f'Заявка {order.number}'})
+            order.save()  # save() сам заносит слоты в календарь
         self.message_user(request, f'Подтверждено заявок: {queryset.count()}')
 
     @admin.action(description='Отклонить выбранные заявки')
     def mark_rejected(self, request, queryset):
-        queryset.update(status='rejected')
+        for order in queryset:
+            order.status = 'rejected'
+            order.save()  # save() уберёт слоты этой заявки из календаря
 
 
 @admin.register(BusySlot)
 class BusySlotAdmin(admin.ModelAdmin):
-    list_display = ('resource', 'date', 'slot_start', 'slot_end', 'note')
-    list_filter = ('date',)
-    search_fields = ('resource__title',)
+    date_hierarchy = 'date'                      # навигация по годам/месяцам/дням
+    list_display = ('date', 'slot_start', 'slot_end', 'resource', 'note')
+    list_filter = ('date', 'resource__type', 'resource')
+    search_fields = ('resource__title', 'note')
     autocomplete_fields = ('resource',)
+    ordering = ('date', 'slot_start')

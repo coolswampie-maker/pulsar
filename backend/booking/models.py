@@ -100,6 +100,28 @@ class Order(models.Model):
     def __str__(self):
         return f'{self.number} — {self.org} ({self.get_status_display()})'
 
+    def sync_busy_slots(self):
+        """Подтверждённая заявка → её позиции попадают в общий календарь занятости.
+        Отменённая/новая → слоты этой заявки убираются."""
+        tag = f'Заявка {self.number}'
+        if self.status == 'confirmed':
+            for line in self.lines.all():
+                if line.date:
+                    BusySlot.objects.get_or_create(
+                        resource=line.resource, date=line.date,
+                        slot_start=line.slot_start, slot_end=line.slot_end,
+                        defaults={'note': tag})
+        else:
+            BusySlot.objects.filter(note=tag).delete()
+
+    def save(self, *args, **kwargs):
+        old_status = None
+        if self.pk:
+            old_status = type(self).objects.filter(pk=self.pk).values_list('status', flat=True).first()
+        super().save(*args, **kwargs)
+        if self.status != old_status:
+            self.sync_busy_slots()
+
 
 class BookingLine(models.Model):
     """Позиция заявки: ресурс + дата/слот. Оператор к прибору — связанная строка."""
