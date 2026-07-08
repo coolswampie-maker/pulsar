@@ -6,6 +6,8 @@
 """
 from django.contrib import admin
 from django.contrib.auth.models import Group, User
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet
 
 from .models import BookingLine, BusySlot, Order, Resource
 
@@ -57,8 +59,46 @@ class ResourceAdmin(RuTitlesMixin, admin.ModelAdmin):
     )
 
 
+class BookingLineFormSet(BaseInlineFormSet):
+    """Пересечения по времени: между позициями одной заявки — всегда;
+    с чужими бронями в календаре — при подтверждении заявки."""
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        rows = []
+        for form in self.forms:
+            cd = getattr(form, 'cleaned_data', None)
+            if not cd or cd.get('DELETE'):
+                continue
+            res, d = cd.get('resource'), cd.get('date')
+            if res and d:
+                rows.append((res, d, cd.get('slot_start'), cd.get('slot_end')))
+        # 1) позиции заявки не должны пересекаться между собой
+        for i, (r1, d1, s1, e1) in enumerate(rows):
+            for r2, d2, s2, e2 in rows[i + 1:]:
+                if r1 == r2 and d1 == d2 and _times_overlap(s1, e1, s2, e2):
+                    raise ValidationError(
+                        f'Две позиции на «{r1.title}» пересекаются по времени {d1:%d.%m.%Y}.')
+        # 2) при подтверждении — не должно быть пересечений с чужими бронями
+        status = self.data.get('status') or getattr(self.instance, 'status', None)
+        if status == 'confirmed':
+            tag = f'Заявка {self.instance.number}' if self.instance.number else None
+            for r, d, s, e in rows:
+                qs = BusySlot.objects.filter(resource=r, date=d)
+                if tag:
+                    qs = qs.exclude(note=tag)
+                for slot in qs:
+                    if _times_overlap(s, e, slot.slot_start, slot.slot_end):
+                        raise ValidationError(
+                            f'Ресурс «{r.title}» уже занят {d:%d.%m.%Y} в это время '
+                            f'({slot.note or "вручную"}).')
+
+
 class BookingLineInline(admin.TabularInline):
     model = BookingLine
+    formset = BookingLineFormSet
     extra = 0
     fields = ('resource', 'date', 'slot_start', 'slot_end', 'qty', 'hours', 'line_price', 'is_operator')
     readonly_fields = ('line_price',)  # сумма считается автоматически
@@ -329,7 +369,6 @@ class BusySlotAdmin(admin.ModelAdmin):
     # ---------- API планировщика (move/resize/create/delete) ----------
     def gantt_api(self, request):
         import json
-        import re
         from datetime import datetime
         from django.http import JsonResponse
         from .models import BookingLine, Order, Resource
@@ -378,18 +417,11 @@ class BusySlotAdmin(admin.ModelAdmin):
                     return JsonResponse({'ok': False, 'error': 'Окончание раньше начала'})
                 if self._conflict(r.pk, d, st, en):
                     return JsonResponse({'ok': False, 'error': 'Наложение с другой бронью'})
-                # Бронь из планировщика = подтверждённая заявка оператора
-                mx = 1000
-                for n in Order.objects.values_list('number', flat=True):
-                    m = re.match(r'PLS-(\d+)$', n or '')
-                    if m:
-                        mx = max(mx, int(m.group(1)))
-                number = f'PLS-{mx + 1}'
+                # Бронь из планировщика = подтверждённая заявка оператора (номер даёт модель)
                 hours = max(1, round(((en.hour * 60 + en.minute) - (st.hour * 60 + st.minute)) / 60))
                 org = (data.get('org') or '').strip() or 'Бронь оператора'
                 order = Order.objects.create(
-                    number=number, status='confirmed', org=org, contact_name=org,
-                    email='', phone='', note='Создано в планировщике')
+                    status='confirmed', org=org, contact_name=org, note='Создано в планировщике')
                 # line_price считается в BookingLine.save() автоматически
                 line = BookingLine.objects.create(
                     order=order, resource=r, date=d, slot_start=st, slot_end=en,
@@ -397,11 +429,11 @@ class BusySlotAdmin(admin.ModelAdmin):
                 order.subtotal = order.total = line.line_price
                 order.save(update_fields=['subtotal', 'total'])
                 order.sync_busy_slots()
-                slot = (BusySlot.objects.filter(note=f'Заявка {number}', resource=r, date=d,
+                slot = (BusySlot.objects.filter(note=f'Заявка {order.number}', resource=r, date=d,
                                                 slot_start=st, slot_end=en).order_by('-id').first())
                 return JsonResponse({'ok': True, 'id': slot.pk if slot else None, 'kind': 'order', 'del': True,
                                      'start': st.strftime('%H:%M'), 'end': en.strftime('%H:%M'),
-                                     'color': GANTT_COLORS.get(r.type, '#555'), 'number': number,
+                                     'color': GANTT_COLORS.get(r.type, '#555'), 'number': order.number,
                                      'href': f'/admin/booking/order/{order.pk}/change/'})
 
             if act == 'delete':

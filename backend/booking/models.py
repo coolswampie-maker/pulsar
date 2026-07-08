@@ -116,7 +116,19 @@ class Order(models.Model):
                         resource=line.resource, date=line.date,
                         slot_start=line.slot_start, slot_end=line.slot_end, note=tag)
 
+    @staticmethod
+    def next_number():
+        import re
+        mx = 1000
+        for n in Order.objects.values_list('number', flat=True):
+            m = re.match(r'PLS-(\d+)$', n or '')
+            if m:
+                mx = max(mx, int(m.group(1)))
+        return f'PLS-{mx + 1}'
+
     def save(self, *args, **kwargs):
+        if not self.number:
+            self.number = self.next_number()
         old_status = None
         if self.pk:
             old_status = type(self).objects.filter(pk=self.pk).values_list('status', flat=True).first()
@@ -144,11 +156,16 @@ class BookingLine(models.Model):
         verbose_name_plural = 'Позиции заявки'
 
     def clean(self):
-        # Нельзя забронировать больше единиц, чем есть в наличии.
         from django.core.exceptions import ValidationError
+        errors = {}
+        # Нельзя забронировать больше единиц, чем есть в наличии.
         if self.resource_id and self.qty and self.qty > self.resource.units_total:
-            raise ValidationError({'qty': f'Больше, чем есть в наличии '
-                                          f'({self.resource.units_total}).'})
+            errors['qty'] = f'Больше, чем есть в наличии ({self.resource.units_total}).'
+        # Окончание должно быть позже начала.
+        if self.slot_start and self.slot_end and self.slot_end <= self.slot_start:
+            errors['slot_end'] = 'Окончание должно быть позже начала.'
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
         # Сумма строки считается автоматически: цена × (часы для почасовых) × кол-во.
