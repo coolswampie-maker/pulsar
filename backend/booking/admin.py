@@ -96,20 +96,13 @@ class OrderAdmin(RuTitlesMixin, admin.ModelAdmin):
 
 
 GANTT_CSS = """
-body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;margin:0;background:#f5f6f8;color:#1b2733}
-.top{background:linear-gradient(90deg,#0E2A47,#0A1E33);color:#fff;padding:10px 18px;font-size:13px;display:flex;align-items:center;gap:2px;box-shadow:0 2px 10px rgba(10,30,51,.2)}
-.top a{color:#cfe0f0;text-decoration:none;padding:5px 10px;border-radius:6px}
-.top a:hover{color:#fff;background:rgba(255,255,255,.09)}
-.top .brand{display:inline-flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.05em;margin-right:8px}
-.top .brand b{font-weight:500;color:#9db4cc;font-size:12px;letter-spacing:0}
-.top .sp{flex:0 0 12px}
-h1{font-size:23px;margin:20px 16px 4px;color:#0E2A47;letter-spacing:-.02em}
-.sub{margin:0 16px 12px;color:#889;font-size:13px}
-.filters{margin:0 16px 12px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+#gantt{color:#1b2733}
+.sub{margin:-4px 0 14px;color:#889;font-size:13px}
+.filters{margin:0 0 12px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .filters a{display:inline-block;padding:4px 11px;border:1px solid #cdd6df;border-radius:16px;color:#345;text-decoration:none}
 .filters a.on{background:#264b63;color:#fff;border-color:#264b63}
 .filters .hint{color:#96a0ab;border:none;margin-left:6px}
-.wrap{overflow-x:auto;margin:0 16px 14px;border:1px solid #dde;border-radius:8px;background:#fff}
+.wrap{overflow-x:auto;margin:0 0 14px;border:1px solid #dde;border-radius:8px;background:#fff}
 table{border-collapse:collapse;min-width:900px;font-size:12px;width:100%}
 th,td{border:1px solid #eef}
 th{background:#f0f3f7;position:sticky;top:0;text-align:center;padding:6px 4px;font-weight:600;min-width:118px}
@@ -129,16 +122,18 @@ td.day.wknd{background-color:#faf6f0}
 .bar .lbl{pointer-events:none}
 .today{box-shadow:inset 0 3px 0 #c99b3f}
 .empty{padding:30px;text-align:center;color:#889}
-.legend{margin:0 16px 26px;font-size:12px;color:#556;display:flex;gap:18px;flex-wrap:wrap}
+.legend{margin:14px 0 6px;font-size:12px;color:#556;display:flex;gap:18px;flex-wrap:wrap}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1b2733;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:.25s;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:50}
 #toast.show{opacity:1}
 #toast.bad{background:#9a3b2b}
-.pager{margin:0 16px 12px;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
-.pager a{display:inline-block;padding:5px 12px;border:1px solid #cdd6df;border-radius:16px;color:#264b63;text-decoration:none;font-weight:600}
+.pager{margin:0 0 14px;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+.pager a{display:inline-block;padding:6px 13px;border:1px solid #cdd6df;border-radius:9px;color:#264b63;text-decoration:none;font-weight:600}
 .pager a:hover{background:#eef2f6}
 .pager a.today-btn{border-color:#264b63}
-.pager .range{color:#5a6675;margin-left:4px;font-variant-numeric:tabular-nums}
+.pager a.on{background:#264b63;color:#fff;border-color:#264b63}
+.pager .pgsep{flex:0 0 1px;align-self:stretch;background:#d8dee6;margin:2px 4px}
+.pager .range{color:#5a6675;margin-left:2px;font-variant-numeric:tabular-nums}
 #ov{position:fixed;inset:0;background:rgba(14,42,71,.4);display:none;align-items:center;justify-content:center;z-index:60}
 #ov.show{display:flex}
 .modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(10,30,51,.4);width:350px;max-width:92vw;overflow:hidden;animation:pop .16s ease-out}
@@ -159,7 +154,7 @@ td.day.wknd{background-color:#faf6f0}
 """
 GANTT_JS = """
 (function(){
-  var body=document.body, API=body.dataset.api, CSRF=body.dataset.csrf;
+  var root=document.getElementById('gantt'), API=root.dataset.api, CSRF=root.dataset.csrf;
   var DS=8, DE=20, TOTAL=(DE-DS)*60, SNAP=30;
   function pad(n){return (n<10?'0':'')+n;}
   function m2s(m){return pad(Math.floor(m/60))+':'+pad(m%60);}
@@ -425,11 +420,11 @@ class BusySlotAdmin(admin.ModelAdmin):
     # ---------- страница Ганта ----------
     def gantt_view(self, request):
         from datetime import timedelta
-        from django.http import HttpResponse
-        from django.middleware.csrf import get_token
+        from django.template.response import TemplateResponse
         from django.urls import reverse
         from django.utils import timezone
         from django.utils.html import escape
+        from django.utils.safestring import mark_safe
         from .models import Order, Resource
 
         api_url = reverse('admin:booking_busyslot_gantt_api')
@@ -534,33 +529,27 @@ class BusySlotAdmin(admin.ModelAdmin):
             f'<a class="today-btn" href="{base}?type={rtype}&days={span}&off=0">сегодня</a>'
             f'<a href="{base}?type={rtype}&days={span}&off={off + span}">позже ▶</a>'
             f'<span class="range">{days[0].day:02d}.{days[0].month:02d} — '
-            f'{days[-1].day:02d}.{days[-1].month:02d}.{days[-1].year}</span>')
+            f'{days[-1].day:02d}.{days[-1].month:02d}.{days[-1].year}</span>'
+            '<span class="pgsep"></span>'
+            + ''.join(
+                f'<a class="{"on" if span == n else ""}" '
+                f'href="{base}?type={rtype}&days={n}&off={off}">{label}</a>'
+                for n, label in [(7, '7 дней'), (14, '14'), (30, '30')]))
 
         legend = ''.join(f'<span><i style="background:{GANTT_COLORS[t]}"></i>{GANTT_LABELS[t]}</span>'
                          for t in GANTT_COLORS)
-        star = ('<svg class="star" viewBox="0 0 40 40" width="20" height="20" aria-hidden="true">'
-                '<g transform="rotate(-28 20 20)"><ellipse cx="20" cy="20" rx="11.5" ry="4.6" fill="none" '
-                'stroke="#cfe0f0" stroke-width="1.7" opacity=".5"/><path d="M20 16.4 L17.6 3 L22.4 3 Z" fill="#CBA968"/>'
-                '<path d="M20 23.6 L17.6 37 L22.4 37 Z" fill="#CBA968"/><circle cx="20" cy="20" r="3.6" fill="#fff"/></g></svg>')
 
-        html = (
-            '<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<title>Планировщик · ПУЛЬСАР</title><style>' + GANTT_CSS + '</style></head>'
-            f'<body data-api="{api_url}" data-csrf="{get_token(request)}">'
-            '<div class="top"><span class="brand">' + star + 'ПУЛЬСАР<b>планировщик</b></span>'
-            f'<span class="sp"></span><a href="{reverse("admin:index")}">← Обзор</a>'
-            f'<span class="sp"></span><a href="{base}?type={rtype}&days=7&off={off}">7 дней</a>'
-            f'<a href="{base}?type={rtype}&days=14&off={off}">14</a>'
-            f'<a href="{base}?type={rtype}&days=30&off={off}">30</a></div>'
-            '<h1>Календарь занятости</h1>'
-            '<div class="sub">Шкала дня 8:00–20:00, шаг 30 мин · наложения блокируются автоматически.</div>'
-            '<div class="pager">' + pager + '</div>'
-            '<div class="filters">' + filters + '</div>'
-            '<div class="wrap"><table><thead><tr>' + head + '</tr></thead><tbody>' + rows +
-            '</tbody></table></div>'
-            '<div class="legend">' + legend + '</div>'
-            '<div id="toast"></div><div id="ov"></div>'
-            '<script>' + GANTT_JS + '</script>'
-            '</body></html>')
-        return HttpResponse(html)
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Календарь занятости',
+            'api_url': api_url,
+            'gantt_css': mark_safe(GANTT_CSS),
+            'gantt_js': mark_safe(GANTT_JS),
+            'sub': 'Шкала дня 8:00–20:00, шаг 30 мин · наложения блокируются автоматически.',
+            'pager': mark_safe(pager),
+            'filters': mark_safe(filters),
+            'thead': mark_safe(head),
+            'rows': mark_safe(rows),
+            'legend': mark_safe(legend),
+        }
+        return TemplateResponse(request, 'admin/booking/busyslot/gantt.html', context)
