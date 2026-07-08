@@ -61,6 +61,7 @@ class BookingLineInline(admin.TabularInline):
     model = BookingLine
     extra = 0
     fields = ('resource', 'date', 'slot_start', 'slot_end', 'qty', 'hours', 'line_price', 'is_operator')
+    readonly_fields = ('line_price',)  # сумма считается автоматически
     autocomplete_fields = ('resource',)
 
 
@@ -77,9 +78,14 @@ class OrderAdmin(RuTitlesMixin, admin.ModelAdmin):
     actions = ['mark_confirmed', 'mark_rejected']
 
     def save_related(self, request, form, formsets, change):
-        # позиции сохраняются после заявки — синхронизируем календарь уже с ними
+        # позиции сохраняются после заявки — пересчитываем итог и синхронизируем календарь
         super().save_related(request, form, formsets, change)
-        form.instance.sync_busy_slots()
+        order = form.instance
+        order.subtotal = sum(line.line_price for line in order.lines.all())
+        order.discount = round(order.subtotal * 0.25) if order.resident else 0
+        order.total = max(0, order.subtotal - order.discount)
+        order.save(update_fields=['subtotal', 'discount', 'total'])
+        order.sync_busy_slots()
 
     @admin.action(description='Подтвердить выбранные заявки')
     def mark_confirmed(self, request, queryset):
@@ -378,15 +384,16 @@ class BusySlotAdmin(admin.ModelAdmin):
                         mx = max(mx, int(m.group(1)))
                 number = f'PLS-{mx + 1}'
                 hours = max(1, round(((en.hour * 60 + en.minute) - (st.hour * 60 + st.minute)) / 60))
-                price = r.price_value * hours
                 org = (data.get('org') or '').strip() or 'Бронь оператора'
                 order = Order.objects.create(
                     number=number, status='confirmed', org=org, contact_name=org,
-                    email='', phone='', note='Создано в планировщике',
-                    subtotal=price, discount=0, total=price)
-                BookingLine.objects.create(
+                    email='', phone='', note='Создано в планировщике')
+                # line_price считается в BookingLine.save() автоматически
+                line = BookingLine.objects.create(
                     order=order, resource=r, date=d, slot_start=st, slot_end=en,
-                    qty=1, hours=hours, unit_price=r.price_value, line_price=price)
+                    qty=1, hours=hours)
+                order.subtotal = order.total = line.line_price
+                order.save(update_fields=['subtotal', 'total'])
                 order.sync_busy_slots()
                 slot = (BusySlot.objects.filter(note=f'Заявка {number}', resource=r, date=d,
                                                 slot_start=st, slot_end=en).order_by('-id').first())

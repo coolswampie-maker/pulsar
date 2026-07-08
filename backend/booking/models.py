@@ -151,5 +151,13 @@ class BookingLine(models.Model):
             raise ValidationError({'qty': f'Больше, чем есть в наличии '
                                           f'({self.resource.units_total}).'})
 
+    def save(self, *args, **kwargs):
+        # Сумма строки считается автоматически: цена × (часы для почасовых) × кол-во.
+        if self.resource_id:
+            self.unit_price = self.resource.price_value
+            per = self.hours if (self.resource.book_mode == 'hour' and self.hours) else 1
+            self.line_price = self.unit_price * per * (self.qty or 1)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f'{self.resource_id} · {self.date or "—"}'
