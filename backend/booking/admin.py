@@ -5,8 +5,15 @@
  • Календарь занятости.
 """
 from django.contrib import admin
+from django.contrib.auth.models import Group, User
 
 from .models import BookingLine, BusySlot, Order, Resource
+
+# Управление доступом (пока за всё отвечает один администратор) — прячем
+# стандартный блок «Пользователи и группы», чтобы не путал в CRM.
+# Вернуть — просто убрать эти две строки.
+admin.site.unregister(Group)
+admin.site.unregister(User)
 
 
 @admin.register(Resource)

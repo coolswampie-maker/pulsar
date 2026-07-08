@@ -44,5 +44,15 @@ a.button, .button, input[type=submit], .submit-row input[type=submit]{background
 .button, input[type=submit], input[type=button], .submit-row input, a.button{border-radius:7px}
 .object-tools a{border-radius:16px}
 .calendarbox, .clockbox{z-index:1}
+/* Контент — на всю ширину экрана (Django по умолчанию сужает #content) */
+#content{width:auto!important;max-width:none!important;margin-right:0!important;box-sizing:border-box;flex:1 1 auto;padding:22px 40px 60px}
+#content-main{float:none;width:auto}
+/* Дашборд: слева разделы во всю ширину, справа — «Последние действия» */
+.dashboard #content{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:32px;align-items:start}
+.dashboard #content-main,.dashboard #content-related{float:none;width:auto;margin:0}
+.dashboard #content-main{grid-column:1}
+.dashboard #content-related{grid-column:2}
+.dashboard .module table{width:100%}
+@media (max-width:1024px){.dashboard #content{grid-template-columns:1fr}}
 </style>
 {% endblock %}
