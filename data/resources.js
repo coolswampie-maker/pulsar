@@ -135,7 +135,7 @@ window.PULSAR.baseResources = [
   lab:'Механические и теплофизические испытания', priceValue:4500, priceUnit:'сутки', minUnits:1,
   specs:['Теплопроводность методом стационарного потока','Контрольные образцы (пеноплэкс, оргстекло) в комплекте','Транспортный кофр','Поверка 2024 г.'],
   description:'Прибор для измерения теплопроводности строительных и теплоизоляционных материалов методом стационарного теплового потока. Доступ с инструктажем.',
-  requiresOperator:null, bundledWith:[], img:'eq-meter'
+  requiresOperator:null, bundledWith:[], img:'eq-its1'
 },
 {
   id:'eq-3dprint', type:'equipment', bookMode:'day', category:'materials',
