@@ -40,6 +40,9 @@ class Resource(models.Model):
     price_value = models.PositiveIntegerField('Цена, ₽', default=0)
     price_unit = models.CharField('Единица цены', max_length=20, default='час')
     min_units = models.PositiveSmallIntegerField('Мин. единиц', default=1)
+    units_total = models.PositiveSmallIntegerField(
+        'Единиц в наличии', default=1,
+        help_text='Сколько одинаковых единиц ресурса есть физически (приборов, мест, специалистов).')
 
     image = models.CharField('Ключ/URL фото', max_length=200, blank=True)
     requires_operator = models.ForeignKey(
@@ -140,6 +143,13 @@ class BookingLine(models.Model):
     class Meta:
         verbose_name = 'Позиция заявки'
         verbose_name_plural = 'Позиции заявки'
+
+    def clean(self):
+        # Нельзя забронировать больше единиц, чем есть в наличии.
+        from django.core.exceptions import ValidationError
+        if self.resource_id and self.qty and self.qty > self.resource.units_total:
+            raise ValidationError({'qty': f'Больше, чем есть в наличии '
+                                          f'({self.resource.units_total}).'})
 
     def __str__(self):
         return f'{self.resource_id} · {self.date or "—"}'

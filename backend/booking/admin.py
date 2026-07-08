@@ -52,7 +52,7 @@ class ResourceAdmin(RuTitlesMixin, admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': ('slug', 'type', 'category', 'book_mode', 'is_active')}),
         ('Карточка', {'fields': ('title', 'lab', 'clean_class', 'description', 'specs', 'image')}),
-        ('Цена', {'fields': ('price_value', 'price_unit', 'min_units')}),
+        ('Цена и наличие', {'fields': ('price_value', 'price_unit', 'min_units', 'units_total')}),
         ('Связи', {'fields': ('requires_operator', 'bundled_with')}),
     )
 
