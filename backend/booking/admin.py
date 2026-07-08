@@ -61,10 +61,13 @@ class OrderAdmin(admin.ModelAdmin):
 
 GANTT_CSS = """
 body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;margin:0;background:#f5f6f8;color:#1b2733}
-.top{background:#264b63;color:#fff;padding:9px 16px;font-size:13px}
-.top a{color:#cfe0f0;text-decoration:none;margin-right:8px}
-.top a:hover{color:#fff}
-h1{font-size:19px;margin:18px 16px 4px}
+.top{background:linear-gradient(90deg,#0E2A47,#0A1E33);color:#fff;padding:10px 18px;font-size:13px;display:flex;align-items:center;gap:2px;box-shadow:0 2px 10px rgba(10,30,51,.2)}
+.top a{color:#cfe0f0;text-decoration:none;padding:5px 10px;border-radius:6px}
+.top a:hover{color:#fff;background:rgba(255,255,255,.09)}
+.top .brand{display:inline-flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.05em;margin-right:8px}
+.top .brand b{font-weight:500;color:#9db4cc;font-size:12px;letter-spacing:0}
+.top .sp{flex:0 0 12px}
+h1{font-size:23px;margin:20px 16px 4px;color:#0E2A47;letter-spacing:-.02em}
 .sub{margin:0 16px 12px;color:#889;font-size:13px}
 .filters{margin:0 16px 12px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .filters a{display:inline-block;padding:4px 11px;border:1px solid #cdd6df;border-radius:16px;color:#345;text-decoration:none}
@@ -183,6 +186,12 @@ class BusySlotAdmin(admin.ModelAdmin):
         ]
         return extra + super().get_urls()
 
+    def changelist_view(self, request, extra_context=None):
+        # «Календарь занятости» = Гант-планировщик; сырой список записей — по ?list=1
+        if request.GET.get('list'):
+            return super().changelist_view(request, extra_context)
+        return self.gantt_view(request)
+
     # ---------- конфликты ----------
     def _conflict(self, resource_id, d, start, end, exclude_pk=None):
         qs = BusySlot.objects.filter(resource_id=resource_id, date=d)
@@ -252,9 +261,13 @@ class BusySlotAdmin(admin.ModelAdmin):
         from datetime import timedelta
         from django.http import HttpResponse
         from django.middleware.csrf import get_token
+        from django.urls import reverse
         from django.utils import timezone
         from django.utils.html import escape
         from .models import Order, Resource
+
+        api_url = reverse('admin:booking_busyslot_gantt_api')
+        base = reverse('admin:booking_busyslot_changelist')
 
         try:
             span = max(7, min(60, int(request.GET.get('days', 14))))
@@ -333,24 +346,31 @@ class BusySlotAdmin(admin.ModelAdmin):
 
         def flt(t, label):
             on = ' on' if t == rtype else ''
-            return f'<a class="f{on}" href="?type={t}&days={span}">{label}</a>'
+            return f'<a class="f{on}" href="{base}?type={t}&days={span}">{label}</a>'
         filters = (flt('equipment', 'Оборудование') + flt('room', 'Лаборатории') +
                    flt('specialist', 'Специалисты') + flt('service', 'Услуги') +
                    flt('busy', 'Только с бронями') +
-                   '<span class="hint">· клик по пустому = создать · тянуть = двигать · края = менять длительность · 2× клик = удалить · клик по брони = открыть</span>')
+                   '<span class="hint">· клик по пустому = создать · тянуть = двигать · края = длительность · 2× клик = удалить · клик по брони = открыть</span>')
 
         legend = ''.join(f'<span><i style="background:{GANTT_COLORS[t]}"></i>{GANTT_LABELS[t]}</span>'
                          for t in GANTT_COLORS)
+        star = ('<svg class="star" viewBox="0 0 40 40" width="20" height="20" aria-hidden="true">'
+                '<g transform="rotate(-28 20 20)"><ellipse cx="20" cy="20" rx="11.5" ry="4.6" fill="none" '
+                'stroke="#cfe0f0" stroke-width="1.7" opacity=".5"/><path d="M20 16.4 L17.6 3 L22.4 3 Z" fill="#CBA968"/>'
+                '<path d="M20 23.6 L17.6 37 L22.4 37 Z" fill="#CBA968"/><circle cx="20" cy="20" r="3.6" fill="#fff"/></g></svg>')
 
         html = (
             '<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<title>Планировщик · ПУЛЬСАР</title><style>' + GANTT_CSS + '</style></head>'
-            f'<body data-api="api/" data-csrf="{get_token(request)}">'
-            '<div class="top"><a href="../">← к списку занятости</a><a href="/admin/">админка</a>'
-            f'<a href="?type={rtype}&days=7">7 дней</a><a href="?type={rtype}&days=14">14 дней</a>'
-            f'<a href="?type={rtype}&days=30">30 дней</a></div>'
-            '<h1>Планировщик · Гант</h1>'
-            f'<div class="sub">Шкала дня 8:00–20:00, шаг 30 мин. Наложения броней блокируются автоматически.</div>'
+            f'<body data-api="{api_url}" data-csrf="{get_token(request)}">'
+            '<div class="top"><span class="brand">' + star + 'ПУЛЬСАР<b>планировщик</b></span>'
+            f'<span class="sp"></span><a href="{base}?list=1">☰ список записей</a>'
+            f'<a href="{reverse("admin:index")}">админка</a>'
+            f'<span class="sp"></span><a href="{base}?type={rtype}&days=7">7 дней</a>'
+            f'<a href="{base}?type={rtype}&days=14">14</a><a href="{base}?type={rtype}&days=30">30</a></div>'
+            '<h1>Календарь занятости</h1>'
+            '<div class="sub">Шкала дня 8:00–20:00, шаг 30 мин · наложения блокируются автоматически.</div>'
             '<div class="filters">' + filters + '</div>'
             '<div class="wrap"><table><thead><tr>' + head + '</tr></thead><tbody>' + rows +
             '</tbody></table></div>'
