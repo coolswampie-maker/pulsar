@@ -85,9 +85,9 @@ class Order(models.Model):
     status = models.CharField('Статус', max_length=12, choices=ORDER_STATUS, default='new')
 
     org = models.CharField('Организация', max_length=200)
-    contact_name = models.CharField('Контактное лицо', max_length=200)
-    email = models.EmailField('Email')
-    phone = models.CharField('Телефон', max_length=40)
+    contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)
+    email = models.EmailField('Email', blank=True)
+    phone = models.CharField('Телефон', max_length=40, blank=True)
     note = models.TextField('Комментарий', blank=True)
     resident = models.BooleanField('Резидент ИНТЦ', default=False)
 
@@ -104,18 +104,17 @@ class Order(models.Model):
         return f'{self.number} — {self.org} ({self.get_status_display()})'
 
     def sync_busy_slots(self):
-        """Подтверждённая заявка → её позиции попадают в общий календарь занятости.
-        Отменённая/новая → слоты этой заявки убираются."""
+        """Пересобирает слоты календаря по текущим позициям заявки.
+        Сначала убираем все слоты этой заявки (чтобы не оставалось «призраков»
+        после переноса/удаления позиций), затем для подтверждённой создаём заново."""
         tag = f'Заявка {self.number}'
+        BusySlot.objects.filter(note=tag).delete()
         if self.status == 'confirmed':
             for line in self.lines.all():
                 if line.date:
-                    BusySlot.objects.get_or_create(
+                    BusySlot.objects.create(
                         resource=line.resource, date=line.date,
-                        slot_start=line.slot_start, slot_end=line.slot_end,
-                        defaults={'note': tag})
-        else:
-            BusySlot.objects.filter(note=tag).delete()
+                        slot_start=line.slot_start, slot_end=line.slot_end, note=tag)
 
     def save(self, *args, **kwargs):
         old_status = None

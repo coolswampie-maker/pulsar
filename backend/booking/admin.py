@@ -314,6 +314,8 @@ class BusySlotAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         # «Календарь занятости» = Гант-планировщик; сырой список записей — по ?list=1
         if request.GET.get('list'):
+            request.GET = request.GET.copy()
+            request.GET.pop('list', None)  # иначе Django примет параметр за фильтр
             return super().changelist_view(request, extra_context)
         return self.gantt_view(request)
 
