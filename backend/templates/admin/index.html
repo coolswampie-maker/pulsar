@@ -1,0 +1,77 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% for app in app_list %}
+  <div class="pulsar-section">{{ app.name }}</div>
+  <div class="pulsar-cards">
+    {% for model in app.models %}
+    <div class="pcard">
+      <a class="pcard-main" href="{{ model.admin_url|default:model.add_url }}">
+        <span class="pcard-ic">
+          {% if model.object_name == 'Order' %}
+            <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3.2A1.2 1.2 0 0 1 10.2 2h3.6A1.2 1.2 0 0 1 15 3.2V4"/><path d="M8.5 12.5l2 2 4-4.5"/></svg>
+          {% elif model.object_name == 'BusySlot' %}
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7 14h3v3H7z"/></svg>
+          {% else %}
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          {% endif %}
+        </span>
+        <span class="pcard-title">{{ model.name }}</span>
+        <span class="pcard-desc">
+          {% if model.object_name == 'Order' %}Входящие брони: статусы, состав, подтверждение
+          {% elif model.object_name == 'BusySlot' %}Планировщик-Гант: занятость и расстановка броней
+          {% else %}Оборудование, лаборатории, специалисты, услуги{% endif %}
+        </span>
+      </a>
+      <div class="pcard-foot">
+        <a class="pcard-open" href="{{ model.admin_url|default:model.add_url }}">Открыть →</a>
+        {% if model.add_url %}<a class="pcard-add" href="{{ model.add_url }}">+&nbsp;Добавить</a>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+  <div class="module" id="recent-actions-module">
+    <h2>{% translate 'Recent actions' %}</h2>
+    <h3>{% translate 'My actions' %}</h3>
+    {% load log %}
+    {% get_admin_log 10 as admin_log for_user user %}
+    {% if not admin_log %}
+    <p>{% translate 'None available' %}</p>
+    {% else %}
+    <ul class="actionlist">
+    {% for entry in admin_log %}
+      <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+        <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
+        {% if entry.is_deletion or not entry.get_admin_url %}
+          {{ entry.object_repr }}
+        {% else %}
+          <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+        {% endif %}
+        <br>
+        {% if entry.content_type %}
+          <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+        {% else %}
+          <span class="mini quiet">{% translate 'Unknown content' %}</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
