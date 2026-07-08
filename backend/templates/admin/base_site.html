@@ -53,8 +53,22 @@ a.button, .button, input[type=submit], .submit-row input[type=submit]{background
 .dashboard #content-main{grid-column:1}
 .dashboard #content-related{grid-column:2}
 .dashboard .module table{width:100%}
-/* На дашборде оставляем только «Добавить»; правка — внутри списка у конкретной записи */
-.dashboard #content-main .changelink{display:none!important}
+/* Дашборд: разделы как карточки с иконками */
+.pulsar-section{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a97a5;margin:2px 0 15px}
+.pulsar-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:18px;margin-bottom:8px}
+.pcard{background:#fff;border:1px solid #e3e8ee;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .16s,transform .16s,border-color .16s;box-shadow:0 1px 2px rgba(14,42,71,.04)}
+.pcard:hover{box-shadow:0 12px 30px rgba(14,42,71,.13);transform:translateY(-2px);border-color:#cbd5e1}
+.pcard-main{display:block;padding:22px 22px 18px;text-decoration:none;color:inherit;flex:1}
+.pcard-ic{display:inline-flex;width:48px;height:48px;align-items:center;justify-content:center;border-radius:13px;background:linear-gradient(135deg,#0E2A47,#12365a);margin-bottom:15px}
+.pcard-ic svg{width:25px;height:25px;stroke:#CBA968;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.pcard-title{display:block;font-size:17px;font-weight:700;color:#0E2A47;margin-bottom:6px}
+.pcard-desc{display:block;font-size:13px;line-height:1.45;color:#68727f}
+.pcard-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 22px;border-top:1px solid #eef2f6;background:#fafbfc}
+.pcard-foot a{text-decoration:none;font-size:13px;font-weight:600}
+.pcard-open{color:#124a7a}
+.pcard-open:hover{color:#0E2A47}
+.pcard-add{color:#856831;background:#f4ecdc;padding:5px 12px;border-radius:8px;white-space:nowrap}
+.pcard-add:hover{background:#ece0c6;color:#6f561f}
 @media (max-width:1024px){.dashboard #content{grid-template-columns:1fr}}
 </style>
 {% endblock %}
