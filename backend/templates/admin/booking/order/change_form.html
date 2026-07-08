@@ -1,0 +1,44 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_related_objects %}{{ block.super }}
+<script id="res-units" type="application/json">{{ res_units_json|safe }}</script>
+<script>
+// Ограничиваем «кол-во» в позиции по наличию выбранного ресурса (стрелка вверх упрётся в потолок).
+(function () {
+  function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+  ready(function () {
+    var el = document.getElementById('res-units');
+    var UNITS = {};
+    try { UNITS = JSON.parse(el.textContent || '{}'); } catch (e) {}
+    function applyMax(sel) {
+      var row = sel.closest('tr'); if (!row) return;
+      var qty = row.querySelector('input[name$="-qty"]'); if (!qty) return;
+      qty.min = 1;
+      var u = UNITS[sel.value];
+      if (u) {
+        qty.max = u;
+        qty.title = 'В наличии: ' + u;
+        if (parseInt(qty.value || '1', 10) > u) qty.value = u;
+      } else {
+        qty.removeAttribute('max');
+        qty.removeAttribute('title');
+      }
+    }
+    function initAll() {
+      document.querySelectorAll('select[name$="-resource"]').forEach(applyMax);
+    }
+    initAll();
+    var jq = window.django && django.jQuery;
+    if (jq) {
+      // select2 у автокомплита шлёт change на нижележащий <select>
+      jq(document).on('change', 'select[name$="-resource"]', function () { applyMax(this); });
+      jq(document).on('formset:added', function () { setTimeout(initAll, 50); });
+    } else {
+      document.addEventListener('change', function (e) {
+        if (e.target.matches && e.target.matches('select[name$="-resource"]')) applyMax(e.target);
+      });
+    }
+  });
+})();
+</script>
+{% endblock %}

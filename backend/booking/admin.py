@@ -118,6 +118,19 @@ class OrderAdmin(RuTitlesMixin, admin.ModelAdmin):
     inlines = [BookingLineInline]
     actions = ['mark_confirmed', 'mark_rejected']
 
+    def _with_units(self, extra_context):
+        # карта «ресурс → единиц в наличии» — чтобы ограничить «кол-во» прямо в форме
+        import json
+        ec = dict(extra_context or {})
+        ec['res_units_json'] = json.dumps(dict(Resource.objects.values_list('slug', 'units_total')))
+        return ec
+
+    def add_view(self, request, form_url='', extra_context=None):
+        return super().add_view(request, form_url, self._with_units(extra_context))
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        return super().change_view(request, object_id, form_url, self._with_units(extra_context))
+
     def save_related(self, request, form, formsets, change):
         # позиции сохраняются после заявки — пересчитываем итог и синхронизируем календарь
         super().save_related(request, form, formsets, change)

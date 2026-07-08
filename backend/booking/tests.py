@@ -209,6 +209,12 @@ class RenderTests(Base):
         r = self.c.get(base, {'list': 1})
         self.assertEqual(r.status_code, 200)
 
+    def test_order_form_carries_units_map(self):
+        # карта наличия для ограничения «кол-ва» в форме
+        r = self.c.get(reverse('admin:booking_order_add'))
+        self.assertContains(r, 'res-units')
+        self.assertContains(r, 'eq1')
+
     def test_admin_pages_load(self):
         for name, args in [
             ('admin:index', []),
