@@ -97,43 +97,43 @@ class OrderAdmin(RuTitlesMixin, admin.ModelAdmin):
 
 GANTT_CSS = """
 #gantt{color:#1b2733}
-.sub{margin:-4px 0 14px;color:#889;font-size:13px}
-.filters{margin:0 0 12px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
-.filters a{display:inline-block;padding:4px 11px;border:1px solid #cdd6df;border-radius:16px;color:#345;text-decoration:none}
-.filters a.on{background:#264b63;color:#fff;border-color:#264b63}
-.filters .hint{color:#96a0ab;border:none;margin-left:6px}
-.wrap{overflow-x:auto;margin:0 0 14px;border:1px solid #dde;border-radius:8px;background:#fff}
-table{border-collapse:collapse;min-width:900px;font-size:12px;width:100%}
-th,td{border:1px solid #eef}
-th{background:#f0f3f7;position:sticky;top:0;text-align:center;padding:6px 4px;font-weight:600;min-width:118px}
-th b{display:block}
-th span{color:#8892a0;font-weight:400;font-size:11px}
-th.wknd,td.wknd{background:#faf6f0}
-.rescol{position:sticky;left:0;background:#fff;z-index:2;text-align:left;padding:9px 11px;min-width:240px;max-width:240px;border-right:2px solid #dde;font-weight:600;line-height:1.3}
-th.rescol{z-index:3;background:#f0f3f7}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
-td.day{position:relative;height:34px;padding:0;cursor:copy;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(8.333% - 1px),#e9edf3 calc(8.333% - 1px),#e9edf3 8.333%)}
-td.day.wknd{background-color:#faf6f0}
-.bar{position:absolute;top:4px;bottom:4px;border-radius:4px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;padding:0 3px;box-shadow:0 1px 2px rgba(0,0,0,.18);font-variant-numeric:tabular-nums;cursor:grab;user-select:none;touch-action:none}
-.bar.dragging{cursor:grabbing;opacity:.85;z-index:6;box-shadow:0 3px 10px rgba(0,0,0,.3);pointer-events:none}
-.bar .h{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
-.bar .hl{left:0}
-.bar .hr{right:0}
-.bar .lbl{pointer-events:none}
-.today{box-shadow:inset 0 3px 0 #c99b3f}
-.empty{padding:30px;text-align:center;color:#889}
-.legend{margin:14px 0 6px;font-size:12px;color:#556;display:flex;gap:18px;flex-wrap:wrap}
-.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle}
+#gantt .sub{margin:-4px 0 14px;color:#889;font-size:13px}
+#gantt .filters{margin:0 0 12px;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+#gantt .filters a{display:inline-block;padding:4px 11px;border:1px solid #cdd6df;border-radius:16px;color:#345;text-decoration:none}
+#gantt .filters a.on{background:#264b63;color:#fff;border-color:#264b63}
+#gantt .filters .hint{color:#96a0ab;border:none;margin-left:6px}
+#gantt .wrap{overflow-x:auto;margin:0 0 14px;border:1px solid #dde;border-radius:8px;background:#fff}
+#gantt table{border-collapse:collapse;min-width:900px;font-size:12px;width:100%}
+#gantt th,#gantt td{border:1px solid #eef}
+#gantt th{background:#f0f3f7;position:sticky;top:0;text-align:center;padding:6px 4px;font-weight:600;min-width:118px}
+#gantt th b{display:block}
+#gantt th span{color:#8892a0;font-weight:400;font-size:11px}
+#gantt th.wknd,#gantt td.wknd{background:#faf6f0}
+#gantt .rescol{position:sticky;left:0;background:#fff;z-index:2;text-align:left;padding:9px 11px;min-width:240px;max-width:240px;border-right:2px solid #dde;font-weight:600;line-height:1.3}
+#gantt th.rescol{z-index:3;background:#f0f3f7}
+#gantt .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
+#gantt td.day{position:relative;height:34px;padding:0;cursor:copy;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(8.333% - 1px),#e9edf3 calc(8.333% - 1px),#e9edf3 8.333%)}
+#gantt td.day.wknd{background-color:#faf6f0}
+#gantt .bar{position:absolute;top:4px;bottom:4px;border-radius:4px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;padding:0 3px;box-shadow:0 1px 2px rgba(0,0,0,.18);font-variant-numeric:tabular-nums;cursor:grab;user-select:none;touch-action:none}
+#gantt .bar.dragging{cursor:grabbing;opacity:.85;z-index:6;box-shadow:0 3px 10px rgba(0,0,0,.3);pointer-events:none}
+#gantt .bar .h{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
+#gantt .bar .hl{left:0}
+#gantt .bar .hr{right:0}
+#gantt .bar .lbl{pointer-events:none}
+#gantt .today{box-shadow:inset 0 3px 0 #c99b3f}
+#gantt .empty{padding:30px;text-align:center;color:#889}
+#gantt .legend{margin:14px 0 6px;font-size:12px;color:#556;display:flex;gap:18px;flex-wrap:wrap}
+#gantt .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1b2733;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:.25s;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:50}
 #toast.show{opacity:1}
 #toast.bad{background:#9a3b2b}
-.pager{margin:0 0 14px;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
-.pager a{display:inline-block;padding:6px 13px;border:1px solid #cdd6df;border-radius:9px;color:#264b63;text-decoration:none;font-weight:600}
-.pager a:hover{background:#eef2f6}
-.pager a.today-btn{border-color:#264b63}
-.pager a.on{background:#264b63;color:#fff;border-color:#264b63}
-.pager .pgsep{flex:0 0 1px;align-self:stretch;background:#d8dee6;margin:2px 4px}
-.pager .range{color:#5a6675;margin-left:2px;font-variant-numeric:tabular-nums}
+#gantt .pager{margin:0 0 14px;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+#gantt .pager a{display:inline-block;padding:6px 13px;border:1px solid #cdd6df;border-radius:9px;color:#264b63;text-decoration:none;font-weight:600}
+#gantt .pager a:hover{background:#eef2f6}
+#gantt .pager a.today-btn{border-color:#264b63}
+#gantt .pager a.on{background:#264b63;color:#fff;border-color:#264b63}
+#gantt .pager .pgsep{flex:0 0 1px;align-self:stretch;background:#d8dee6;margin:2px 4px}
+#gantt .pager .range{color:#5a6675;margin-left:2px;font-variant-numeric:tabular-nums}
 #ov{position:fixed;inset:0;background:rgba(14,42,71,.4);display:none;align-items:center;justify-content:center;z-index:60}
 #ov.show{display:flex}
 .modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(10,30,51,.4);width:350px;max-width:92vw;overflow:hidden;animation:pop .16s ease-out}
