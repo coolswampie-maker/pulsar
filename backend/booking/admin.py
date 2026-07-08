@@ -69,15 +69,16 @@ h1{font-size:19px;margin:18px 16px 4px}
 .wrap{overflow-x:auto;margin:0 16px 14px;border:1px solid #dde;border-radius:8px;background:#fff}
 table{border-collapse:collapse;min-width:900px;font-size:12px;width:100%}
 th,td{border:1px solid #eef}
-th{background:#f0f3f7;position:sticky;top:0;text-align:center;padding:6px 4px;font-weight:600;min-width:66px}
+th{background:#f0f3f7;position:sticky;top:0;text-align:center;padding:6px 4px;font-weight:600;min-width:118px}
 th b{display:block}
 th span{color:#8892a0;font-weight:400;font-size:11px}
 th.wknd,td.wknd{background:#faf6f0}
 .rescol{position:sticky;left:0;background:#fff;z-index:2;text-align:left;padding:9px 11px;min-width:240px;max-width:240px;border-right:2px solid #dde;font-weight:600;line-height:1.3}
 th.rescol{z-index:3;background:#f0f3f7}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
-td.busy{padding:3px;vertical-align:top}
-.bar{color:#fff;border-radius:4px;padding:3px 5px;font-size:11px;margin-bottom:3px;white-space:nowrap;text-align:center;font-variant-numeric:tabular-nums}
+td.day{position:relative;height:34px;padding:0;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(8.333% - 1px),#e9edf3 calc(8.333% - 1px),#e9edf3 8.333%)}
+td.day.wknd{background-color:#faf6f0}
+.bar{position:absolute;top:4px;bottom:4px;border-radius:4px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;padding:0 3px;box-shadow:0 1px 2px rgba(0,0,0,.18);font-variant-numeric:tabular-nums}
 .today{box-shadow:inset 0 3px 0 #c99b3f}
 .empty{padding:30px;text-align:center;color:#889}
 .legend{margin:0 16px 26px;font-size:12px;color:#556;display:flex;gap:18px;flex-wrap:wrap}
@@ -127,15 +128,34 @@ class BusySlotAdmin(admin.ModelAdmin):
         cells = {}
         for s in slots:
             resources.setdefault(s.resource_id, s.resource)
-            label = (s.slot_start.strftime('%H:%M') + '–' + s.slot_end.strftime('%H:%M')
-                     if s.slot_start else 'весь день')
-            cells.setdefault((s.resource_id, s.date), []).append((label, s.note or ''))
+            cells.setdefault((s.resource_id, s.date), []).append(s)
+
+        DAY_START, DAY_END = 8.0, 20.0            # рабочее окно на шкале дня
+        SPAN_H = DAY_END - DAY_START
 
         def daycls(d):
             c = 'wknd' if d.weekday() >= 5 else ''
             if d == today:
                 c = (c + ' today').strip()
             return c
+
+        def bar_html(slot, color):
+            if slot.slot_start:
+                s = slot.slot_start.hour + slot.slot_start.minute / 60
+                e = (slot.slot_end.hour + slot.slot_end.minute / 60) if slot.slot_end else s + 1
+                s = max(DAY_START, min(DAY_END, s)); e = max(DAY_START, min(DAY_END, e))
+                if e <= s:
+                    e = s + 0.5
+                left = (s - DAY_START) / SPAN_H * 100
+                width = max(7, (e - s) / SPAN_H * 100)
+                short = slot.slot_start.strftime('%H:%M')
+                full = slot.slot_start.strftime('%H:%M') + '–' + (slot.slot_end.strftime('%H:%M') if slot.slot_end else '')
+                style = f'left:{left:.1f}%;width:{width:.1f}%;background:{color}'
+            else:
+                short, full = 'весь день', 'весь день'
+                style = f'left:1%;width:98%;background:{color}'
+            title = full + (' · ' + slot.note if slot.note else '')
+            return f'<div class="bar" style="{style}" title="{escape(title)}">{escape(short)}</div>'
 
         head = '<th class="rescol">Ресурс</th>' + ''.join(
             f'<th class="{daycls(d)}"><b>{d.day:02d}.{d.month:02d}</b>'
@@ -146,14 +166,9 @@ class BusySlotAdmin(admin.ModelAdmin):
             color = GANTT_COLORS.get(r.type, '#555')
             tds = ''
             for d in days:
-                items = cells.get((pk, d))
-                if items:
-                    bars = ''.join(
-                        f'<div class="bar" style="background:{color}" title="{escape(n)}">{escape(l)}</div>'
-                        for l, n in items)
-                    tds += f'<td class="busy {daycls(d)}">{bars}</td>'
-                else:
-                    tds += f'<td class="{daycls(d)}"></td>'
+                items = cells.get((pk, d)) or []
+                inner = ''.join(bar_html(s, color) for s in items)
+                tds += f'<td class="day {daycls(d)}">{inner}</td>'
             rows += (f'<tr><td class="rescol"><span class="dot" style="background:{color}"></span>'
                      f'{escape(r.title)}</td>{tds}</tr>')
 
@@ -171,8 +186,8 @@ class BusySlotAdmin(admin.ModelAdmin):
             '<a href="/admin/">админка</a>'
             '<a href="?days=7">7 дней</a><a href="?days=14">14 дней</a><a href="?days=30">30 дней</a></div>'
             '<h1>Общее расписание · Гант</h1>'
-            f'<div class="sub">Подтверждённые брони на {span} дней. Полоса = занятость ресурса; '
-            'жёлтая метка сверху — сегодня.</div>'
+            f'<div class="sub">Подтверждённые брони на {span} дней · шкала дня 8:00–20:00 (деления по часам). '
+            'Полосы позиционируются по времени — свободные промежутки видны, день набивается плотно.</div>'
             '<div class="wrap"><table><thead><tr>' + head + '</tr></thead><tbody>' + rows +
             '</tbody></table></div>'
             '<div class="legend">' + legend + '</div>'
