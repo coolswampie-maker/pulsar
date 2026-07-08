@@ -16,8 +16,34 @@ admin.site.unregister(Group)
 admin.site.unregister(User)
 
 
+class RuTitlesMixin:
+    """Человеческие заголовки страниц: Django по умолчанию ставит именительный
+    падеж («Изменить Заявка», «Выберите Заявка для изменения»)."""
+    ru_plural = None   # заголовок списка
+    ru_add = None      # заголовок формы добавления
+    ru_change = None   # заголовок формы редактирования
+
+    def changelist_view(self, request, extra_context=None):
+        if self.ru_plural:
+            extra_context = {**(extra_context or {}), 'title': self.ru_plural}
+        return super().changelist_view(request, extra_context)
+
+    def add_view(self, request, form_url='', extra_context=None):
+        if self.ru_add:
+            extra_context = {**(extra_context or {}), 'title': self.ru_add}
+        return super().add_view(request, form_url, extra_context)
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        if self.ru_change:
+            extra_context = {**(extra_context or {}), 'title': self.ru_change}
+        return super().change_view(request, object_id, form_url, extra_context)
+
+
 @admin.register(Resource)
-class ResourceAdmin(admin.ModelAdmin):
+class ResourceAdmin(RuTitlesMixin, admin.ModelAdmin):
+    ru_plural = 'Каталог ресурсов'
+    ru_add = 'Добавление ресурса'
+    ru_change = 'Изменение ресурса'
     list_display = ('title', 'type', 'category', 'price_value', 'price_unit', 'is_active')
     list_filter = ('type', 'category', 'is_active')
     search_fields = ('slug', 'title', 'lab')
@@ -39,7 +65,10 @@ class BookingLineInline(admin.TabularInline):
 
 
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
+class OrderAdmin(RuTitlesMixin, admin.ModelAdmin):
+    ru_plural = 'Заявки'
+    ru_add = 'Добавление заявки'
+    ru_change = 'Изменение заявки'
     list_display = ('number', 'org', 'contact_name', 'status', 'total', 'created_at')
     list_filter = ('status', 'resident', 'created_at')
     search_fields = ('number', 'org', 'contact_name', 'email', 'phone')

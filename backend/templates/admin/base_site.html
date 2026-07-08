@@ -2,6 +2,18 @@
 
 {% block title %}{{ title }} | ПУЛЬСАР — оператор{% endblock %}
 
+{% block extrahead %}{{ block.super }}
+<script>
+// Инлайн-кнопки Django строит через JS в именительном падеже
+// («Добавить ещё один Позиция заявки») — правим на нормальный вид.
+window.addEventListener('load', function () {
+  document.querySelectorAll('.add-row a, a.add-handler').forEach(function (a) {
+    if (/ещ[её] один Позиция заявки/i.test(a.textContent)) a.textContent = 'Добавить позицию заявки';
+  });
+});
+</script>
+{% endblock %}
+
 {% block branding %}
 <div id="site-name">
   <a href="{% url 'admin:index' %}">
