@@ -105,6 +105,28 @@ td.day.wknd{background-color:#faf6f0}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1b2733;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:.25s;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:50}
 #toast.show{opacity:1}
 #toast.bad{background:#9a3b2b}
+.pager{margin:0 16px 12px;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+.pager a{display:inline-block;padding:5px 12px;border:1px solid #cdd6df;border-radius:16px;color:#264b63;text-decoration:none;font-weight:600}
+.pager a:hover{background:#eef2f6}
+.pager a.today-btn{border-color:#264b63}
+.pager .range{color:#5a6675;margin-left:4px;font-variant-numeric:tabular-nums}
+#ov{position:fixed;inset:0;background:rgba(14,42,71,.4);display:none;align-items:center;justify-content:center;z-index:60}
+#ov.show{display:flex}
+.modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(10,30,51,.4);width:350px;max-width:92vw;overflow:hidden;animation:pop .16s ease-out}
+@keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.modal h3{margin:0;padding:14px 18px;background:linear-gradient(90deg,#0E2A47,#0A1E33);color:#fff;font-size:15px;font-weight:700}
+.modal .bd{padding:16px 18px}
+.modal .who{color:#0E2A47;font-weight:700;line-height:1.35;margin:0 0 14px;font-size:14.5px}
+.modal .who span{display:block;color:#8892a0;font-weight:400;font-size:12.5px;margin-top:2px}
+.modal .row{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;gap:12px}
+.modal .row:last-child{margin-bottom:0}
+.modal label{color:#5a6675;font-size:13px}
+.modal input,.modal select{font:inherit;font-size:14px;padding:7px 10px;border:1px solid #cdd6df;border-radius:8px;background:#fff;color:#1b2733}
+.modal .act{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;background:#f5f7f9;border-top:1px solid #eef}
+.modal button{font:inherit;font-size:13.5px;padding:8px 16px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+.modal .ok{background:#9C7638;color:#fff}
+.modal .ok.danger{background:#9a3b2b}
+.modal .cancel{background:#e7ebef;color:#334}
 """
 GANTT_JS = """
 (function(){
@@ -115,8 +137,59 @@ GANTT_JS = """
   function s2m(s){var p=s.split(':');return (+p[0])*60+(+p[1]);}
   function toast(msg,bad){var t=document.getElementById('toast');t.textContent=msg;t.className='show'+(bad?' bad':'');clearTimeout(t._t);t._t=setTimeout(function(){t.className='';},2600);}
   function post(p){return fetch(API,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},body:JSON.stringify(p)}).then(function(r){return r.json();});}
+  function resName(el){var tr=el.closest('tr');var c=tr&&tr.querySelector('.rescol');return c?c.textContent.trim():'';}
+  function fmtDate(iso){var p=iso.split('-');return p[2]+'.'+p[1]+'.'+p[0];}
   function place(bar,sM,eM){bar.style.left=((sM-DS*60)/TOTAL*100).toFixed(1)+'%';bar.style.width=Math.max(7,(eM-sM)/TOTAL*100).toFixed(1)+'%';bar.dataset.start=m2s(sM);bar.dataset.end=m2s(eM);bar.querySelector('.lbl').textContent=m2s(sM);bar.title=m2s(sM)+'–'+m2s(eM);}
-  function mkBar(cell,res){var b=document.createElement('div');b.className='bar';b.dataset.id=res.id;b.dataset.href=res.href;b.style.background=res.color||cell.dataset.color;b.innerHTML='<span class="h hl"></span><span class="lbl"></span><span class="h hr"></span>';cell.appendChild(b);place(b,s2m(res.start),s2m(res.end));return b;}
+  function mkBar(cell,res){var b=document.createElement('div');b.className='bar';b.dataset.id=res.id;b.dataset.href=res.href;b.dataset.kind='manual';b.style.background=res.color||cell.dataset.color;b.innerHTML='<span class="h hl"></span><span class="lbl"></span><span class="h hr"></span>';cell.appendChild(b);place(b,s2m(res.start),s2m(res.end));return b;}
+
+  // ---------- модальное окно ----------
+  var ov=document.getElementById('ov');
+  function closeModal(){ov.className='';ov.innerHTML='';}
+  ov.addEventListener('click',function(e){if(e.target===ov)closeModal();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+  function modal(title,bodyHTML,actions){
+    ov.innerHTML='<div class="modal"><h3>'+title+'</h3><div class="bd">'+bodyHTML+'</div><div class="act"></div></div>';
+    ov.className='show';
+    var act=ov.querySelector('.act');
+    actions.forEach(function(a){var b=document.createElement('button');b.className=a.cls||'cancel';b.textContent=a.label;b.onclick=a.fn;act.appendChild(b);});
+  }
+
+  // клик по брони → меню «Открыть / Удалить»
+  function openBar(bar){
+    var kind=bar.dataset.kind;
+    var body='<div class="who">'+resName(bar)+'<span>'+bar.dataset.start+'–'+bar.dataset.end+(kind==='order'?' · из заявки':' · вручную')+'</span></div>';
+    var acts=[{label:'Отмена',cls:'cancel',fn:closeModal}];
+    if(bar.dataset.href) acts.unshift({label:kind==='order'?'Открыть заявку':'Открыть запись',cls:'ok',fn:function(){window.location=bar.dataset.href;}});
+    if(kind!=='order') acts.unshift({label:'Удалить',cls:'ok danger',fn:function(){
+      post({action:'delete',id:bar.dataset.id}).then(function(r){if(r.ok){bar.remove();closeModal();toast('Бронь удалена');}else{toast(r.error||'Ошибка',true);}});
+    }});
+    modal('Бронь',body,acts);
+  }
+
+  // клик по пустому → окно создания (без мгновенной брони)
+  function openCreate(cell,startM){
+    var date=cell.dataset.date;
+    var body='<div class="who">'+resName(cell)+'<span>'+fmtDate(date)+'</span></div>'
+      +'<div class="row"><label>Начало</label><input id="mStart" type="time" step="1800" value="'+m2s(startM)+'"></div>'
+      +'<div class="row"><label>Длительность</label><select id="mDur">'
+      +'<option value="30">30 минут</option><option value="60" selected>1 час</option>'
+      +'<option value="120">2 часа</option><option value="240">4 часа</option>'
+      +'<option value="480">смена (8 ч)</option><option value="720">весь день</option></select></div>';
+    modal('Новая бронь',body,[
+      {label:'Отмена',cls:'cancel',fn:closeModal},
+      {label:'Создать',cls:'ok',fn:function(){
+        var sM=s2m(document.getElementById('mStart').value);
+        var eM=Math.min(DE*60,sM+parseInt(document.getElementById('mDur').value,10));
+        if(sM<DS*60||sM>=DE*60){toast('Время вне рабочего дня (8:00–20:00)',true);return;}
+        if(eM<=sM){toast('Некорректное время',true);return;}
+        post({action:'create',resource:cell.dataset.res,date:date,start:m2s(sM),end:m2s(eM)})
+          .then(function(res){if(res.ok){mkBar(cell,res);closeModal();toast('Бронь создана');}else{toast(res.error||'Ошибка',true);}})
+          .catch(function(){toast('Сеть недоступна',true);});
+      }}
+    ]);
+  }
+
+  // ---------- перетаскивание / изменение длительности ----------
   var drag=null, suppress=false;
   document.addEventListener('pointerdown',function(e){
     var bar=e.target.closest('.bar'); if(!bar) return; e.preventDefault();
@@ -142,22 +215,16 @@ GANTT_JS = """
       .then(function(res){if(res.ok){toast('Сохранено');}else{place(d.bar,d.sM,d.eM);toast(res.error||'Ошибка',true);}})
       .catch(function(){place(d.bar,d.sM,d.eM);toast('Сеть недоступна',true);});
   });
+
+  // ---------- клики ----------
   document.addEventListener('click',function(e){
     if(suppress){suppress=false;return;}
-    var bar=e.target.closest('.bar');
-    if(bar){ if(bar.dataset.href) window.location=bar.dataset.href; return; }
+    if(e.target.closest('.modal')) return;
+    var bar=e.target.closest('.bar'); if(bar){openBar(bar);return;}
     var cell=e.target.closest('td.day'); if(!cell) return;
     var rect=cell.getBoundingClientRect();
     var mins=DS*60+Math.round(((e.clientX-rect.left)/rect.width*TOTAL)/SNAP)*SNAP;
-    var sM=Math.max(DS*60,Math.min(DE*60-60,mins)), eM=sM+60;
-    post({action:'create',resource:cell.dataset.res,date:cell.dataset.date,start:m2s(sM),end:m2s(eM)})
-      .then(function(res){if(res.ok){mkBar(cell,res);toast('Бронь создана');}else{toast(res.error||'Ошибка',true);}})
-      .catch(function(){toast('Сеть недоступна',true);});
-  });
-  document.addEventListener('dblclick',function(e){
-    var bar=e.target.closest('.bar'); if(!bar) return; e.preventDefault();
-    if(!confirm('Удалить эту бронь из календаря?')) return;
-    post({action:'delete',id:bar.dataset.id}).then(function(res){if(res.ok){bar.remove();toast('Удалено');}else{toast(res.error||'Ошибка',true);}});
+    openCreate(cell,Math.max(DS*60,Math.min(DE*60-60,mins)));
   });
 })();
 """
@@ -280,12 +347,16 @@ class BusySlotAdmin(admin.ModelAdmin):
             span = max(7, min(60, int(request.GET.get('days', 14))))
         except ValueError:
             span = 14
+        try:
+            off = max(-365, min(365, int(request.GET.get('off', 0))))
+        except ValueError:
+            off = 0
         rtype = request.GET.get('type', 'equipment')
         if rtype not in ('room', 'equipment', 'specialist', 'service', 'busy'):
             rtype = 'equipment'
 
         today = timezone.localdate()
-        days = [today + timedelta(days=i) for i in range(span)]
+        days = [today + timedelta(days=off + i) for i in range(span)]
 
         slots = (BusySlot.objects.select_related('resource')
                  .filter(date__gte=days[0], date__lte=days[-1])
@@ -327,7 +398,9 @@ class BusySlotAdmin(admin.ModelAdmin):
             full = (slot.slot_start.strftime('%H:%M') + '–' +
                     (slot.slot_end.strftime('%H:%M') if slot.slot_end else '')) if slot.slot_start else 'весь день'
             title = full + (' · ' + slot.note if slot.note else '')
-            return (f'<div class="bar" data-id="{slot.pk}" data-start="{lbl if slot.slot_start else "08:00"}" '
+            kind = 'order' if (slot.note and slot.note.startswith('Заявка ')) else 'manual'
+            return (f'<div class="bar" data-id="{slot.pk}" data-kind="{kind}" '
+                    f'data-start="{lbl if slot.slot_start else "08:00"}" '
                     f'data-end="{slot.slot_end.strftime("%H:%M") if slot.slot_end else "20:00"}" '
                     f'data-href="{href_for(slot)}" style="left:{left:.1f}%;width:{width:.1f}%;background:{color}" '
                     f'title="{escape(title)}"><span class="h hl"></span>'
@@ -353,11 +426,18 @@ class BusySlotAdmin(admin.ModelAdmin):
 
         def flt(t, label):
             on = ' on' if t == rtype else ''
-            return f'<a class="f{on}" href="{base}?type={t}&days={span}">{label}</a>'
+            return f'<a class="f{on}" href="{base}?type={t}&days={span}&off={off}">{label}</a>'
         filters = (flt('equipment', 'Оборудование') + flt('room', 'Лаборатории') +
                    flt('specialist', 'Специалисты') + flt('service', 'Услуги') +
                    flt('busy', 'Только с бронями') +
-                   '<span class="hint">· клик по пустому = создать · тянуть = двигать · края = длительность · 2× клик = удалить · клик по брони = открыть</span>')
+                   '<span class="hint">· клик по пустому — новая бронь · перетаскивание — время · края — длительность · клик по брони — меню</span>')
+
+        pager = (
+            f'<a href="{base}?type={rtype}&days={span}&off={off - span}">◀ раньше</a>'
+            f'<a class="today-btn" href="{base}?type={rtype}&days={span}&off=0">сегодня</a>'
+            f'<a href="{base}?type={rtype}&days={span}&off={off + span}">позже ▶</a>'
+            f'<span class="range">{days[0].day:02d}.{days[0].month:02d} — '
+            f'{days[-1].day:02d}.{days[-1].month:02d}.{days[-1].year}</span>')
 
         legend = ''.join(f'<span><i style="background:{GANTT_COLORS[t]}"></i>{GANTT_LABELS[t]}</span>'
                          for t in GANTT_COLORS)
@@ -372,17 +452,18 @@ class BusySlotAdmin(admin.ModelAdmin):
             '<title>Планировщик · ПУЛЬСАР</title><style>' + GANTT_CSS + '</style></head>'
             f'<body data-api="{api_url}" data-csrf="{get_token(request)}">'
             '<div class="top"><span class="brand">' + star + 'ПУЛЬСАР<b>планировщик</b></span>'
-            f'<span class="sp"></span><a href="{base}?list=1">☰ список записей</a>'
-            f'<a href="{reverse("admin:index")}">админка</a>'
-            f'<span class="sp"></span><a href="{base}?type={rtype}&days=7">7 дней</a>'
-            f'<a href="{base}?type={rtype}&days=14">14</a><a href="{base}?type={rtype}&days=30">30</a></div>'
+            f'<span class="sp"></span><a href="{reverse("admin:index")}">← Обзор</a>'
+            f'<span class="sp"></span><a href="{base}?type={rtype}&days=7&off={off}">7 дней</a>'
+            f'<a href="{base}?type={rtype}&days=14&off={off}">14</a>'
+            f'<a href="{base}?type={rtype}&days=30&off={off}">30</a></div>'
             '<h1>Календарь занятости</h1>'
             '<div class="sub">Шкала дня 8:00–20:00, шаг 30 мин · наложения блокируются автоматически.</div>'
+            '<div class="pager">' + pager + '</div>'
             '<div class="filters">' + filters + '</div>'
             '<div class="wrap"><table><thead><tr>' + head + '</tr></thead><tbody>' + rows +
             '</tbody></table></div>'
             '<div class="legend">' + legend + '</div>'
-            '<div id="toast"></div>'
+            '<div id="toast"></div><div id="ov"></div>'
             '<script>' + GANTT_JS + '</script>'
             '</body></html>')
         return HttpResponse(html)

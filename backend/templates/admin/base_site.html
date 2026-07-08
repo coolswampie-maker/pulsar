@@ -53,6 +53,8 @@ a.button, .button, input[type=submit], .submit-row input[type=submit]{background
 .dashboard #content-main{grid-column:1}
 .dashboard #content-related{grid-column:2}
 .dashboard .module table{width:100%}
+/* На дашборде оставляем только «Добавить»; правка — внутри списка у конкретной записи */
+.dashboard #content-main .changelink{display:none!important}
 @media (max-width:1024px){.dashboard #content{grid-template-columns:1fr}}
 </style>
 {% endblock %}
