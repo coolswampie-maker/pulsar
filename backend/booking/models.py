@@ -2,6 +2,8 @@
 Модели ПУЛЬСАР. Зеркалят структуру фронтенда (data/resources.js) +
 заявки/брони. Персональные данные заявок хранятся в РФ (152-ФЗ).
 """
+from datetime import time
+
 from django.db import models
 
 RES_TYPES = [
@@ -43,6 +45,8 @@ class Resource(models.Model):
     units_total = models.PositiveSmallIntegerField(
         'Единиц в наличии', default=1,
         help_text='Сколько одинаковых единиц ресурса есть физически (приборов, мест, специалистов).')
+    work_start = models.TimeField('Работает с', default=time(8, 0))
+    work_end = models.TimeField('Работает до', default=time(20, 0))
 
     image = models.CharField('Ключ/URL фото', max_length=200, blank=True)
     requires_operator = models.ForeignKey(
@@ -157,6 +161,7 @@ class BookingLine(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
+        from django.utils import timezone
         errors = {}
         # Нельзя забронировать больше единиц, чем есть в наличии.
         if self.resource_id and self.qty and self.qty > self.resource.units_total:
@@ -164,6 +169,14 @@ class BookingLine(models.Model):
         # Окончание должно быть позже начала.
         if self.slot_start and self.slot_end and self.slot_end <= self.slot_start:
             errors['slot_end'] = 'Окончание должно быть позже начала.'
+        # В пределах рабочих часов ресурса.
+        if self.resource_id and self.slot_start and self.slot_end:
+            ws, we = self.resource.work_start, self.resource.work_end
+            if (ws and self.slot_start < ws) or (we and self.slot_end > we):
+                errors['slot_start'] = f'Вне рабочих часов ресурса ({ws:%H:%M}–{we:%H:%M}).'
+        # Новую позицию нельзя ставить в прошлое (историю править можно).
+        if self.date and self._state.adding and self.date < timezone.localdate():
+            errors['date'] = 'Дата в прошлом.'
         if errors:
             raise ValidationError(errors)
 

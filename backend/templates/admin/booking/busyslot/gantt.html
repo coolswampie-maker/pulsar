@@ -12,7 +12,8 @@
 
 {% block content %}
 <div id="content-main">
-  <div id="gantt" data-api="{{ api_url }}" data-csrf="{{ csrf_token }}">
+  <div id="gantt" data-api="{{ api_url }}" data-csrf="{{ csrf_token }}"
+       data-ds="{{ ds }}" data-de="{{ de }}" style="--hstep:{{ hstep }}">
     <div class="sub">{{ sub }}</div>
     <div class="pager">{{ pager }}</div>
     <div class="filters">{{ filters }}</div>

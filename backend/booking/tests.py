@@ -357,6 +357,94 @@ class OverlapFormTests(Base):
         self.assertEqual(r.status_code, 302)
 
 
+class PlannerGuardTests(Base):
+    def _create(self, slug='eq1', d=None, start='09:00', end='11:00'):
+        return self.api_ok({'action': 'create', 'resource': slug,
+                            'date': (d or self.d).isoformat(), 'start': start, 'end': end})
+
+    def test_move_cross_day_into_conflict_blocked(self):
+        day_b = date(2026, 7, 21)
+        a = self._create(d=self.d)
+        self._create(d=day_b)                                  # занятость на дне-приёмнике
+        res = self.api_ok({'action': 'move', 'id': a['id'], 'start': '09:00', 'end': '11:00',
+                           'date': day_b.isoformat()})
+        self.assertFalse(res['ok'])
+        self.assertIn('аложени', res['error'])
+
+    def test_move_cross_day_free_ok(self):
+        a = self._create(d=self.d)
+        res = self.api_ok({'action': 'move', 'id': a['id'], 'start': '09:00', 'end': '11:00',
+                           'date': date(2026, 7, 25).isoformat()})
+        self.assertTrue(res['ok'])
+        self.assertEqual(BusySlot.objects.get(pk=a['id']).date, date(2026, 7, 25))
+
+    def test_create_in_past_blocked(self):
+        res = self._create(d=date(2020, 1, 1))
+        self.assertFalse(res['ok'])
+        self.assertIn('прошл', res['error'])
+
+    def test_move_into_past_blocked(self):
+        a = self._create(d=self.d)
+        res = self.api_ok({'action': 'move', 'id': a['id'], 'start': '09:00', 'end': '11:00',
+                           'date': date(2020, 1, 1).isoformat()})
+        self.assertFalse(res['ok'])
+        self.assertIn('прошл', res['error'])
+
+    def _narrow(self, slug):
+        return Resource.objects.create(slug=slug, type='equipment', book_mode='hour',
+                                       title='Узкий', price_value=100,
+                                       work_start=time(9), work_end=time(18))
+
+    def test_create_before_work_hours_blocked(self):
+        self._narrow('eqn1')
+        res = self._create(slug='eqn1', start='08:00', end='09:00')
+        self.assertFalse(res['ok'])
+        self.assertIn('рабочих часов', res['error'])
+
+    def test_create_within_work_hours_ok(self):
+        self._narrow('eqn2')
+        res = self._create(slug='eqn2', start='09:00', end='12:00')
+        self.assertTrue(res['ok'])
+
+    def test_resize_beyond_work_hours_blocked(self):
+        self._narrow('eqn3')
+        c = self._create(slug='eqn3', start='09:00', end='17:00')
+        res = self.api_ok({'action': 'resize', 'id': c['id'], 'start': '09:00', 'end': '19:00',
+                           'date': self.d.isoformat()})
+        self.assertFalse(res['ok'])
+        self.assertIn('рабочих часов', res['error'])
+
+
+class FormGuardTests(Base):
+    def test_resource_default_work_hours(self):
+        r = Resource.objects.create(slug='w', type='room', book_mode='shift', title='К')
+        self.assertEqual((r.work_start, r.work_end), (time(8), time(20)))
+
+    def test_form_line_outside_work_hours_blocked(self):
+        narrow = Resource.objects.create(slug='eqn', type='equipment', book_mode='hour',
+                                         title='Н', price_value=100, work_start=time(9), work_end=time(18))
+        o = Order.objects.create(org='X', status='new')
+        line = BookingLine.objects.create(order=o, resource=narrow, date=self.d,
+                                          slot_start=time(9), slot_end=time(12), hours=3)
+        r = self.order_change_post(o, 'new', [
+            {'id': line.pk, 'resource': 'eqn', 'date': self.d.isoformat(),
+             'start': '08:00:00', 'end': '12:00:00', 'hours': 4}])
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'рабочих часов')
+
+    def test_form_new_line_in_past_blocked(self):
+        o = Order.objects.create(org='X', status='new')
+        good = BookingLine.objects.create(order=o, resource=self.eq, date=self.d,
+                                          slot_start=time(9), slot_end=time(10), hours=1)
+        r = self.order_change_post(o, 'new', [
+            {'id': good.pk, 'resource': 'eq1', 'date': self.d.isoformat(),
+             'start': '09:00:00', 'end': '10:00:00', 'hours': 1},
+            {'resource': 'eq1', 'date': '2020-01-01', 'start': '09:00:00', 'end': '10:00:00', 'hours': 1},
+        ])
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'прошлом')
+
+
 class ActionTests(Base):
     def test_mark_confirmed_action_creates_slots(self):
         o = Order.objects.create(org='X', status='new')

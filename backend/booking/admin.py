@@ -54,7 +54,8 @@ class ResourceAdmin(RuTitlesMixin, admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': ('slug', 'type', 'category', 'book_mode', 'is_active')}),
         ('Карточка', {'fields': ('title', 'lab', 'clean_class', 'description', 'specs', 'image')}),
-        ('Цена и наличие', {'fields': ('price_value', 'price_unit', 'min_units', 'units_total')}),
+        ('Цена и наличие', {'fields': ('price_value', 'price_unit', 'min_units', 'units_total',
+                                       'work_start', 'work_end')}),
         ('Связи', {'fields': ('requires_operator', 'bundled_with')}),
     )
 
@@ -158,7 +159,7 @@ GANTT_CSS = """
 #gantt .rescol{position:sticky;left:0;background:#fff;z-index:2;text-align:left;padding:9px 11px;min-width:240px;max-width:240px;border-right:2px solid #dde;font-weight:600;line-height:1.3}
 #gantt th.rescol{z-index:3;background:#f0f3f7}
 #gantt .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
-#gantt td.day{position:relative;height:34px;padding:0;cursor:copy;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(8.333% - 1px),#e9edf3 calc(8.333% - 1px),#e9edf3 8.333%)}
+#gantt td.day{position:relative;height:34px;padding:0;cursor:copy;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(var(--hstep,8.333%) - 1px),#e9edf3 calc(var(--hstep,8.333%) - 1px),#e9edf3 var(--hstep,8.333%))}
 #gantt td.day.wknd{background-color:#faf6f0}
 #gantt .bar{position:absolute;top:4px;bottom:4px;border-radius:4px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;padding:0 3px;box-shadow:0 1px 2px rgba(0,0,0,.18);font-variant-numeric:tabular-nums;cursor:grab;user-select:none;touch-action:none}
 #gantt .bar.dragging{cursor:grabbing;opacity:.85;z-index:6;box-shadow:0 3px 10px rgba(0,0,0,.3);pointer-events:none}
@@ -201,7 +202,7 @@ GANTT_CSS = """
 GANTT_JS = """
 (function(){
   var root=document.getElementById('gantt'), API=root.dataset.api, CSRF=root.dataset.csrf;
-  var DS=8, DE=20, TOTAL=(DE-DS)*60, SNAP=30;
+  var DS=+root.dataset.ds||8, DE=+root.dataset.de||20, TOTAL=(DE-DS)*60, SNAP=30;
   function pad(n){return (n<10?'0':'')+n;}
   function m2s(m){return pad(Math.floor(m/60))+':'+pad(m%60);}
   function s2m(s){var p=s.split(':');return (+p[0])*60+(+p[1]);}
@@ -252,7 +253,7 @@ GANTT_JS = """
       {label:'Создать',cls:'ok',fn:function(){
         var sM=s2m(document.getElementById('mStart').value);
         var eM=Math.min(DE*60,sM+parseInt(document.getElementById('mDur').value,10));
-        if(sM<DS*60||sM>=DE*60){toast('Время вне рабочего дня (8:00–20:00)',true);return;}
+        if(sM<DS*60||sM>=DE*60){toast('Время вне шкалы дня ('+DS+':00–'+DE+':00)',true);return;}
         if(eM<=sM){toast('Некорректное время',true);return;}
         post({action:'create',resource:cell.dataset.res,date:date,start:m2s(sM),end:m2s(eM),
               org:document.getElementById('mOrg').value})
@@ -366,6 +367,16 @@ class BusySlotAdmin(admin.ModelAdmin):
             qs = qs.exclude(pk=exclude_pk)
         return any(_times_overlap(start, end, o.slot_start, o.slot_end) for o in qs)
 
+    def _time_problem(self, resource, d, start, end):
+        """Прошлое и рабочие часы ресурса. Возвращает текст ошибки или None."""
+        from django.utils import timezone
+        if d < timezone.localdate():
+            return 'Нельзя бронировать в прошлом'
+        if start < resource.work_start or end > resource.work_end:
+            return (f'Вне рабочих часов ресурса '
+                    f'({resource.work_start:%H:%M}–{resource.work_end:%H:%M})')
+        return None
+
     # ---------- API планировщика (move/resize/create/delete) ----------
     def gantt_api(self, request):
         import json
@@ -394,6 +405,9 @@ class BusySlotAdmin(admin.ModelAdmin):
                 if en <= st:
                     return JsonResponse({'ok': False, 'error': 'Окончание раньше начала'})
                 new_date = pdate(data['date']) if data.get('date') else slot.date
+                problem = self._time_problem(slot.resource, new_date, st, en)
+                if problem:
+                    return JsonResponse({'ok': False, 'error': problem})
                 if self._conflict(slot.resource_id, new_date, st, en, exclude_pk=slot.pk):
                     return JsonResponse({'ok': False, 'error': 'Наложение с другой бронью'})
                 # если слот принадлежит заявке — синхронизируем её позицию
@@ -415,6 +429,9 @@ class BusySlotAdmin(admin.ModelAdmin):
                 d, st, en = pdate(data['date']), ptime(data['start']), ptime(data['end'])
                 if en <= st:
                     return JsonResponse({'ok': False, 'error': 'Окончание раньше начала'})
+                problem = self._time_problem(r, d, st, en)
+                if problem:
+                    return JsonResponse({'ok': False, 'error': problem})
                 if self._conflict(r.pk, d, st, en):
                     return JsonResponse({'ok': False, 'error': 'Наложение с другой бронью'})
                 # Бронь из планировщика = подтверждённая заявка оператора (номер даёт модель)
@@ -499,6 +516,14 @@ class BusySlotAdmin(admin.ModelAdmin):
         else:
             resources = list(Resource.objects.filter(is_active=True, type=rtype).order_by('title'))
 
+        # Шкала дня адаптивная — от самого раннего открытия до самого позднего закрытия.
+        starts = [r.work_start for r in resources if r.work_start]
+        ends = [r.work_end for r in resources if r.work_end]
+        ds_h = max(0, min(min((t.hour for t in starts), default=8), 12))
+        de_h = min(24, max(max(((t.hour + (1 if t.minute else 0)) for t in ends), default=20), ds_h + 1))
+        ds_min, de_min, total_min = ds_h * 60, de_h * 60, (de_h - ds_h) * 60
+        hstep = f'{100 / (de_h - ds_h):.4f}%'
+
         order_pk = dict(Order.objects.values_list('number', 'pk'))
         # заявки, созданные прямо в планировщике — их бронь можно удалять из календаря
         op_orders = set(Order.objects.filter(note='Создано в планировщике')
@@ -520,11 +545,11 @@ class BusySlotAdmin(admin.ModelAdmin):
                 s_min = slot.slot_start.hour * 60 + slot.slot_start.minute
                 e_min = (slot.slot_end.hour * 60 + slot.slot_end.minute) if slot.slot_end else s_min + 60
             else:
-                s_min, e_min = DAY_START_MIN, DAY_END_MIN
-            s_min = max(DAY_START_MIN, min(DAY_END_MIN, s_min))
-            e_min = max(s_min + 30, min(DAY_END_MIN, e_min))
-            left = (s_min - DAY_START_MIN) / TOTAL_MIN * 100
-            width = max(7, (e_min - s_min) / TOTAL_MIN * 100)
+                s_min, e_min = ds_min, de_min
+            s_min = max(ds_min, min(de_min, s_min))
+            e_min = max(s_min + 30, min(de_min, e_min))
+            left = (s_min - ds_min) / total_min * 100
+            width = max(7, (e_min - s_min) / total_min * 100)
             lbl = slot.slot_start.strftime('%H:%M') if slot.slot_start else 'весь день'
             full = (slot.slot_start.strftime('%H:%M') + '–' +
                     (slot.slot_end.strftime('%H:%M') if slot.slot_end else '')) if slot.slot_start else 'весь день'
@@ -533,8 +558,8 @@ class BusySlotAdmin(admin.ModelAdmin):
             deletable = kind == 'manual' or slot.note[len('Заявка '):] in op_orders
             del_attr = ' data-del="1"' if (kind == 'order' and deletable) else ''
             return (f'<div class="bar" data-id="{slot.pk}" data-kind="{kind}"{del_attr} '
-                    f'data-start="{lbl if slot.slot_start else "08:00"}" '
-                    f'data-end="{slot.slot_end.strftime("%H:%M") if slot.slot_end else "20:00"}" '
+                    f'data-start="{lbl if slot.slot_start else f"{ds_h:02d}:00"}" '
+                    f'data-end="{slot.slot_end.strftime("%H:%M") if slot.slot_end else f"{de_h:02d}:00"}" '
                     f'data-href="{href_for(slot)}" style="left:{left:.1f}%;width:{width:.1f}%;background:{color}" '
                     f'title="{escape(title)}"><span class="h hl"></span>'
                     f'<span class="lbl">{escape(lbl)}</span><span class="h hr"></span></div>')
@@ -586,11 +611,12 @@ class BusySlotAdmin(admin.ModelAdmin):
             'api_url': api_url,
             'gantt_css': mark_safe(GANTT_CSS),
             'gantt_js': mark_safe(GANTT_JS),
-            'sub': 'Шкала дня 8:00–20:00, шаг 30 мин · наложения блокируются автоматически.',
+            'sub': f'Шкала дня {ds_h}:00–{de_h}:00, шаг 30 мин · наложения блокируются автоматически.',
             'pager': mark_safe(pager),
             'filters': mark_safe(filters),
             'thead': mark_safe(head),
             'rows': mark_safe(rows),
             'legend': mark_safe(legend),
+            'ds': ds_h, 'de': de_h, 'hstep': hstep,
         }
         return TemplateResponse(request, 'admin/booking/busyslot/gantt.html', context)
