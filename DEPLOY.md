@@ -5,7 +5,7 @@
 
 Дальше:
 - `<ВАШ-ДОМЕН>` — например `zimermans.ru` (полный домен с Reg.ru)
-- `<github-логин>` — ваш логин на GitHub
+- `coolswampie-maker` — ваш логин на GitHub
 - поддомен будет: `pulsar.<ВАШ-ДОМЕН>`
 
 ---
@@ -25,7 +25,7 @@
 cd site
 git init && git add -A && git commit -m "ПУЛЬСАР — статический сайт"
 git branch -M main
-git remote add origin https://github.com/<github-логин>/pulsar.git
+git remote add origin https://github.com/coolswampie-maker/pulsar.git
 git push -u origin main
 ```
 
@@ -42,7 +42,7 @@ git push -u origin main
 2. Добавьте запись типа **CNAME**:
    | Тип  | Имя (поддомен) | Значение              |
    |------|----------------|-----------------------|
-   | CNAME| `pulsar`       | `<github-логин>.github.io.` |
+   | CNAME| `pulsar`       | `coolswampie-maker.github.io.` |
    > Именно `pulsar` (не полный домен). Точка в конце значения — по требованию Reg.ru,
    > обычно можно и без неё. TTL — по умолчанию.
 3. Сохраните. Обновление DNS — от 15 минут до нескольких часов.
