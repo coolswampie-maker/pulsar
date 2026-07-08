@@ -101,7 +101,7 @@ class BookingLineInline(admin.TabularInline):
     model = BookingLine
     formset = BookingLineFormSet
     extra = 0
-    fields = ('resource', 'date', 'slot_start', 'slot_end', 'qty', 'hours', 'line_price', 'is_operator')
+    fields = ('resource', 'date', 'slot_start', 'slot_end', 'qty', 'hours', 'line_price')
     readonly_fields = ('line_price',)  # сумма считается автоматически
     autocomplete_fields = ('resource',)
 
@@ -196,7 +196,7 @@ GANTT_CSS = """
 #gantt .pager .range{color:#5a6675;margin-left:2px;font-variant-numeric:tabular-nums}
 #ov{position:fixed;inset:0;background:rgba(14,42,71,.4);display:none;align-items:center;justify-content:center;z-index:60}
 #ov.show{display:flex}
-.modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(10,30,51,.4);width:350px;max-width:92vw;overflow:hidden;animation:pop .16s ease-out}
+.modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(10,30,51,.4);width:400px;max-width:94vw;overflow:hidden;animation:pop .16s ease-out}
 @keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .modal h3{margin:0;padding:14px 18px;background:linear-gradient(90deg,#0E2A47,#0A1E33);color:#fff;font-size:15px;font-weight:700}
 .modal .bd{padding:16px 18px}
@@ -204,6 +204,8 @@ GANTT_CSS = """
 .modal .who span{display:block;color:#8892a0;font-weight:400;font-size:12.5px;margin-top:2px}
 .modal .row{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;gap:12px}
 .modal .row:last-child{margin-bottom:0}
+.modal .row.col{flex-direction:column;align-items:stretch;gap:5px}
+.modal .row.col input{width:100%;box-sizing:border-box}
 .modal label{color:#5a6675;font-size:13px}
 .modal input,.modal select{font:inherit;font-size:14px;padding:7px 10px;border:1px solid #cdd6df;border-radius:8px;background:#fff;color:#1b2733}
 .modal .act{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;background:#f5f7f9;border-top:1px solid #eef}
@@ -259,8 +261,8 @@ GANTT_JS = """
       +'<option value="30">30 минут</option><option value="60" selected>1 час</option>'
       +'<option value="120">2 часа</option><option value="240">4 часа</option>'
       +'<option value="480">смена (8 ч)</option><option value="720">весь день</option></select></div>'
-      +'<div class="row"><label>Организация&nbsp;/&nbsp;назначение</label>'
-      +'<input id="mOrg" type="text" placeholder="Бронь оператора" style="flex:1;min-width:0"></div>';
+      +'<div class="row col"><label>Организация / назначение</label>'
+      +'<input id="mOrg" type="text" placeholder="Бронь оператора"></div>';
     modal('Новая заявка',body,[
       {label:'Отмена',cls:'cancel',fn:closeModal},
       {label:'Создать',cls:'ok',fn:function(){
@@ -624,7 +626,7 @@ class BusySlotAdmin(admin.ModelAdmin):
             'api_url': api_url,
             'gantt_css': mark_safe(GANTT_CSS),
             'gantt_js': mark_safe(GANTT_JS),
-            'sub': f'Шкала дня {ds_h}:00–{de_h}:00, шаг 30 мин · наложения блокируются автоматически.',
+            'sub': f'Шкала дня {ds_h}:00–{de_h}:00, шаг 30 мин',
             'pager': mark_safe(pager),
             'filters': mark_safe(filters),
             'thead': mark_safe(head),
