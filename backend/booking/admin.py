@@ -93,7 +93,7 @@ th.rescol{z-index:3;background:#f0f3f7}
 td.day{position:relative;height:34px;padding:0;cursor:copy;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(8.333% - 1px),#e9edf3 calc(8.333% - 1px),#e9edf3 8.333%)}
 td.day.wknd{background-color:#faf6f0}
 .bar{position:absolute;top:4px;bottom:4px;border-radius:4px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;padding:0 3px;box-shadow:0 1px 2px rgba(0,0,0,.18);font-variant-numeric:tabular-nums;cursor:grab;user-select:none;touch-action:none}
-.bar.dragging{cursor:grabbing;opacity:.85;z-index:6;box-shadow:0 3px 10px rgba(0,0,0,.3)}
+.bar.dragging{cursor:grabbing;opacity:.85;z-index:6;box-shadow:0 3px 10px rgba(0,0,0,.3);pointer-events:none}
 .bar .h{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
 .bar .hl{left:0}
 .bar .hr{right:0}
@@ -140,7 +140,7 @@ GANTT_JS = """
   function resName(el){var tr=el.closest('tr');var c=tr&&tr.querySelector('.rescol');return c?c.textContent.trim():'';}
   function fmtDate(iso){var p=iso.split('-');return p[2]+'.'+p[1]+'.'+p[0];}
   function place(bar,sM,eM){bar.style.left=((sM-DS*60)/TOTAL*100).toFixed(1)+'%';bar.style.width=Math.max(7,(eM-sM)/TOTAL*100).toFixed(1)+'%';bar.dataset.start=m2s(sM);bar.dataset.end=m2s(eM);bar.querySelector('.lbl').textContent=m2s(sM);bar.title=m2s(sM)+'–'+m2s(eM);}
-  function mkBar(cell,res){var b=document.createElement('div');b.className='bar';b.dataset.id=res.id;b.dataset.href=res.href;b.dataset.kind='manual';b.style.background=res.color||cell.dataset.color;b.innerHTML='<span class="h hl"></span><span class="lbl"></span><span class="h hr"></span>';cell.appendChild(b);place(b,s2m(res.start),s2m(res.end));return b;}
+  function mkBar(cell,res){var b=document.createElement('div');b.className='bar';b.dataset.id=res.id;b.dataset.href=res.href;b.dataset.kind=res.kind||'manual';if(res.del)b.dataset.del='1';b.style.background=res.color||cell.dataset.color;b.innerHTML='<span class="h hl"></span><span class="lbl"></span><span class="h hr"></span>';cell.appendChild(b);place(b,s2m(res.start),s2m(res.end));return b;}
 
   // ---------- модальное окно ----------
   var ov=document.getElementById('ov');
@@ -156,17 +156,17 @@ GANTT_JS = """
 
   // клик по брони → меню «Открыть / Удалить»
   function openBar(bar){
-    var kind=bar.dataset.kind;
-    var body='<div class="who">'+resName(bar)+'<span>'+bar.dataset.start+'–'+bar.dataset.end+(kind==='order'?' · из заявки':' · вручную')+'</span></div>';
+    var kind=bar.dataset.kind, canDel=(kind!=='order'||bar.dataset.del==='1');
+    var body='<div class="who">'+resName(bar)+'<span>'+bar.dataset.start+'–'+bar.dataset.end+(kind==='order'?' · заявка':' · вручную')+'</span></div>';
     var acts=[{label:'Отмена',cls:'cancel',fn:closeModal}];
     if(bar.dataset.href) acts.unshift({label:kind==='order'?'Открыть заявку':'Открыть запись',cls:'ok',fn:function(){window.location=bar.dataset.href;}});
-    if(kind!=='order') acts.unshift({label:'Удалить',cls:'ok danger',fn:function(){
-      post({action:'delete',id:bar.dataset.id}).then(function(r){if(r.ok){bar.remove();closeModal();toast('Бронь удалена');}else{toast(r.error||'Ошибка',true);}});
+    if(canDel) acts.unshift({label:kind==='order'?'Удалить заявку':'Удалить',cls:'ok danger',fn:function(){
+      post({action:'delete',id:bar.dataset.id}).then(function(r){if(r.ok){bar.remove();closeModal();toast('Удалено');}else{toast(r.error||'Ошибка',true);}});
     }});
     modal('Бронь',body,acts);
   }
 
-  // клик по пустому → окно создания (без мгновенной брони)
+  // клик по пустому → окно создания заявки (без мгновенной брони)
   function openCreate(cell,startM){
     var date=cell.dataset.date;
     var body='<div class="who">'+resName(cell)+'<span>'+fmtDate(date)+'</span></div>'
@@ -174,46 +174,67 @@ GANTT_JS = """
       +'<div class="row"><label>Длительность</label><select id="mDur">'
       +'<option value="30">30 минут</option><option value="60" selected>1 час</option>'
       +'<option value="120">2 часа</option><option value="240">4 часа</option>'
-      +'<option value="480">смена (8 ч)</option><option value="720">весь день</option></select></div>';
-    modal('Новая бронь',body,[
+      +'<option value="480">смена (8 ч)</option><option value="720">весь день</option></select></div>'
+      +'<div class="row"><label>Организация&nbsp;/&nbsp;назначение</label>'
+      +'<input id="mOrg" type="text" placeholder="Бронь оператора" style="flex:1;min-width:0"></div>';
+    modal('Новая заявка',body,[
       {label:'Отмена',cls:'cancel',fn:closeModal},
       {label:'Создать',cls:'ok',fn:function(){
         var sM=s2m(document.getElementById('mStart').value);
         var eM=Math.min(DE*60,sM+parseInt(document.getElementById('mDur').value,10));
         if(sM<DS*60||sM>=DE*60){toast('Время вне рабочего дня (8:00–20:00)',true);return;}
         if(eM<=sM){toast('Некорректное время',true);return;}
-        post({action:'create',resource:cell.dataset.res,date:date,start:m2s(sM),end:m2s(eM)})
-          .then(function(res){if(res.ok){mkBar(cell,res);closeModal();toast('Бронь создана');}else{toast(res.error||'Ошибка',true);}})
+        post({action:'create',resource:cell.dataset.res,date:date,start:m2s(sM),end:m2s(eM),
+              org:document.getElementById('mOrg').value})
+          .then(function(res){if(res.ok){mkBar(cell,res);closeModal();toast('Заявка '+(res.number||'')+' создана');}else{toast(res.error||'Ошибка',true);}})
           .catch(function(){toast('Сеть недоступна',true);});
       }}
     ]);
   }
 
-  // ---------- перетаскивание / изменение длительности ----------
+  // ---------- перетаскивание (в т.ч. на другой день) / изменение длительности ----------
   var drag=null, suppress=false;
   document.addEventListener('pointerdown',function(e){
     var bar=e.target.closest('.bar'); if(!bar) return; e.preventDefault();
     var mode=e.target.classList.contains('hl')?'resizeL':e.target.classList.contains('hr')?'resizeR':'move';
-    drag={bar:bar,mode:mode,cell:bar.parentElement,x:e.clientX,moved:false,sM:s2m(bar.dataset.start),eM:s2m(bar.dataset.end)};
+    var cell=bar.parentElement, rect=cell.getBoundingClientRect();
+    var ptr=DS*60+(e.clientX-rect.left)/rect.width*TOTAL;
+    drag={bar:bar,mode:mode,cell:cell,origCell:cell,row:bar.closest('tr'),x:e.clientX,moved:false,
+          sM:s2m(bar.dataset.start),eM:s2m(bar.dataset.end),grab:ptr-s2m(bar.dataset.start),
+          date:cell.dataset.date};
     bar.classList.add('dragging');
   });
   document.addEventListener('pointermove',function(e){
     if(!drag) return;
-    var dx=e.clientX-drag.x; if(Math.abs(dx)>3) drag.moved=true;
-    var w=drag.cell.getBoundingClientRect().width;
-    var dM=Math.round((dx/w*TOTAL)/SNAP)*SNAP, sM=drag.sM, eM=drag.eM, dur=drag.eM-drag.sM;
-    if(drag.mode==='move'){sM=drag.sM+dM;eM=drag.eM+dM;if(sM<DS*60){sM=DS*60;eM=sM+dur;}if(eM>DE*60){eM=DE*60;sM=eM-dur;}}
-    else if(drag.mode==='resizeR'){eM=Math.max(sM+SNAP,Math.min(DE*60,drag.eM+dM));}
-    else{sM=Math.min(eM-SNAP,Math.max(DS*60,drag.sM+dM));}
-    place(drag.bar,sM,eM);
+    if(Math.abs(e.clientX-drag.x)>3) drag.moved=true;
+    if(drag.mode==='move'){
+      var tc=document.elementFromPoint(e.clientX,e.clientY);
+      tc=tc&&tc.closest('td.day');
+      if(tc&&tc.closest('tr')===drag.row&&tc!==drag.cell){tc.appendChild(drag.bar);drag.cell=tc;drag.date=tc.dataset.date;}
+      var rect=drag.cell.getBoundingClientRect();
+      var ptr=DS*60+(e.clientX-rect.left)/rect.width*TOTAL, dur=drag.eM-drag.sM;
+      var sM=Math.round((ptr-drag.grab)/SNAP)*SNAP;
+      if(sM<DS*60) sM=DS*60; if(sM+dur>DE*60) sM=DE*60-dur;
+      place(drag.bar,sM,sM+dur);
+    }else{
+      var w=drag.cell.getBoundingClientRect().width;
+      var dM=Math.round(((e.clientX-drag.x)/w*TOTAL)/SNAP)*SNAP, sM2=drag.sM, eM2=drag.eM;
+      if(drag.mode==='resizeR'){eM2=Math.max(sM2+SNAP,Math.min(DE*60,drag.eM+dM));}
+      else{sM2=Math.min(eM2-SNAP,Math.max(DS*60,drag.sM+dM));}
+      place(drag.bar,sM2,eM2);
+    }
   });
   document.addEventListener('pointerup',function(){
     if(!drag) return; var d=drag; drag=null; d.bar.classList.remove('dragging');
     if(!d.moved){return;}
     suppress=true;
-    post({action:d.mode==='move'?'move':'resize',id:d.bar.dataset.id,start:d.bar.dataset.start,end:d.bar.dataset.end})
-      .then(function(res){if(res.ok){toast('Сохранено');}else{place(d.bar,d.sM,d.eM);toast(res.error||'Ошибка',true);}})
-      .catch(function(){place(d.bar,d.sM,d.eM);toast('Сеть недоступна',true);});
+    function revert(msg){d.origCell.appendChild(d.bar);place(d.bar,d.sM,d.eM);toast(msg,true);}
+    var payload={action:d.mode==='move'?'move':'resize',id:d.bar.dataset.id,
+                 start:d.bar.dataset.start,end:d.bar.dataset.end};
+    if(d.mode==='move') payload.date=d.date;
+    post(payload)
+      .then(function(res){if(res.ok){toast('Сохранено');}else{revert(res.error||'Ошибка');}})
+      .catch(function(){revert('Сеть недоступна');});
   });
 
   // ---------- клики ----------
@@ -276,9 +297,10 @@ class BusySlotAdmin(admin.ModelAdmin):
     # ---------- API планировщика (move/resize/create/delete) ----------
     def gantt_api(self, request):
         import json
+        import re
         from datetime import datetime
         from django.http import JsonResponse
-        from .models import Resource
+        from .models import BookingLine, Order, Resource
 
         if request.method != 'POST':
             return JsonResponse({'ok': False, 'error': 'Только POST'}, status=405)
@@ -300,11 +322,22 @@ class BusySlotAdmin(admin.ModelAdmin):
                 st, en = ptime(data['start']), ptime(data['end'])
                 if en <= st:
                     return JsonResponse({'ok': False, 'error': 'Окончание раньше начала'})
-                if self._conflict(slot.resource_id, slot.date, st, en, exclude_pk=slot.pk):
+                new_date = pdate(data['date']) if data.get('date') else slot.date
+                if self._conflict(slot.resource_id, new_date, st, en, exclude_pk=slot.pk):
                     return JsonResponse({'ok': False, 'error': 'Наложение с другой бронью'})
-                slot.slot_start, slot.slot_end = st, en
-                slot.save(update_fields=['slot_start', 'slot_end'])
-                return JsonResponse({'ok': True, 'id': slot.pk, 'start': st.strftime('%H:%M'), 'end': en.strftime('%H:%M')})
+                # если слот принадлежит заявке — синхронизируем её позицию
+                line = None
+                if slot.note and slot.note.startswith('Заявка '):
+                    line = BookingLine.objects.filter(
+                        order__number=slot.note[len('Заявка '):], resource_id=slot.resource_id,
+                        date=slot.date, slot_start=slot.slot_start, slot_end=slot.slot_end).first()
+                slot.slot_start, slot.slot_end, slot.date = st, en, new_date
+                slot.save(update_fields=['slot_start', 'slot_end', 'date'])
+                if line:
+                    line.date, line.slot_start, line.slot_end = new_date, st, en
+                    line.save(update_fields=['date', 'slot_start', 'slot_end'])
+                return JsonResponse({'ok': True, 'id': slot.pk, 'start': st.strftime('%H:%M'),
+                                     'end': en.strftime('%H:%M'), 'date': new_date.isoformat()})
 
             if act == 'create':
                 r = Resource.objects.get(slug=data['resource'])
@@ -313,14 +346,44 @@ class BusySlotAdmin(admin.ModelAdmin):
                     return JsonResponse({'ok': False, 'error': 'Окончание раньше начала'})
                 if self._conflict(r.pk, d, st, en):
                     return JsonResponse({'ok': False, 'error': 'Наложение с другой бронью'})
-                slot = BusySlot.objects.create(resource=r, date=d, slot_start=st, slot_end=en,
-                                               note='вручную (планировщик)')
-                return JsonResponse({'ok': True, 'id': slot.pk, 'start': st.strftime('%H:%M'),
-                                     'end': en.strftime('%H:%M'), 'color': GANTT_COLORS.get(r.type, '#555'),
-                                     'href': f'/admin/booking/busyslot/{slot.pk}/change/'})
+                # Бронь из планировщика = подтверждённая заявка оператора
+                mx = 1000
+                for n in Order.objects.values_list('number', flat=True):
+                    m = re.match(r'PLS-(\d+)$', n or '')
+                    if m:
+                        mx = max(mx, int(m.group(1)))
+                number = f'PLS-{mx + 1}'
+                hours = max(1, round(((en.hour * 60 + en.minute) - (st.hour * 60 + st.minute)) / 60))
+                price = r.price_value * hours
+                org = (data.get('org') or '').strip() or 'Бронь оператора'
+                order = Order.objects.create(
+                    number=number, status='confirmed', org=org, contact_name=org,
+                    email='', phone='', note='Создано в планировщике',
+                    subtotal=price, discount=0, total=price)
+                BookingLine.objects.create(
+                    order=order, resource=r, date=d, slot_start=st, slot_end=en,
+                    qty=1, hours=hours, unit_price=r.price_value, line_price=price)
+                order.sync_busy_slots()
+                slot = (BusySlot.objects.filter(note=f'Заявка {number}', resource=r, date=d,
+                                                slot_start=st, slot_end=en).order_by('-id').first())
+                return JsonResponse({'ok': True, 'id': slot.pk if slot else None, 'kind': 'order', 'del': True,
+                                     'start': st.strftime('%H:%M'), 'end': en.strftime('%H:%M'),
+                                     'color': GANTT_COLORS.get(r.type, '#555'), 'number': number,
+                                     'href': f'/admin/booking/order/{order.pk}/change/'})
 
             if act == 'delete':
-                BusySlot.objects.filter(pk=data['id']).delete()
+                slot = BusySlot.objects.filter(pk=data['id']).first()
+                if not slot:
+                    return JsonResponse({'ok': True})
+                if slot.note and slot.note.startswith('Заявка '):
+                    num = slot.note[len('Заявка '):]
+                    order = Order.objects.filter(number=num, note='Создано в планировщике').first()
+                    if not order:
+                        return JsonResponse({'ok': False, 'error': 'Бронь из заявки — измените в самой заявке'})
+                    BusySlot.objects.filter(note=f'Заявка {num}').delete()
+                    order.delete()
+                    return JsonResponse({'ok': True})
+                slot.delete()
                 return JsonResponse({'ok': True})
         except BusySlot.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Бронь не найдена'}, status=404)
@@ -372,6 +435,9 @@ class BusySlotAdmin(admin.ModelAdmin):
             resources = list(Resource.objects.filter(is_active=True, type=rtype).order_by('title'))
 
         order_pk = dict(Order.objects.values_list('number', 'pk'))
+        # заявки, созданные прямо в планировщике — их бронь можно удалять из календаря
+        op_orders = set(Order.objects.filter(note='Создано в планировщике')
+                        .values_list('number', flat=True))
 
         def href_for(slot):
             if slot.note and slot.note.startswith('Заявка '):
@@ -399,7 +465,9 @@ class BusySlotAdmin(admin.ModelAdmin):
                     (slot.slot_end.strftime('%H:%M') if slot.slot_end else '')) if slot.slot_start else 'весь день'
             title = full + (' · ' + slot.note if slot.note else '')
             kind = 'order' if (slot.note and slot.note.startswith('Заявка ')) else 'manual'
-            return (f'<div class="bar" data-id="{slot.pk}" data-kind="{kind}" '
+            deletable = kind == 'manual' or slot.note[len('Заявка '):] in op_orders
+            del_attr = ' data-del="1"' if (kind == 'order' and deletable) else ''
+            return (f'<div class="bar" data-id="{slot.pk}" data-kind="{kind}"{del_attr} '
                     f'data-start="{lbl if slot.slot_start else "08:00"}" '
                     f'data-end="{slot.slot_end.strftime("%H:%M") if slot.slot_end else "20:00"}" '
                     f'data-href="{href_for(slot)}" style="left:{left:.1f}%;width:{width:.1f}%;background:{color}" '
@@ -430,7 +498,7 @@ class BusySlotAdmin(admin.ModelAdmin):
         filters = (flt('equipment', 'Оборудование') + flt('room', 'Лаборатории') +
                    flt('specialist', 'Специалисты') + flt('service', 'Услуги') +
                    flt('busy', 'Только с бронями') +
-                   '<span class="hint">· клик по пустому — новая бронь · перетаскивание — время · края — длительность · клик по брони — меню</span>')
+                   '<span class="hint">· клик по пустому — новая заявка · перетаскивание — время и день · края — длительность · клик по брони — меню</span>')
 
         pager = (
             f'<a href="{base}?type={rtype}&days={span}&off={off - span}">◀ раньше</a>'
