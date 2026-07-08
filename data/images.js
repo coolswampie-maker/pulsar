@@ -33,18 +33,18 @@ window.PULSAR = window.PULSAR || {};
     'eq-formolder':'assets/img/eq-formolder.png',
 
     // оборудование — сток по теме прибора
-    'eq-massspec': u('1663365520163-cf0ef0afb744'),               // масс-спектрометр / анализатор
-    'eq-sem'     : u('1614308460927-5024ba2e1dcb'),               // электронный микроскоп
-    'eq-tem'     : u('1526930700683-86db0d6bab09'),               // микроскоп
-    'eq-nmr'     : u('1678527973176-e53c88287c7e'),               // крупный прибор/магнит (ЯМР)
-    'eq-raman'   : u('1569102396802-8c658c913b3f'),               // спектрометр
-    'eq-xrd'     : u('1627817471035-3333a9ece240'),               // приборная панель
-    'eq-hplc'    : u('1602052577122-f73b9710adba'),               // лабораторный стол/прибор
-    'eq-pcr'     : u('1576669801838-1b1c52121e6a'),               // молекулярная лаборатория
-    'eq-facs'    : u('1669344319217-19810a5e3d3b'),               // приборы на столе
-    'eq-meter'   : u('1608037222022-62649819f8aa'),               // стекло/анализ (Zetasizer)
+    'eq-massspec': 'assets/img/eq-massspec.jpg',               // масс-спектрометр / анализатор
+    'eq-sem'     : 'assets/img/eq-sem.jpg',               // электронный микроскоп
+    'eq-tem'     : 'assets/img/eq-tem.jpg',               // микроскоп
+    'eq-nmr'     : 'assets/img/eq-nmr.jpg',               // крупный прибор/магнит (ЯМР)
+    'eq-raman'   : 'assets/img/eq-raman.jpg',               // спектрометр
+    'eq-xrd'     : 'assets/img/eq-xrd.jpg',               // приборная панель
+    'eq-hplc'    : 'assets/img/eq-hplc.jpg',               // лабораторный стол/прибор
+    'eq-pcr'     : 'assets/img/eq-pcr.jpg',               // молекулярная лаборатория
+    'eq-facs'    : 'assets/img/eq-facs.jpg',               // приборы на столе
+    'eq-meter'   : 'assets/img/eq-meter.jpg',               // стекло/анализ (Zetasizer)
     'eq-its1'    : 'assets/img/eq-its1.jpg',                       // реальное фото ИТС-1
-    'eq-lyo':'', 'eq-3d':'',                                       // → брендовый плейсхолдер
+    'eq-lyo':'assets/img/eq-lyo.jpg', 'eq-3d':'assets/img/eq-3d.jpg',                                       // → брендовый плейсхолдер
 
     // специалисты — роль в лаборатории (все разные)
     'sp-em'     : u('1668600418879-c461f6079c06'),                // у микроскопа
@@ -57,8 +57,8 @@ window.PULSAR = window.PULSAR || {};
     // услуги под ключ — по теме анализа (без дублей!)
     'srv-analysis': u('1676545228858-b4d9de95704b'),              // (запасной ключ)
     'srv-icp'     : u('1676545228858-b4d9de95704b'),              // ICP-MS: спектрометр
-    'srv-sem'     : u('1526930382372-67bf22c0fce2'),              // СЭМ: микроскоп
+    'srv-sem'     : 'assets/img/srv-sem.jpg',                     // СЭМ+EDX — реальное фото
     'srv-xrd'     : u('1627817471035-3333a9ece240'),              // XRD: приборная панель
-    'srv-lyo'     : ''                                            // → брендовый плейсхолдер (фарма)
+    'srv-lyo'     : 'assets/img/srv-lyo.jpg'                                            // → брендовый плейсхолдер (фарма)
   };
 })();
