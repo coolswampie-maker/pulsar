@@ -276,6 +276,96 @@ class AdminFormTests(Base):
         self.assertContains(r, 'в наличии')
 
 
+class CabinetApiTests(TestCase):
+    """Личный кабинет компании: регистрация, вход, профиль, свои заявки."""
+
+    def setUp(self):
+        self.c = Client()
+        Resource.objects.create(slug='eq1', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=1000, units_total=1)
+
+    def _j(self, r):
+        return json.loads(r.content)
+
+    def register(self, email='co@x.ru', **kw):
+        data = {'email': email, 'password': 'secret1', 'name': 'ООО Тест', 'resident': True}
+        data.update(kw)
+        return self.c.post('/api/auth/register/', data=json.dumps(data), content_type='application/json')
+
+    def _auth(self, r):
+        return {'HTTP_AUTHORIZATION': 'Token ' + self._j(r)['token']}
+
+    def test_register_returns_token_and_company(self):
+        r = self.register()
+        self.assertEqual(r.status_code, 201)
+        d = self._j(r)
+        self.assertTrue(d['token'])
+        self.assertEqual(d['company']['name'], 'ООО Тест')
+
+    def test_register_duplicate_email_blocked(self):
+        self.register()
+        self.assertEqual(self.register().status_code, 400)
+
+    def test_login_ok_and_bad(self):
+        self.register(email='a@a.ru')
+        ok = self.c.post('/api/auth/login/', data=json.dumps({'email': 'a@a.ru', 'password': 'secret1'}),
+                         content_type='application/json')
+        self.assertEqual(ok.status_code, 200)
+        self.assertTrue(self._j(ok)['token'])
+        bad = self.c.post('/api/auth/login/', data=json.dumps({'email': 'a@a.ru', 'password': 'x'}),
+                          content_type='application/json')
+        self.assertEqual(bad.status_code, 400)
+
+    def test_me_requires_auth(self):
+        self.assertEqual(self.c.get('/api/auth/me/').status_code, 401)
+
+    def test_me_get_and_update(self):
+        auth = self._auth(self.register())
+        self.assertEqual(self.c.get('/api/auth/me/', **auth).status_code, 200)
+        upd = self.c.patch('/api/auth/me/', data=json.dumps({'phone': '+7 495 000-11-22'}),
+                           content_type='application/json', **auth)
+        self.assertEqual(upd.status_code, 200)
+        self.assertEqual(self._j(upd)['phone'], '+7 495 000-11-22')
+
+    def test_order_linked_to_company_with_resident_discount(self):
+        auth = self._auth(self.register())
+        payload = {'contact': {}, 'resident': False, 'lines': [
+            {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '11:00',
+             'qty': 1, 'hours': 2, 'unitPrice': 1000, 'linePrice': 2000, 'isOperator': False}]}
+        r = self.c.post('/api/orders/', data=json.dumps(payload), content_type='application/json', **auth)
+        self.assertEqual(r.status_code, 201)
+        order = Order.objects.get(number=self._j(r)['id'])
+        self.assertIsNotNone(order.company)
+        self.assertEqual(order.discount, 500)   # резидент → 25% от 2000
+        listed = self.c.get('/api/orders/', **auth)
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(self._j(listed)), 1)
+
+    def test_orders_list_requires_auth(self):
+        self.assertEqual(self.c.get('/api/orders/').status_code, 401)
+
+    def test_two_companies_see_only_their_orders(self):
+        a = self._auth(self.register(email='a@a.ru'))
+        b = self._auth(self.register(email='b@b.ru'))
+        payload = {'contact': {}, 'resident': False, 'lines': [
+            {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '10:00',
+             'qty': 1, 'hours': 1, 'unitPrice': 1000, 'linePrice': 1000, 'isOperator': False}]}
+        self.c.post('/api/orders/', data=json.dumps(payload), content_type='application/json', **a)
+        self.assertEqual(len(self._j(self.c.get('/api/orders/', **a))), 1)
+        self.assertEqual(len(self._j(self.c.get('/api/orders/', **b))), 0)
+
+    def test_guest_order_not_linked(self):
+        payload = {'contact': {'org': 'Гость', 'name': 'Иван', 'email': 'i@i.ru', 'phone': '123'},
+                   'resident': False, 'lines': [
+                       {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '10:00',
+                        'qty': 1, 'hours': 1, 'unitPrice': 1000, 'linePrice': 1000, 'isOperator': False}]}
+        r = self.c.post('/api/orders/', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        order = Order.objects.get(number=self._j(r)['id'])
+        self.assertIsNone(order.company)
+        self.assertEqual(order.org, 'Гость')
+
+
 class CatalogImportTests(TestCase):
     def test_import_catalog_full(self):
         call_command('import_catalog')

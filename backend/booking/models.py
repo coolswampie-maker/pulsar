@@ -4,6 +4,7 @@
 """
 from datetime import time
 
+from django.conf import settings
 from django.db import models
 
 RES_TYPES = [
@@ -24,6 +25,27 @@ CATEGORIES = [
     ('materials', 'Новые материалы'), ('food', 'Функциональное питание'), ('analytics', 'Аналитика'),
 ]
 ORDER_STATUS = [('new', 'Новая'), ('confirmed', 'Подтверждена'), ('rejected', 'Отклонена')]
+
+
+class Company(models.Model):
+    """Компания-резидент кластера «Ломоносов» — владелец личного кабинета."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='company', verbose_name='Учётная запись')
+    name = models.CharField('Организация', max_length=200)
+    inn = models.CharField('ИНН', max_length=12, blank=True)
+    category = models.CharField('Направление', max_length=12, choices=CATEGORIES, blank=True)
+    resident = models.BooleanField('Резидент ИНТЦ', default=True)
+    contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)
+    phone = models.CharField('Телефон', max_length=40, blank=True)
+    created_at = models.DateTimeField('Зарегистрирована', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Компания'
+        verbose_name_plural = 'Компании'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
 
 
 class Resource(models.Model):
@@ -83,11 +105,13 @@ class BusySlot(models.Model):
 
 
 class Order(models.Model):
-    """Заявка на бронирование (гостевая). Мини-CRM оператора."""
+    """Заявка на бронирование. Может быть от компании из ЛК или гостевая/операторская."""
     number = models.CharField('Номер', max_length=20, unique=True)
     created_at = models.DateTimeField('Создана', auto_now_add=True)
     status = models.CharField('Статус', max_length=12, choices=ORDER_STATUS, default='new')
 
+    company = models.ForeignKey('Company', null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name='orders', verbose_name='Компания')
     org = models.CharField('Организация', max_length=200)
     contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)
     email = models.EmailField('Email', blank=True)

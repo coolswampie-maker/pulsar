@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'booking',
 ]
@@ -75,10 +76,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
 }
 
-# CORS: фронт (демо/локалка) обращается к API
+# CORS: фронт (личный кабинет) обращается к API. Токен-авторизация не зависит от cookie.
 CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv(
-    'CORS_ALLOWED_ORIGINS', 'http://localhost:4177').split(',') if o.strip()]
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:4177,http://localhost:8080,http://127.0.0.1:8080,'
+    'http://localhost:5500,http://127.0.0.1:5500,https://pulsar.zimermans.ru').split(',') if o.strip()]
+# В разработке удобно разрешить любой источник (данные защищены токеном, не cookie).
+CORS_ALLOW_ALL_ORIGINS = DEBUG
 CSRF_TRUSTED_ORIGINS = [o for o in CORS_ALLOWED_ORIGINS if o.startswith('http')]

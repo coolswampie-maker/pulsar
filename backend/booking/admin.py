@@ -9,7 +9,7 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
-from .models import BookingLine, BusySlot, Order, Resource
+from .models import BookingLine, BusySlot, Company, Order, Resource
 
 # Управление доступом (пока за всё отвечает один администратор) — прячем
 # стандартный блок «Пользователи и группы», чтобы не путал в CRM.
@@ -104,6 +104,14 @@ class BookingLineInline(admin.TabularInline):
     fields = ('resource', 'date', 'slot_start', 'slot_end', 'qty', 'hours', 'line_price')
     readonly_fields = ('line_price',)  # сумма считается автоматически
     autocomplete_fields = ('resource',)
+
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'inn', 'category', 'resident', 'contact_name', 'phone', 'created_at')
+    list_filter = ('resident', 'category')
+    search_fields = ('name', 'inn', 'contact_name', 'user__email')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(Order)
