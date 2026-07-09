@@ -1,14 +1,16 @@
 from django.contrib.auth import authenticate
+from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import BusySlot, Order, Resource
-from .serializers import (CompanySerializer, OrderCreateSerializer, OrderListSerializer,
-                          RegisterSerializer, ResourceSerializer)
+from .models import KPI_KEYS, BusySlot, Kpi, Order, Resource
+from .serializers import (CompanySerializer, KpiSerializer, OrderCreateSerializer,
+                          OrderListSerializer, RegisterSerializer, ResourceSerializer)
 
 
 def _auth_payload(company):
@@ -106,6 +108,55 @@ class MeView(APIView):
         if not company:
             return Response({'detail': 'Нет профиля компании.'}, status=404)
         ser = CompanySerializer(company, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+
+# ---------- показатели (KPI по методологии) ----------
+def _kpi_company(request):
+    return getattr(request.user, 'company', None)
+
+
+def _kpi_year(request):
+    try:
+        y = int(request.query_params.get('year') or 0)
+    except (TypeError, ValueError):
+        y = 0
+    return y or timezone.localdate().year
+
+
+class KpiView(APIView):
+    """GET /api/kpi/?year= — 6 показателей компании за год (автосоздание)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = _kpi_company(request)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=404)
+        year = _kpi_year(request)
+        existing = {k.key: k for k in company.kpis.filter(year=year)}
+        for key in KPI_KEYS:
+            if key not in existing:
+                existing[key] = Kpi.objects.create(company=company, year=year, key=key)
+        items = [existing[key] for key in KPI_KEYS]
+        return Response({'year': year, 'items': KpiSerializer(items, many=True, context={'request': request}).data})
+
+
+class KpiItemView(APIView):
+    """PATCH /api/kpi/<key>/?year= — компания вводит факт (+ документ)."""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def patch(self, request, key):
+        company = _kpi_company(request)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=404)
+        if key not in KPI_KEYS:
+            return Response({'detail': 'Неизвестный показатель.'}, status=404)
+        year = _kpi_year(request)
+        obj, _ = Kpi.objects.get_or_create(company=company, year=year, key=key)
+        ser = KpiSerializer(obj, data=request.data, partial=True, context={'request': request})
         ser.is_valid(raise_exception=True)
         ser.save()
         return Response(ser.data)

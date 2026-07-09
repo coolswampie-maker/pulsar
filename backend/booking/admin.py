@@ -9,7 +9,7 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
-from .models import BookingLine, BusySlot, Company, Order, Resource
+from .models import BookingLine, BusySlot, Company, Kpi, Order, Resource
 
 # Управление доступом (пока за всё отвечает один администратор) — прячем
 # стандартный блок «Пользователи и группы», чтобы не путал в CRM.
@@ -108,10 +108,30 @@ class BookingLineInline(admin.TabularInline):
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'inn', 'category', 'resident', 'contact_name', 'phone', 'created_at')
-    list_filter = ('resident', 'category')
+    list_display = ('name', 'inn', 'confirmed', 'resident', 'contact_name', 'phone', 'created_at')
+    list_filter = ('confirmed', 'resident', 'category')
+    list_editable = ('confirmed', 'resident')
     search_fields = ('name', 'inn', 'contact_name', 'user__email')
     readonly_fields = ('created_at',)
+    actions = ['mark_confirmed']
+
+    @admin.action(description='Подтвердить выбранные компании')
+    def mark_confirmed(self, request, queryset):
+        n = queryset.update(confirmed=True)
+        self.message_user(request, f'Подтверждено компаний: {n}')
+
+
+@admin.register(Kpi)
+class KpiAdmin(admin.ModelAdmin):
+    list_display = ('company', 'year', 'key', 'plan', 'fact', 'status_col', 'updated_at')
+    list_editable = ('plan',)          # оператор задаёт план (из календарного плана)
+    list_filter = ('year', 'key', 'company')
+    search_fields = ('company__name',)
+    ordering = ('company', '-year', 'key')
+
+    @admin.display(description='Статус')
+    def status_col(self, obj):
+        return {'ok': '✓ норма', 'warn': '≈ ниже плана', 'bad': '✗ недовыполн.', 'none': '—'}[obj.status]
 
 
 @admin.register(Order)

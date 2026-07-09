@@ -1,9 +1,26 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import BookingLine, Company, Order, Resource
+from .models import KPI_META, BookingLine, Company, Kpi, Order, Resource
 
 User = get_user_model()
+
+
+class KpiSerializer(serializers.ModelSerializer):
+    """Показатель компании: план (только чтение — ставит оператор) + факт (компания)."""
+    label = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()
+    hint = serializers.SerializerMethodField()
+    status = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Kpi
+        fields = ('key', 'label', 'unit', 'hint', 'plan', 'fact', 'status', 'document', 'updated_at', 'year')
+        read_only_fields = ('key', 'plan', 'year', 'updated_at')
+
+    def get_label(self, o): return KPI_META[o.key]['label']
+    def get_unit(self, o): return KPI_META[o.key]['unit']
+    def get_hint(self, o): return KPI_META[o.key]['hint']
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -12,19 +29,17 @@ class CompanySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Company
-        fields = ('name', 'inn', 'category', 'resident', 'contact_name', 'phone', 'email', 'created_at')
-        read_only_fields = ('created_at', 'email')
+        fields = ('name', 'inn', 'category', 'resident', 'confirmed',
+                  'contact_name', 'phone', 'email', 'created_at')
+        read_only_fields = ('created_at', 'email', 'resident', 'confirmed')
 
 
 class RegisterSerializer(serializers.Serializer):
-    """Регистрация компании: создаёт учётную запись и профиль."""
+    """Регистрация компании. Минимум полей; остальное и статус резидента
+    заполняет оператор при подтверждении."""
     email = serializers.EmailField()
     password = serializers.CharField(min_length=6, write_only=True)
     name = serializers.CharField(max_length=200)
-    inn = serializers.CharField(max_length=12, required=False, allow_blank=True)
-    category = serializers.CharField(max_length=12, required=False, allow_blank=True)
-    resident = serializers.BooleanField(default=True)
-    contact_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
     phone = serializers.CharField(max_length=40, required=False, allow_blank=True)
 
     def validate_email(self, v):
@@ -35,10 +50,9 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated):
         user = User.objects.create_user(
             username=validated['email'], email=validated['email'], password=validated['password'])
+        # resident/confirmed по умолчанию False — подтверждает оператор
         return Company.objects.create(
-            user=user, name=validated['name'], inn=validated.get('inn', ''),
-            category=validated.get('category', ''), resident=validated.get('resident', True),
-            contact_name=validated.get('contact_name', ''), phone=validated.get('phone', ''))
+            user=user, name=validated['name'], phone=validated.get('phone', ''))
 
 
 class LineOutSerializer(serializers.ModelSerializer):
@@ -114,7 +128,8 @@ class OrderCreateSerializer(serializers.Serializer):
         # компания из ЛК, если запрос авторизован
         request = self.context.get('request')
         company = getattr(getattr(request, 'user', None), 'company', None) if request else None
-        resident = company.resident if company else validated['resident']
+        # скидка резидента — только для подтверждённых оператором компаний
+        resident = (company.resident and company.confirmed) if company else validated['resident']
         discount = round(subtotal * 0.25) if resident else 0
         with transaction.atomic():
             number = Order.next_number()

@@ -12,7 +12,7 @@ from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from booking.models import BookingLine, BusySlot, Order, Resource
+from booking.models import BookingLine, BusySlot, Company, Kpi, Order, Resource
 
 
 class Base(TestCase):
@@ -327,19 +327,34 @@ class CabinetApiTests(TestCase):
         self.assertEqual(upd.status_code, 200)
         self.assertEqual(self._j(upd)['phone'], '+7 495 000-11-22')
 
-    def test_order_linked_to_company_with_resident_discount(self):
-        auth = self._auth(self.register())
-        payload = {'contact': {}, 'resident': False, 'lines': [
+    def _order_payload(self):
+        return {'contact': {}, 'resident': False, 'lines': [
             {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '11:00',
              'qty': 1, 'hours': 2, 'unitPrice': 1000, 'linePrice': 2000, 'isOperator': False}]}
-        r = self.c.post('/api/orders/', data=json.dumps(payload), content_type='application/json', **auth)
-        self.assertEqual(r.status_code, 201)
+
+    def test_registration_is_unconfirmed_and_not_resident(self):
+        self.register()
+        co = Company.objects.get(user__email='co@x.ru')
+        self.assertFalse(co.confirmed)
+        self.assertFalse(co.resident)   # статус ставит оператор
+
+    def test_confirmed_resident_gets_discount(self):
+        auth = self._auth(self.register())
+        Company.objects.filter(user__email='co@x.ru').update(confirmed=True, resident=True)
+        r = self.c.post('/api/orders/', data=json.dumps(self._order_payload()),
+                        content_type='application/json', **auth)
         order = Order.objects.get(number=self._j(r)['id'])
         self.assertIsNotNone(order.company)
-        self.assertEqual(order.discount, 500)   # резидент → 25% от 2000
-        listed = self.c.get('/api/orders/', **auth)
-        self.assertEqual(listed.status_code, 200)
-        self.assertEqual(len(self._j(listed)), 1)
+        self.assertEqual(order.discount, 500)   # подтверждён + резидент → 25%
+        self.assertEqual(len(self._j(self.c.get('/api/orders/', **auth))), 1)
+
+    def test_unconfirmed_company_no_discount(self):
+        auth = self._auth(self.register())
+        Company.objects.filter(user__email='co@x.ru').update(confirmed=False, resident=True)
+        r = self.c.post('/api/orders/', data=json.dumps(self._order_payload()),
+                        content_type='application/json', **auth)
+        order = Order.objects.get(number=self._j(r)['id'])
+        self.assertEqual(order.discount, 0)     # не подтверждён — без скидки
 
     def test_orders_list_requires_auth(self):
         self.assertEqual(self.c.get('/api/orders/').status_code, 401)
@@ -364,6 +379,57 @@ class CabinetApiTests(TestCase):
         order = Order.objects.get(number=self._j(r)['id'])
         self.assertIsNone(order.company)
         self.assertEqual(order.org, 'Гость')
+
+
+class KpiApiTests(TestCase):
+    """Показатели по методологии: автосоздание 6, ввод факта, статус."""
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/',
+                        data=json.dumps({'email': 'k@k.ru', 'password': 'secret1', 'name': 'ООО КПЭ'}),
+                        content_type='application/json')
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+
+    def test_kpi_requires_auth(self):
+        self.assertEqual(self.c.get('/api/kpi/').status_code, 401)
+
+    def test_kpi_get_autocreates_six(self):
+        r = self.c.get('/api/kpi/?year=2026', **self.auth)
+        self.assertEqual(r.status_code, 200)
+        d = json.loads(r.content)
+        self.assertEqual(d['year'], 2026)
+        self.assertEqual(len(d['items']), 6)
+        keys = [i['key'] for i in d['items']]
+        self.assertIn('rid', keys)
+        self.assertIn('export', keys)
+        self.assertTrue(all(i['status'] == 'none' for i in d['items']))
+
+    def test_company_updates_fact_and_status(self):
+        co = Company.objects.get(user__email='k@k.ru')
+        self.c.get('/api/kpi/?year=2026', **self.auth)               # автосоздание
+        Kpi.objects.filter(company=co, year=2026, key='rid').update(plan=3)   # план — оператор
+        r = self.c.patch('/api/kpi/rid/?year=2026', data=json.dumps({'fact': 2}),
+                         content_type='application/json', **self.auth)         # 2/3 = 0.67 → недовыполн.
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)['status'], 'bad')
+        r2 = self.c.patch('/api/kpi/rid/?year=2026', data=json.dumps({'fact': 3}),
+                          content_type='application/json', **self.auth)        # 3/3 → норма
+        self.assertEqual(json.loads(r2.content)['status'], 'ok')
+
+    def test_kpi_plan_read_only_for_company(self):
+        co = Company.objects.get(user__email='k@k.ru')
+        self.c.get('/api/kpi/?year=2026', **self.auth)
+        self.c.patch('/api/kpi/rid/?year=2026', data=json.dumps({'plan': 99, 'fact': 1}),
+                     content_type='application/json', **self.auth)
+        obj = Kpi.objects.get(company=co, year=2026, key='rid')
+        self.assertIsNone(obj.plan)          # компания не может задать план
+        self.assertEqual(obj.fact, 1)
+
+    def test_kpi_unknown_key(self):
+        r = self.c.patch('/api/kpi/xxx/?year=2026', data=json.dumps({'fact': 1}),
+                         content_type='application/json', **self.auth)
+        self.assertEqual(r.status_code, 404)
 
 
 class CatalogImportTests(TestCase):

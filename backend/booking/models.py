@@ -34,7 +34,8 @@ class Company(models.Model):
     name = models.CharField('Организация', max_length=200)
     inn = models.CharField('ИНН', max_length=12, blank=True)
     category = models.CharField('Направление', max_length=12, choices=CATEGORIES, blank=True)
-    resident = models.BooleanField('Резидент ИНТЦ', default=True)
+    resident = models.BooleanField('Резидент ИНТЦ', default=False)
+    confirmed = models.BooleanField('Подтверждена оператором', default=False)
     contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)
     phone = models.CharField('Телефон', max_length=40, blank=True)
     created_at = models.DateTimeField('Зарегистрирована', auto_now_add=True)
@@ -214,3 +215,50 @@ class BookingLine(models.Model):
 
     def __str__(self):
         return f'{self.resource_id} · {self.date or "—"}'
+
+
+# 6 ключевых показателей по Методологии оценки деятельности участников ИНТЦ.
+# (key, наименование, единица, норма-подсказка)
+KPI_DEFS = [
+    ('rid',     'Количество РИД',                'шт',        ''),
+    ('rnd',     'Инвестиции в НИОКР',            '% выручки', 'норма ≥ 10%'),
+    ('infra',   'Инвестиции в инфраструктуру',   '% выручки', 'норма ≥ 1%'),
+    ('staff',   'Численность работников',        'чел',       ''),
+    ('revenue', 'Выручка',                       '₽',         ''),
+    ('export',  'Доля экспорта',                 '%',         ''),
+]
+KPI_KEYS = [d[0] for d in KPI_DEFS]
+KPI_META = {d[0]: {'label': d[1], 'unit': d[2], 'hint': d[3]} for d in KPI_DEFS}
+
+
+class Kpi(models.Model):
+    """Ключевой показатель компании за год: план (оператор) + факт (компания)."""
+    company = models.ForeignKey('Company', on_delete=models.CASCADE, related_name='kpis', verbose_name='Компания')
+    year = models.PositiveSmallIntegerField('Год')
+    key = models.CharField('Показатель', max_length=12, choices=[(d[0], d[1]) for d in KPI_DEFS])
+    plan = models.DecimalField('План', max_digits=16, decimal_places=2, null=True, blank=True)
+    fact = models.DecimalField('Факт', max_digits=16, decimal_places=2, null=True, blank=True)
+    document = models.FileField('Подтверждающий документ', upload_to='kpi_docs/', null=True, blank=True)
+    updated_at = models.DateTimeField('Обновлён', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Показатель'
+        verbose_name_plural = 'Показатели'
+        unique_together = ('company', 'year', 'key')
+        ordering = ['company', '-year']
+
+    def __str__(self):
+        return f'{self.company_id} · {self.year} · {self.get_key_display()}'
+
+    @property
+    def status(self):
+        """ok — достигнут; warn — ниже плана, но в пределах 20%; bad — существенное
+        недовыполнение (>20%); none — нет данных. По п.3.5 Методологии."""
+        if self.plan in (None, 0) or self.fact is None:
+            return 'none'
+        ratio = float(self.fact) / float(self.plan)
+        if ratio >= 1:
+            return 'ok'
+        if ratio >= 0.8:
+            return 'warn'
+        return 'bad'
