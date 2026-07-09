@@ -89,11 +89,12 @@ class OrderListSerializer(serializers.ModelSerializer):
     """Заявка компании для раздела «Мои заявки»."""
     lines = LineOutSerializer(many=True, read_only=True)
     statusLabel = serializers.CharField(source='get_status_display', read_only=True)
+    changeRequest = serializers.CharField(source='change_request', read_only=True)
 
     class Meta:
         model = Order
         fields = ('id', 'number', 'status', 'statusLabel', 'created_at', 'org', 'note',
-                  'subtotal', 'discount', 'total', 'resident', 'lines')
+                  'changeRequest', 'subtotal', 'discount', 'total', 'resident', 'lines')
 
 
 class ResourceSerializer(serializers.ModelSerializer):

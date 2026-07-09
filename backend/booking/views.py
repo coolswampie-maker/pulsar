@@ -83,6 +83,21 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.Gene
         order.delete()
         return Response({'ok': True})
 
+    @action(detail=True, methods=['post'], url_path='request-change')
+    def request_change(self, request, pk=None):
+        """POST /api/orders/<id>/request-change/ — компания просит оператора изменить даты/время."""
+        if not request.user.is_authenticated:
+            return Response({'detail': 'Требуется вход.'}, status=401)
+        order = self.get_queryset().filter(pk=pk).first()
+        if not order:
+            return Response({'detail': 'Заявка не найдена.'}, status=404)
+        msg = (request.data.get('message') or '').strip()
+        if not msg:
+            return Response({'detail': 'Опишите, что изменить.'}, status=400)
+        order.change_request = msg
+        order.save(update_fields=['change_request'])
+        return Response({'ok': True, 'changeRequest': msg})
+
 
 # ---------- авторизация компании ----------
 class RegisterView(APIView):

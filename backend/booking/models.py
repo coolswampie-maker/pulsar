@@ -118,6 +118,7 @@ class Order(models.Model):
     email = models.EmailField('Email', blank=True)
     phone = models.CharField('Телефон', max_length=40, blank=True)
     note = models.TextField('Комментарий', blank=True)
+    change_request = models.TextField('Запрос на изменение (от компании)', blank=True)
     resident = models.BooleanField('Резидент ИНТЦ', default=False)
 
     subtotal = models.PositiveIntegerField('Стоимость, ₽', default=0)

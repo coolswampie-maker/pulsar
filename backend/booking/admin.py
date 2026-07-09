@@ -148,10 +148,14 @@ class OrderAdmin(RuTitlesMixin, admin.ModelAdmin):
     ru_plural = 'Заявки'
     ru_add = 'Добавление заявки'
     ru_change = 'Изменение заявки'
-    list_display = ('number', 'org', 'contact_name', 'status', 'total', 'created_at')
+    list_display = ('number', 'org', 'contact_name', 'status', 'change_flag', 'total', 'created_at')
     list_filter = ('status', 'resident', 'created_at')
     search_fields = ('number', 'org', 'contact_name', 'email', 'phone')
     readonly_fields = ('number', 'created_at', 'subtotal', 'discount', 'total')
+
+    @admin.display(description='Изменение')
+    def change_flag(self, obj):
+        return '⚠ запрос' if obj.change_request else ''
     inlines = [BookingLineInline]
     actions = ['mark_confirmed', 'mark_rejected']
 
