@@ -12,6 +12,17 @@
   function el(id){ return document.getElementById(id); }
   function qsAll(s,root){ return Array.prototype.slice.call((root||document).querySelectorAll(s)); }
   function unitLabel(r){ return '/ '+r.priceUnit; }
+  // склонение единиц по числу: 1 смена / 2 смены / 5 смен
+  var UNIT_FORMS = {
+    'смена':  ['смена','смены','смен'],
+    'час':    ['час','часа','часов'],
+    'сутки':  ['сутки','суток','суток'],
+    'образец':['образец','образца','образцов'],
+    'партия': ['партия','партии','партий']
+  };
+  function plural(n, f){ n=Math.abs(n)%100; var d=n%10;
+    if(n>10 && n<20) return f[2]; if(d>1 && d<5) return f[1]; if(d===1) return f[0]; return f[2]; }
+  function unitWord(n, unit){ var f=UNIT_FORMS[unit]; return f ? plural(n,f) : (unit||''); }
 
   var ICON = {
     building:'<path d="M4 21V5l8-3 8 3v16"/><path d="M4 21h16M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h.01M15 17h.01"/>',
@@ -324,12 +335,12 @@
     var r=book.res;
     if(rangeInvalid()) return '<span class="rn-err">Окончание должно быть позже начала.</span>';
     var o=currentOpts(), hrs=P.cart.rangeHours(o), units=P.cart.rangeUnits(r,o);
-    var uw=P.unitShort[r.priceUnit]||r.priceUnit;
     var span = book.startDate===book.endDate
       ? P.dates.human(book.startDate)+', '+book.startTime+'–'+book.endTime
       : P.dates.human(book.startDate)+' '+book.startTime+' → '+P.dates.human(book.endDate)+' '+book.endTime;
-    var dur = (hrs%1===0? hrs : hrs.toFixed(1))+' ч';
-    return span+' · <strong>'+units+' '+esc(uw)+'</strong> ('+dur+')';
+    var dur = (hrs%1===0? hrs : hrs.toFixed(1))+' '+unitWord(hrs,'час');
+    var tail = r.priceUnit==='час' ? '' : ' ('+dur+')';
+    return span+' · <strong>'+units+' '+esc(unitWord(units,r.priceUnit))+'</strong>'+tail;
   }
   function refreshRange(){ var n=el('rnote'); if(n) n.innerHTML=rangeNoteHtml(); updateEstimate(); }
 
@@ -450,11 +461,10 @@
      КОРЗИНА / БРОНИРОВАНИЕ
      ========================================================== */
   function slotText(l){
-    if(l.bookMode==='sample') return l.qty+' образец(ов)';
+    if(l.bookMode==='sample') return l.qty+' '+unitWord(l.qty,'образец');
     if(l.bookMode==='range'){
       var sd=l.startDate||l.date, ed=l.endDate||sd;
-      var uw=P.unitShort[l.unit]||l.unit||'';
-      var units=l.units? ' · '+l.units+' '+uw : '';
+      var units=l.units? ' · '+l.units+' '+unitWord(l.units,l.unit) : '';
       return sd===ed
         ? P.dates.human(sd)+', '+(l.slotStart||'')+'–'+(l.slotEnd||'')+units
         : P.dates.human(sd)+' '+(l.slotStart||'')+' → '+P.dates.human(ed)+' '+(l.slotEnd||'')+units;

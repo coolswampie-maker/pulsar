@@ -13,15 +13,15 @@ window.PULSAR = window.PULSAR || {};
     // крупные декоративные фото (реальные локальные снимки)
     'hero'       : 'assets/img/building.jpg',        // здание кластера «Ломоносов»
     'about'      : 'assets/img/building.jpg',         // ИНТЦ МГУ
-    'hero-media' : 'assets/img/lab-generic.jpg',      // лаборатория (первый экран)
+    'hero-media' : 'assets/img/room-b.avif',          // научное фото — чистая комната (первый экран)
 
-    // помещения — брендовый плейсхолдер по научному направлению
-    'room-a'        : '',
-    'room-b'        : '',
-    'room-v'        : '',
+    // помещения — реальные фото заказчика
+    'room-a'        : 'assets/img/room-a.avif',        // чистая комната А (фарм)
+    'room-b'        : 'assets/img/room-b.avif',        // чистая комната Б (биотех)
+    'room-v'        : 'assets/img/room-v.avif',        // чистая комната В (микроэлектроника)
     'room-vacuum'   : 'assets/img/eq-vk1000.png',     // реальная камера ВК-1000 (входит в комплекс)
-    'room-genomics' : '',
-    'room-nutrition': '',
+    'room-genomics' : 'assets/img/room-genomics.avif',// лаборатория молекулярной геномики
+    'room-nutrition': 'assets/img/room-nutrition.avif',// лаборатория функционального питания
 
     // оборудование — РЕАЛЬНЫЕ фото из «Приложение_1_Испытательный_комплекс.pdf»
     'eq-vk1000'  : 'assets/img/eq-vk1000.png',
@@ -46,19 +46,19 @@ window.PULSAR = window.PULSAR || {};
     'eq-lyo'     : 'assets/img/eq-lyo.jpg',
     'eq-3d'      : 'assets/img/eq-3d.jpg',
 
-    // специалисты — брендовый плейсхолдер (роль в лаборатории)
-    'sp-em'     : '',
-    'sp-ms'     : '',
-    'sp-nmr'    : '',
-    'sp-clean'  : '',
-    'sp-bioinf' : '',
-    'sp-test'   : '',
+    // специалисты — реальные фото (роль в лаборатории)
+    'sp-em'     : 'assets/img/sp-em.avif',            // оператор электронной микроскопии
+    'sp-ms'     : 'assets/img/sp-ms.avif',            // специалист масс-спектрометрии
+    'sp-nmr'    : 'assets/img/sp-nmr.avif',           // специалист ЯМР
+    'sp-clean'  : 'assets/img/sp-clean.jpg',          // инженер чистых помещений
+    'sp-bioinf' : 'assets/img/sp-bioinf.jpg',         // биоинформатик
+    'sp-test'   : 'assets/img/sp-test.jpg',           // инженер испытательного комплекса
 
-    // услуги под ключ — реальные фото / брендовый плейсхолдер по направлению
-    'srv-analysis': '',
-    'srv-icp'     : '',
+    // услуги под ключ — реальные фото
+    'srv-analysis': '',                                // запасной ключ → плейсхолдер
+    'srv-icp'     : 'assets/img/srv-icp.webp',        // элементный анализ ICP-MS
     'srv-sem'     : 'assets/img/srv-sem.jpg',         // СЭМ+EDX — реальное фото
-    'srv-xrd'     : '',
+    'srv-xrd'     : 'assets/img/srv-xrd.jpg',         // фазовый анализ XRD
     'srv-lyo'     : 'assets/img/srv-lyo.jpg'          // лиофилизация — реальное фото
   };
 })();
