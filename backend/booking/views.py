@@ -70,6 +70,19 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.Gene
         order = ser.save()
         return Response({'ok': True, 'id': order.number}, status=201)
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """POST /api/orders/<id>/cancel/ — компания отменяет свою новую заявку."""
+        if not request.user.is_authenticated:
+            return Response({'detail': 'Требуется вход.'}, status=401)
+        order = self.get_queryset().filter(pk=pk).first()
+        if not order:
+            return Response({'detail': 'Заявка не найдена.'}, status=404)
+        if order.status != 'new':
+            return Response({'detail': 'Отменить можно только новую заявку.'}, status=400)
+        order.delete()
+        return Response({'ok': True})
+
 
 # ---------- авторизация компании ----------
 class RegisterView(APIView):
