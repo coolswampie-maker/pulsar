@@ -393,6 +393,19 @@
     }
     renderBooking();
   }
+  // подсказка «какие часы уже заняты» в выбранные дни (частичная занятость)
+  function busyHoursHint(){
+    var r=book.res, lines=[];
+    P.dates.range(book.startDate, book.endDate).forEach(function(d){
+      var slots=P.getBusy(r.id).filter(function(b){ return b.date===d && b.slotStart; })
+        .sort(function(a,b){ return a.slotStart<b.slotStart?-1:1; })
+        .map(function(b){ return b.slotStart+'–'+b.slotEnd; });
+      if(slots.length) lines.push('<b>'+P.dates.human(d)+':</b> '+slots.join(', '));
+    });
+    if(!lines.length) return '';
+    return '<div class="busy-hint">'+icon('clock',15)+'<div>Уже занято — '+lines.join('; ')+
+      '. Выберите свободное время.</div></div>';
+  }
 
   function renderBooking(){
     var r=book.res, b=el('booking'); if(!b) return;
@@ -405,6 +418,7 @@
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
     } else if(r.bookMode==='range'){
       html+='<div class="field"><label>Выберите даты</label>'+rangeCalendarHtml()+'</div>'+
+        busyHoursHint()+
         '<div class="field-row">'+
           '<div class="field"><label>Время начала</label><input type="time" id="bstartt" step="1800" value="'+book.startTime+'"></div>'+
           '<div class="field"><label>Время окончания</label><input type="time" id="bendt" step="1800" value="'+book.endTime+'"></div>'+
