@@ -83,10 +83,9 @@
     'eq-massspec':[{off:0,s:'09:00',e:'13:00'},{off:1,s:'10:00',e:'14:00'},{off:2,s:'09:00',e:'12:00'}],
     'eq-sem':[{off:1,s:'12:00',e:'16:00'}],
     'eq-nmr':[{off:3,s:'10:00',e:'13:00'}],
-    // помещения бронируются почасово → занятость по времени (день остаётся частично доступен)
-    'room-cleanroom-a':[{off:2,s:'09:00',e:'13:00'}],
-    'room-vacuum':[{off:0,s:'10:00',e:'18:00'},{off:4,s:'09:00',e:'14:00'}],
-    // суточное оборудование бронируется целиком → день занят полностью
+    // помещения/оборудование бронируются по сменам/суткам → занятые дни целиком
+    'room-cleanroom-a':[{off:2},{off:6}],
+    'room-vacuum':[{off:0},{off:4}],
     'eq-vk1000':[{off:2},{off:3}],
     'eq-mim':[{off:5}]
   };
@@ -103,14 +102,9 @@
       o.lines.forEach(function(l){
         if(l.resourceId!==id) return;
         if(l.bookMode==='range' && l.startDate){
-          // интервальная бронь: разворачиваем по дням, сохраняя время начала/конца по краям
-          var end=l.endDate||l.startDate, days=P.dates.range(l.startDate,end);
-          days.forEach(function(d){
-            out.push({
-              date:d,
-              slotStart: d===l.startDate ? (l.slotStart||null) : '00:00',
-              slotEnd:   d===end        ? (l.slotEnd||null)   : '24:00'
-            });
+          // бронь по дням: каждый день диапазона занят целиком
+          P.dates.range(l.startDate, l.endDate||l.startDate).forEach(function(d){
+            out.push({date:d, slotStart:null, slotEnd:null});
           });
         } else {
           out.push({date:l.date, slotStart:l.slotStart||null, slotEnd:l.slotEnd||null});

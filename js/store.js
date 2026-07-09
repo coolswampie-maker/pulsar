@@ -54,37 +54,23 @@
     return clash;
   };
 
-  /* ---- проверка конфликта для datetime-промежутка (помещения) ---- */
-  // интервал брони: [дата+время начала .. дата+время конца]; даты могут различаться.
-  // конфликт — реальное пересечение интервалов (учитывает переход через сутки).
-  Cart.conflictInterval = function(resId, startDate, startTime, endDate, endTime){
+  /* ---- проверка конфликта диапазона дат (только расписание, не корзина) ---- */
+  // занятые дни в календаре и так недоступны для выбора; свою корзину не блокируем —
+  // можно бронировать несколько пересекающихся позиций.
+  Cart.conflictRange = function(resId, startDate, endDate){
     if(!startDate) return null;
-    var iv = slotAbs(startDate, startTime, endDate, endTime), clash=null;
-    function hit(a){ return iv[0] < a[1] && a[0] < iv[1]; }
-    P.getBusy(resId).forEach(function(b){
-      if(hit(slotAbs(b.date, b.slotStart, b.date, b.slotEnd))) clash='занято в расписании';
-    });
-    read().forEach(function(l){
-      if(l.resourceId!==resId) return;
-      var a = l.bookMode==='range'
-        ? slotAbs(l.startDate||l.date, l.slotStart, l.endDate||l.date, l.slotEnd)
-        : slotAbs(l.date, l.slotStart, l.date, l.slotEnd);
-      if(hit(a)) clash='уже занято в вашей брони';
+    var busy=P.getBusy(resId), clash=null;
+    P.dates.range(startDate, endDate).forEach(function(d){
+      if(busy.some(function(b){ return b.date===d; })) clash='занято в расписании ('+P.dates.human(d)+')';
     });
     return clash;
   };
 
-  /* ---- datetime-интервал → часы и единицы тарифа ---- */
-  // длина интервала брони в часах
-  var UNIT_HOURS = { 'час':1, 'смена':8, 'сутки':24 };
-  Cart.rangeHours = function(o){
-    var iv=slotAbs(o.startDate, o.slotStart, o.endDate||o.startDate, o.slotEnd);
-    return Math.max(0, (iv[1]-iv[0])/60);
-  };
-  // сколько тарифных единиц (час/смена/сутки) укладывается в интервал, с учётом минимума
+  /* ---- дни → тарифные единицы (смена/сутки = 1/день, час = 8/день) ---- */
+  var UNIT_PER_DAY = { 'час':8, 'смена':1, 'сутки':1, 'образец':1, 'партия':1 };
   Cart.rangeUnits = function(res, o){
-    var uh = UNIT_HOURS[res.priceUnit] || 1;
-    return Math.max(Math.ceil(Cart.rangeHours(o)/uh), res.minUnits||1);
+    var days = o.days || P.dates.days(o.startDate, o.endDate);
+    return Math.max(days,1) * (UNIT_PER_DAY[res.priceUnit] || 1);
   };
 
   /* ---- расчёт цены строки ---- */
@@ -102,7 +88,7 @@
   function operatorHours(parentRes, opts){
     if(parentRes.bookMode==='hour')  return opts.hours||parentRes.minUnits||2;
     if(parentRes.bookMode==='day')   return 8*(opts.qty||1);
-    if(parentRes.bookMode==='range') return Math.max(Math.ceil(Cart.rangeHours(opts)),1);
+    if(parentRes.bookMode==='range') return 8*(opts.days||P.dates.days(opts.startDate,opts.endDate)||1);
     if(parentRes.bookMode==='shift') return 8;
     return 8;
   }
@@ -113,13 +99,13 @@
     opts=opts||{};
     var res=P.getById(resId); if(!res) return {ok:false,msg:'Ресурс не найден'};
 
-    // конфликт: помещения — по datetime-интервалу, остальное — по времени в дне
+    // конфликт по расписанию (свою корзину не блокируем)
     var c = res.bookMode==='range'
-      ? Cart.conflictInterval(resId, opts.startDate, opts.slotStart||null, opts.endDate, opts.slotEnd||null)
+      ? Cart.conflictRange(resId, opts.startDate, opts.endDate)
       : Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
     if(c){
       return res.bookMode==='range'
-        ? {ok:false,msg:'Выбранное время '+c+'. Укажите другой промежуток.'}
+        ? {ok:false,msg:'Часть дат '+c+'. Выберите другие даты.'}
         : {ok:false,msg:'Этот слот '+c+'. Выберите другое время.'};
     }
 
@@ -130,11 +116,11 @@
     lines.push({
       lineId:parentId, resourceId:res.id, type:res.type, bookMode:res.bookMode,
       title:res.title, lab:res.lab, img:res.img, unit:res.priceUnit,
-      date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
+      date:opts.date||null, slotStart:null, slotEnd:null,
       startDate:opts.startDate||null, endDate:opts.endDate||null,
       days: isRange ? P.dates.days(opts.startDate, opts.endDate) : (opts.days||null),
       units: isRange ? Cart.rangeUnits(res,opts) : null,
-      qty:opts.qty||1, hours: isRange ? Cart.rangeHours(opts) : (opts.hours||null),
+      qty:opts.qty||1, hours: isRange ? null : (opts.hours||null),
       unitPrice:pr.unit, linePrice:pr.line,
       linkedTo:null, isOperator:false
     });
