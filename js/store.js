@@ -76,14 +76,14 @@
     if(res.bookMode==='range') return { line:v*Cart.rangeUnits(res,opts), unit:v };
     if(res.bookMode==='shift') return { line:v*(opts.shifts||1), unit:v };
     if(res.bookMode==='day')   return { line:v*(opts.qty||1), unit:v };
-    if(res.bookMode==='hour')  return { line:v*(opts.hours||res.minUnits||1), unit:v };
+    if(res.bookMode==='hour')  return { line:v*(opts.hours||res.minUnits||1)*(opts.days||1), unit:v };
     if(res.bookMode==='sample')return { line:v*(opts.qty||1), unit:v };
     return { line:v, unit:v };
   }
 
   // сколько часов работы оператора нужно на родительскую строку
   function operatorHours(parentRes, opts){
-    if(parentRes.bookMode==='hour')  return opts.hours||parentRes.minUnits||2;
+    if(parentRes.bookMode==='hour')  return (opts.hours||parentRes.minUnits||2)*(opts.days||1);
     if(parentRes.bookMode==='day')   return 8*(opts.qty||1);
     if(parentRes.bookMode==='range') return 8*(opts.days||P.dates.days(opts.startDate,opts.endDate)||1);
     if(parentRes.bookMode==='shift') return 8*(opts.shifts||1);
@@ -98,9 +98,17 @@
 
     // конфликт по расписанию (свою корзину не блокируем)
     var byDays = res.bookMode==='range' || res.bookMode==='shift';
-    var c = byDays
-      ? Cart.conflictRange(resId, opts.startDate, opts.endDate)
-      : Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
+    var c=null;
+    if(byDays){
+      c=Cart.conflictRange(resId, opts.startDate, opts.endDate);
+    } else if(res.bookMode==='hour'){
+      // почасово, возможно на несколько дней — проверяем слот в каждый день
+      P.dates.range(opts.startDate||opts.date, opts.endDate||opts.date).forEach(function(d){
+        if(!c){ var x=Cart.conflict(resId, d, opts.slotStart||null, opts.slotEnd||null); if(x) c=x; }
+      });
+    } else {
+      c=Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
+    }
     if(c){
       return byDays
         ? {ok:false,msg:'Часть дат '+c+'. Выберите другие даты.'}
@@ -133,9 +141,8 @@
           lineId:uid(), resourceId:op.id, type:'specialist', bookMode:'hour',
           title:op.title, lab:op.lab, img:op.img, unit:'час',
           date:opts.date||null,
-          // при интервальной брони оператор идёт на весь промежуток (показываем длительность, а не слот)
-          slotStart: isRange ? null : (opts.slotStart||null),
-          slotEnd:   isRange ? null : (opts.slotEnd||null),
+          // оператор показывается общей длительностью (а не слотом)
+          slotStart:null, slotEnd:null,
           startDate:opts.startDate||null, endDate:opts.endDate||null,
           qty:1, hours:h, unitPrice:op.priceValue, linePrice:op.priceValue*h,
           linkedTo:parentId, isOperator:true

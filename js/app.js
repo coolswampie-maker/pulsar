@@ -337,7 +337,11 @@
   // статус дня: past | busy (день занят, выбрать нельзя) | free
   function dayStatus(resId, iso){
     if(iso < P.dates.todayISO()) return 'past';
-    return P.getBusy(resId).some(function(b){ return b.date===iso; }) ? 'busy' : 'free';
+    var busy=P.getBusy(resId).filter(function(b){ return b.date===iso; });
+    if(!busy.length) return 'free';
+    // почасово день недоступен только если занят целиком; частичную занятость снимают слоты времени
+    if(book.res.bookMode==='hour') return busy.some(function(b){ return b.slotStart==null; }) ? 'busy' : 'free';
+    return 'busy'; // смены/сутки — любой занятый день недоступен
   }
   var CAL_WD=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   var CAL_MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -423,23 +427,18 @@
     } else if(r.bookMode==='range'){
       html+=rangeCalendarHtml()+
         '<div class="range-note" id="rnote">'+rangeSummaryHtml()+'</div>';
-    } else {
-      html+='<div class="field"><label>Дата</label><input type="date" id="bdate" min="'+P.dates.todayISO()+'" value="'+book.date+'"></div>';
-      if(r.bookMode==='shift'){
-        html+='<div class="field"><label>Смена</label><select id="bshift"><option value="day">Дневная смена (09:00–17:00)</option><option value="eve">Вечерняя смена (18:00–02:00)</option></select></div>';
-      } else if(r.bookMode==='day'){
-        html+='<div class="field"><label>Количество суток</label><input type="number" id="bqty" min="1" max="14" value="'+book.qty+'"></div>';
-      } else { // hour
-        html+='<div class="field"><label>Время начала</label><div class="slots" id="bslots">'+
+    } else { // hour — почасово, можно на несколько дат
+      html+=rangeCalendarHtml()+
+        '<div class="field" style="margin-top:12px"><label>Время начала (в каждый выбранный день)</label><div class="slots" id="bslots">'+
           timeStarts().map(function(t){
-            var busy=isStartBusy(r.id,book.date,t,book.hours);
+            var busy=isStartBusy(r.id,t,book.hours);
             return '<button class="slot'+(book.start===t?' sel':'')+'" data-t="'+t+'"'+(busy?' disabled':'')+'>'+t+'</button>';
           }).join('')+'</div></div>'+
-          '<div class="field"><label>Длительность</label><select id="bhours">'+
-            [2,3,4,5,6].filter(function(h){return h>=(r.minUnits||1);}).map(function(h){
-              return '<option value="'+h+'"'+(book.hours===h?' selected':'')+'>'+h+' ч</option>'; }).join('')+
-          '</select></div>';
-      }
+        '<div class="field"><label>Длительность</label><select id="bhours">'+
+          [2,3,4,5,6].filter(function(h){return h>=(r.minUnits||1);}).map(function(h){
+            return '<option value="'+h+'"'+(book.hours===h?' selected':'')+'>'+h+' ч</option>'; }).join('')+
+        '</select></div>'+
+        '<div class="range-note" id="rnote">'+hourSummaryHtml()+'</div>';
     }
 
     if(r.requiresOperator){
@@ -456,8 +455,20 @@
     updateEstimate();
   }
 
-  function isStartBusy(id,date,start,hours){
-    return !!P.cart.conflict(id,date,start,computeEnd(start,hours));
+  // слот занят, если конфликтует по расписанию хотя бы в один день выбранного диапазона
+  function isStartBusy(id,start,hours){
+    var end=computeEnd(start,hours);
+    return P.dates.range(book.startDate, book.endDate).some(function(d){ return !!P.cart.conflict(id,d,start,end); });
+  }
+  function hourSummaryHtml(){
+    var s=book.startDate, e=book.endDate, days=P.dates.days(s,e);
+    if(!book.start) return '<span class="rn-err">Выберите время начала.</span>';
+    var span = s===e ? P.dates.human(s) : P.dates.human(s)+' – '+P.dates.human(e);
+    var win = book.start+'–'+computeEnd(book.start,book.hours);
+    var strong = days>1
+      ? days+' '+unitWord(days,'день')+' × '+book.hours+' ч = '+(book.hours*days)+' ч'
+      : book.hours+' '+unitWord(book.hours,'час');
+    return span+', '+win+' · <strong>'+strong+'</strong>';
   }
   function bindBooking(){
     var r=book.res;
@@ -476,7 +487,8 @@
     if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
     qsAll('#bslots .slot').forEach(function(s){ if(s.disabled) return;
-      s.onclick=function(){ book.start=s.getAttribute('data-t'); qsAll('#bslots .slot').forEach(function(x){x.classList.remove('sel');}); s.classList.add('sel'); updateEstimate(); };
+      s.onclick=function(){ book.start=s.getAttribute('data-t'); qsAll('#bslots .slot').forEach(function(x){x.classList.remove('sel');}); s.classList.add('sel');
+        var n=el('rnote'); if(n) n.innerHTML=hourSummaryHtml(); updateEstimate(); };
     });
     el('badd').onclick=addToCart;
   }
@@ -493,17 +505,17 @@
       o.days=P.dates.days(book.startDate,book.endDate);
       return o;
     }
-    o.date=book.date;
-    if(r.bookMode==='shift'){ o.qty=1; o.slotStart=book.shift==='day'?'09:00':'18:00'; o.slotEnd=book.shift==='day'?'17:00':'26:00'; }
-    else if(r.bookMode==='day'){ o.qty=book.qty; }
-    else { o.hours=book.hours; if(book.start){ o.slotStart=book.start; o.slotEnd=computeEnd(book.start,book.hours); } }
+    // hour — почасово, диапазон дат + окно времени в каждый день
+    o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
+    o.days=P.dates.days(book.startDate,book.endDate); o.hours=book.hours;
+    if(book.start){ o.slotStart=book.start; o.slotEnd=computeEnd(book.start,book.hours); }
     return o;
   }
   function estimatePrice(){
     var r=book.res, o=currentOpts();
     if(r.bookMode==='shift') return r.priceValue*(o.shifts||1);
     if(r.bookMode==='range') return r.priceValue*P.cart.rangeUnits(r,o);
-    if(r.bookMode==='hour') return r.priceValue*(o.hours||r.minUnits||1);
+    if(r.bookMode==='hour') return r.priceValue*(o.hours||r.minUnits||1)*(o.days||1);
     if(r.bookMode==='sample'||r.bookMode==='day') return r.priceValue*(o.qty||1);
     return r.priceValue*(o.qty||1);
   }
@@ -512,7 +524,8 @@
     var base=estimatePrice(), opLine='';
     if(r.requiresOperator){
       var op=P.getById(r.requiresOperator);
-      var h = r.bookMode==='hour'?book.hours : r.bookMode==='day'?8*book.qty : r.bookMode==='range'?8*P.dates.days(book.startDate,book.endDate) : r.bookMode==='shift'?8*shiftCount() : 8;
+      var days1=P.dates.days(book.startDate,book.endDate);
+      var h = r.bookMode==='hour'?book.hours*days1 : r.bookMode==='day'?8*book.qty : r.bookMode==='range'?8*days1 : r.bookMode==='shift'?8*shiftCount() : 8;
       if(op){ opLine='<div class="est-line"><span>Оператор ('+h+' ч)</span><span>'+fmt(op.priceValue*h)+'</span></div>'; base+=op.priceValue*h; }
     }
     box.innerHTML='<div class="est-line"><span>'+esc(P.typeMeta[r.type].single)+'</span><span>'+fmt(estimatePrice())+'</span></div>'+
@@ -547,13 +560,16 @@
     }
     var d=P.dates.human(l.date);
     if(l.bookMode==='day') return d+' · '+l.qty+' сут.';
-    // час без конкретного времени (напр. оператор при суточной/промежуточной брони)
+    // час без конкретного времени (напр. оператор при суточной/сменной брони)
     if(!l.slotStart){
       var span=(l.startDate&&l.endDate&&l.startDate!==l.endDate)
         ? P.dates.human(l.startDate)+' — '+P.dates.human(l.endDate) : d;
       return span+' · '+(l.hours||'')+' ч';
     }
-    return d+' · '+(l.slotStart||'')+'–'+(l.slotEnd||'')+' ('+(l.hours||'')+' ч)';
+    // почасово (возможно на несколько дней)
+    var hs=l.startDate||l.date, he=l.endDate||hs, hd=l.days||1;
+    if(hs!==he) return P.dates.human(hs)+' – '+P.dates.human(he)+', '+l.slotStart+'–'+l.slotEnd+' · '+hd+' '+unitWord(hd,'день');
+    return P.dates.human(hs)+' · '+l.slotStart+'–'+l.slotEnd+' ('+(l.hours||'')+' ч)';
   }
   function viewCart(){
     var lines=P.cart.get();
