@@ -101,8 +101,8 @@
       if(o.status!=='confirmed') return;
       o.lines.forEach(function(l){
         if(l.resourceId!==id) return;
-        if(l.bookMode==='range' && l.startDate){
-          // бронь по дням: каждый день диапазона занят целиком
+        if((l.bookMode==='range'||l.bookMode==='shift') && l.startDate){
+          // бронь по дням/сменам: каждый день диапазона занят целиком
           P.dates.range(l.startDate, l.endDate||l.startDate).forEach(function(d){
             out.push({date:d, slotStart:null, slotEnd:null});
           });

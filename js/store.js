@@ -41,15 +41,12 @@
     return [ absMin(dateStart, timeStart, 0), absMin(dateEnd||dateStart, timeEnd, 1440) ];
   }
 
-  /* ---- проверка конфликта: занятость + уже добавленное ---- */
+  /* ---- проверка конфликта по времени (только расписание, не корзина) ---- */
+  // свою корзину не блокируем — можно бронировать несколько пересекающихся позиций.
   Cart.conflict = function(resId, date, slotStart, slotEnd){
     var clash=null;
     P.getBusy(resId).forEach(function(b){
       if(b.date===date && overlap(slotStart,slotEnd,b.slotStart,b.slotEnd)) clash='занято в расписании';
-    });
-    read().forEach(function(l){
-      if(l.resourceId===resId && l.date===date && overlap(slotStart,slotEnd,l.slotStart,l.slotEnd))
-        clash='уже в вашей корзине';
     });
     return clash;
   };
@@ -77,7 +74,7 @@
   function priceLine(res, opts){
     var v=res.priceValue;
     if(res.bookMode==='range') return { line:v*Cart.rangeUnits(res,opts), unit:v };
-    if(res.bookMode==='shift') return { line:v*(opts.qty||1), unit:v };
+    if(res.bookMode==='shift') return { line:v*(opts.shifts||1), unit:v };
     if(res.bookMode==='day')   return { line:v*(opts.qty||1), unit:v };
     if(res.bookMode==='hour')  return { line:v*(opts.hours||res.minUnits||1), unit:v };
     if(res.bookMode==='sample')return { line:v*(opts.qty||1), unit:v };
@@ -89,7 +86,7 @@
     if(parentRes.bookMode==='hour')  return opts.hours||parentRes.minUnits||2;
     if(parentRes.bookMode==='day')   return 8*(opts.qty||1);
     if(parentRes.bookMode==='range') return 8*(opts.days||P.dates.days(opts.startDate,opts.endDate)||1);
-    if(parentRes.bookMode==='shift') return 8;
+    if(parentRes.bookMode==='shift') return 8*(opts.shifts||1);
     return 8;
   }
 
@@ -100,27 +97,29 @@
     var res=P.getById(resId); if(!res) return {ok:false,msg:'Ресурс не найден'};
 
     // конфликт по расписанию (свою корзину не блокируем)
-    var c = res.bookMode==='range'
+    var byDays = res.bookMode==='range' || res.bookMode==='shift';
+    var c = byDays
       ? Cart.conflictRange(resId, opts.startDate, opts.endDate)
       : Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
     if(c){
-      return res.bookMode==='range'
+      return byDays
         ? {ok:false,msg:'Часть дат '+c+'. Выберите другие даты.'}
         : {ok:false,msg:'Этот слот '+c+'. Выберите другое время.'};
     }
 
     var lines=read();
-    var isRange=res.bookMode==='range';
+    var isRange=res.bookMode==='range', isShift=res.bookMode==='shift';
     var pr=priceLine(res,opts);
     var parentId=uid();
     lines.push({
       lineId:parentId, resourceId:res.id, type:res.type, bookMode:res.bookMode,
       title:res.title, lab:res.lab, img:res.img, unit:res.priceUnit,
-      date:opts.date||null, slotStart:null, slotEnd:null,
+      date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
       startDate:opts.startDate||null, endDate:opts.endDate||null,
+      shiftStart:opts.shiftStart||null, shiftEnd:opts.shiftEnd||null, shifts:opts.shifts||null,
       days: isRange ? P.dates.days(opts.startDate, opts.endDate) : (opts.days||null),
       units: isRange ? Cart.rangeUnits(res,opts) : null,
-      qty:opts.qty||1, hours: isRange ? null : (opts.hours||null),
+      qty:opts.qty||1, hours: (isRange||isShift) ? null : (opts.hours||null),
       unitPrice:pr.unit, linePrice:pr.line,
       linkedTo:null, isOperator:false
     });

@@ -273,6 +273,11 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .range-note{font-size:13px;color:var(--ink-soft);background:var(--paper-2);border:1px solid var(--line);border-radius:var(--r);padding:10px 13px;margin:2px 0 15px;line-height:1.5;}
 .range-note strong{color:var(--navy);}
 .range-note .rn-err{color:var(--busy);font-weight:600;}
+.seg{display:flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;}
+.seg-b{flex:1;padding:9px 6px;font-size:13px;background:var(--paper-2);color:var(--ink);cursor:pointer;border:0;border-right:1px solid var(--line);transition:.12s;}
+.seg-b:last-child{border-right:0;}
+.seg-b:hover{background:#fff;}
+.seg-b.on{background:var(--navy);color:#fff;}
 .busy-hint{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:#8A6D2F;background:#FBF1DD;border-radius:var(--r);padding:10px 12px;margin:12px 0 4px;}
 .busy-hint svg{flex:none;margin-top:1px;}
 .busy-hint b{color:#6E561F;}

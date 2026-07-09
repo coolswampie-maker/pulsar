@@ -296,10 +296,11 @@
   function viewResource(id){
     var r=P.getById(id);
     if(!r) return render('<section class="section"><div class="wrap empty"><h3>Ресурс не найден</h3><a class="btn btn-primary" href="#/catalog">В каталог</a></div></section>');
-    // по умолчанию — один день (одна смена/сутки)
+    // по умолчанию — один день / одна смена
     var d1=P.dates.plusISO(1);
     book={ res:r, date:d1, start:null, hours:r.minUnits||2, qty:1, shift:'day',
            startDate:d1, endDate:d1, rangePick:'start',
+           shiftStart:'day', shiftEnd:'day',
            cal:new Date(parseInt(d1.slice(0,4),10), parseInt(d1.slice(5,7),10)-1, 1), err:'' };
     var bundled=P.cart.bundledFor(r);
     render(''+
@@ -373,11 +374,34 @@
     }
     renderBooking();
   }
-  // короткая подпись выбранного периода
+  // короткая подпись выбранного периода (сутки — для оборудования)
   function rangeSummaryHtml(){
-    var s=book.startDate, e=book.endDate, days=P.dates.days(s,e);
+    var s=book.startDate, e=book.endDate, days=P.dates.days(s,e), r=book.res;
     var span = s===e ? P.dates.human(s) : P.dates.human(s)+' – '+P.dates.human(e);
-    return span+' · <strong>'+days+' '+unitWord(days,'день')+'</strong>';
+    return span+' · <strong>'+days+' '+unitWord(days, r.priceUnit==='сутки'?'сутки':'день')+'</strong>';
+  }
+
+  /* ---- смены (лаборатории): заезд/выезд + подсчёт смен ---- */
+  var SHIFT_LABEL={day:'дневная', eve:'ночная'}, SHIFT_TIME={day:'09:00–17:00', eve:'18:00–02:00'}, SHIFT_IDX={day:0, eve:1};
+  function calDayIndex(iso){ return Math.round(new Date(iso+'T12:00:00').getTime()/86400000); }
+  function shiftCount(){
+    var a=calDayIndex(book.startDate)*2+SHIFT_IDX[book.shiftStart];
+    var b=calDayIndex(book.endDate)*2+SHIFT_IDX[book.shiftEnd];
+    return Math.max(b-a+1, 1);
+  }
+  function shiftToggle(id, val){
+    return '<div class="seg" id="'+id+'">'+
+      ['day','eve'].map(function(s){
+        return '<button type="button" class="seg-b'+(val===s?' on':'')+'" data-s="'+s+'">'+
+          (s==='day'?'Дневная':'Ночная')+'</button>';
+      }).join('')+'</div>';
+  }
+  function shiftSummaryHtml(){
+    var n=shiftCount(), s=book.startDate, e=book.endDate;
+    var span = (s===e && book.shiftStart===book.shiftEnd)
+      ? P.dates.human(s)+', '+SHIFT_LABEL[book.shiftStart]+' смена'
+      : P.dates.human(s)+' ('+SHIFT_LABEL[book.shiftStart]+') – '+P.dates.human(e)+' ('+SHIFT_LABEL[book.shiftEnd]+')';
+    return span+' · <strong>'+n+' '+unitWord(n,'смена')+'</strong>';
   }
 
   function renderBooking(){
@@ -389,6 +413,13 @@
       html+='<div class="field"><label>Количество образцов</label>'+
         '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
+    } else if(r.bookMode==='shift'){
+      html+=rangeCalendarHtml()+
+        '<div class="field-row" style="margin-top:12px">'+
+          '<div class="field"><label>Смена заезда</label>'+shiftToggle('bshiftStart',book.shiftStart)+'</div>'+
+          '<div class="field"><label>Смена выезда</label>'+shiftToggle('bshiftEnd',book.shiftEnd)+'</div>'+
+        '</div>'+
+        '<div class="range-note" id="rnote">'+shiftSummaryHtml()+'</div>';
     } else if(r.bookMode==='range'){
       html+=rangeCalendarHtml()+
         '<div class="range-note" id="rnote">'+rangeSummaryHtml()+'</div>';
@@ -438,6 +469,9 @@
       if(c.disabled || !c.getAttribute('data-cal')) return;
       c.onclick=function(){ pickCalDay(c.getAttribute('data-cal')); };
     });
+    // переключатели смен заезда/выезда (лаборатории)
+    qsAll('#bshiftStart .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftStart=bt.getAttribute('data-s'); renderBooking(); }; });
+    qsAll('#bshiftEnd .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftEnd=bt.getAttribute('data-s'); renderBooking(); }; });
     if(el('bshift')) el('bshift').onchange=function(){ book.shift=this.value; };
     if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
@@ -449,6 +483,11 @@
   function currentOpts(){
     var r=book.res, o={};
     if(r.type==='service'){ o.qty=book.qty; return o; }
+    if(r.bookMode==='shift'){
+      o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
+      o.shiftStart=book.shiftStart; o.shiftEnd=book.shiftEnd; o.shifts=shiftCount();
+      return o;
+    }
     if(r.bookMode==='range'){
       o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
       o.days=P.dates.days(book.startDate,book.endDate);
@@ -462,6 +501,7 @@
   }
   function estimatePrice(){
     var r=book.res, o=currentOpts();
+    if(r.bookMode==='shift') return r.priceValue*(o.shifts||1);
     if(r.bookMode==='range') return r.priceValue*P.cart.rangeUnits(r,o);
     if(r.bookMode==='hour') return r.priceValue*(o.hours||r.minUnits||1);
     if(r.bookMode==='sample'||r.bookMode==='day') return r.priceValue*(o.qty||1);
@@ -472,7 +512,7 @@
     var base=estimatePrice(), opLine='';
     if(r.requiresOperator){
       var op=P.getById(r.requiresOperator);
-      var h = r.bookMode==='hour'?book.hours : r.bookMode==='day'?8*book.qty : r.bookMode==='range'?8*P.dates.days(book.startDate,book.endDate) : 8;
+      var h = r.bookMode==='hour'?book.hours : r.bookMode==='day'?8*book.qty : r.bookMode==='range'?8*P.dates.days(book.startDate,book.endDate) : r.bookMode==='shift'?8*shiftCount() : 8;
       if(op){ opLine='<div class="est-line"><span>Оператор ('+h+' ч)</span><span>'+fmt(op.priceValue*h)+'</span></div>'; base+=op.priceValue*h; }
     }
     box.innerHTML='<div class="est-line"><span>'+esc(P.typeMeta[r.type].single)+'</span><span>'+fmt(estimatePrice())+'</span></div>'+
@@ -493,13 +533,19 @@
      ========================================================== */
   function slotText(l){
     if(l.bookMode==='sample') return l.qty+' '+unitWord(l.qty,'образец');
+    if(l.bookMode==='shift'){
+      var ss=l.startDate||l.date, se=l.endDate||ss, n=l.shifts||1, SL={day:'дневная',eve:'ночная'};
+      var sp = (ss===se && l.shiftStart===l.shiftEnd)
+        ? P.dates.human(ss)+', '+(SL[l.shiftStart]||'')+' смена'
+        : P.dates.human(ss)+' ('+(SL[l.shiftStart]||'')+') – '+P.dates.human(se)+' ('+(SL[l.shiftEnd]||'')+')';
+      return sp+' · '+n+' '+unitWord(n,'смена');
+    }
     if(l.bookMode==='range'){
       var sd=l.startDate||l.date, ed=l.endDate||sd, days=l.days||P.dates.days(sd,ed);
       var span = sd===ed ? P.dates.human(sd) : P.dates.human(sd)+' – '+P.dates.human(ed);
-      return span+' · '+days+' '+unitWord(days,'день');
+      return span+' · '+days+' '+unitWord(days, l.unit==='сутки'?'сутки':'день');
     }
     var d=P.dates.human(l.date);
-    if(l.bookMode==='shift') return d+' · '+(l.slotStart==='09:00'?'дневная смена':'вечерняя смена');
     if(l.bookMode==='day') return d+' · '+l.qty+' сут.';
     // час без конкретного времени (напр. оператор при суточной/промежуточной брони)
     if(!l.slotStart){
