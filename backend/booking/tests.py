@@ -216,12 +216,16 @@ class RenderTests(Base):
         self.assertContains(r, 'eq1')
 
     def test_admin_pages_load(self):
+        # оператор видит все разделы: заявки, каталог, компании, показатели, планировщик
         for name, args in [
             ('admin:index', []),
             ('admin:booking_order_changelist', []),
             ('admin:booking_order_add', []),
             ('admin:booking_resource_changelist', []),
             ('admin:booking_resource_add', []),
+            ('admin:booking_company_changelist', []),
+            ('admin:booking_kpi_changelist', []),
+            ('admin:booking_busyslot_changelist', []),
         ]:
             r = self.c.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 200, name)
@@ -444,6 +448,71 @@ class KpiApiTests(TestCase):
         r = self.c.post('/api/kpi/rid/entries/', data=json.dumps({'title': 'x', 'amount': 1}),
                         content_type='application/json')
         self.assertIn(r.status_code, (401, 403))
+
+
+class ConnectivityTests(TestCase):
+    """Сквозная связка: фронт (API) ↔ база ↔ оператор (CRM/ORM)."""
+
+    def setUp(self):
+        self.c = Client()
+        Resource.objects.create(slug='eqc', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=1000, units_total=1)
+
+    def _reg(self, email='c@c.ru'):
+        r = self.c.post('/api/auth/register/',
+                        data=json.dumps({'email': email, 'password': 'secret1', 'name': 'ООО Связь'}),
+                        content_type='application/json')
+        return {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+
+    def test_booking_reaches_crm_and_syncs_calendar(self):
+        auth = self._reg()
+        co = Company.objects.get(user__email='c@c.ru')
+        co.confirmed, co.resident = True, True
+        co.save()
+        # фронт оформляет заявку
+        payload = {'contact': {}, 'resident': False, 'lines': [
+            {'resourceId': 'eqc', 'date': '2026-08-01', 'slotStart': '09:00', 'slotEnd': '11:00',
+             'qty': 1, 'hours': 2, 'unitPrice': 1000, 'linePrice': 2000, 'isOperator': False}]}
+        num = json.loads(self.c.post('/api/orders/', data=json.dumps(payload),
+                                     content_type='application/json', **auth).content)['id']
+        order = Order.objects.get(number=num)
+        # оператор в CRM видит заявку с привязкой к компании и скидкой резидента
+        self.assertEqual(order.company, co)
+        self.assertEqual(order.discount, 500)
+        # оператор подтверждает → общий календарь синхронизируется
+        order.status = 'confirmed'
+        order.save()
+        self.assertEqual(BusySlot.objects.filter(note=f'Заявка {num}').count(), 1)
+        # фронтовый эндпоинт занятости видит слот
+        busy = json.loads(self.c.get('/api/resources/eqc/busy/').content)
+        self.assertTrue(any(b['date'] == '2026-08-01' for b in busy))
+        # компания видит подтверждённую заявку в своём ЛК
+        mine = json.loads(self.c.get('/api/orders/', **auth).content)
+        self.assertEqual(mine[0]['status'], 'confirmed')
+
+    def test_operator_plan_reflects_in_company_cabinet(self):
+        auth = self._reg('k2@k.ru')
+        co = Company.objects.get(user__email='k2@k.ru')
+        self.c.get('/api/kpi/?year=2026', **auth)                              # автосоздание 6
+        Kpi.objects.filter(company=co, year=2026, key='rid').update(plan=3)    # план — оператор
+        self.c.post('/api/kpi/rid/entries/?year=2026',
+                    data=json.dumps({'title': 'Патент', 'amount': 2}),
+                    content_type='application/json', **auth)                   # факт — компания
+        d = json.loads(self.c.get('/api/kpi/?year=2026', **auth).content)
+        rid = [i for i in d['items'] if i['key'] == 'rid'][0]
+        self.assertEqual(float(rid['plan']), 3)
+        self.assertEqual(rid['status'], 'bad')                                # 2/3 = 0.67
+
+    def test_change_request_visible_to_operator(self):
+        auth = self._reg('ch@ch.ru')
+        order = Order.objects.create(number=Order.next_number(), status='confirmed',
+                                     company=Company.objects.get(user__email='ch@ch.ru'), org='X')
+        r = self.c.post(f'/api/orders/{order.pk}/request-change/',
+                        data=json.dumps({'message': 'Перенести на другой день'}),
+                        content_type='application/json', **auth)
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.change_request, 'Перенести на другой день')
 
 
 class CatalogImportTests(TestCase):
