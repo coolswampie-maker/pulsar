@@ -1,28 +1,27 @@
 /* ============================================================
    ПУЛЬСАР — манифест изображений (тематическое соответствие).
    Ключ = поле img у ресурса. Каждая карточка — своя картинка по теме.
-   Смешанно: локальные фото заказчика (assets/img/*) +
-   курируемый сток Unsplash (свободная лицензия).
-   Пусто ('') → аккуратный брендовый плейсхолдер по направлению.
+   Только ЛОКАЛЬНЫЕ файлы (assets/img/*) — чтобы всё гарантированно
+   грузилось и на GitHub Pages, и с мобильного интернета, без внешних
+   CDN. Пусто ('') → аккуратный брендовый плейсхолдер по направлению
+   (рисуется инлайн SVG, не требует сети).
    ============================================================ */
 window.PULSAR = window.PULSAR || {};
 
 (function(){
-  function u(id, w, h){ return 'https://images.unsplash.com/photo-'+id+'?w='+(w||1000)+'&h='+(h||700)+'&fit=crop&crop=entropy&q=72&auto=format'; }
-
   window.PULSAR.images = {
-    // локальные реальные фото заказчика
-    'hero'  : 'assets/img/building.jpg',
-    'about' : u('1668511237401-4c71e8df5a17', 1200, 900),          // работа в чистой зоне
-    'hero-media' : u('1668600418823-6d4dd4e74353', 1000, 1200),    // чистая комната (первый экран)
+    // крупные декоративные фото (реальные локальные снимки)
+    'hero'       : 'assets/img/building.jpg',        // здание кластера «Ломоносов»
+    'about'      : 'assets/img/building.jpg',         // ИНТЦ МГУ
+    'hero-media' : 'assets/img/lab-generic.jpg',      // лаборатория (первый экран)
 
-    // помещения — чистые комнаты / лаборатории (все разные)
-    'room-a'        : u('1669101283516-e608dcf142df'),             // фарм. чистая зона
-    'room-b'        : u('1669101283561-642d16d924ba'),             // биотех, работа с образцом
-    'room-v'        : u('1668600418823-6d4dd4e74353'),             // микроэлектроника, оборудование
-    'room-vacuum'   : 'assets/img/eq-vk1000.png',                  // реальная камера ВК-1000 (входит в комплекс)
-    'room-genomics' : u('1643780668909-580822430155'),            // геномика / ДНК
-    'room-nutrition': u('1581056771085-3ce30d907416'),            // лабораторные стеллажи
+    // помещения — брендовый плейсхолдер по научному направлению
+    'room-a'        : '',
+    'room-b'        : '',
+    'room-v'        : '',
+    'room-vacuum'   : 'assets/img/eq-vk1000.png',     // реальная камера ВК-1000 (входит в комплекс)
+    'room-genomics' : '',
+    'room-nutrition': '',
 
     // оборудование — РЕАЛЬНЫЕ фото из «Приложение_1_Испытательный_комплекс.pdf»
     'eq-vk1000'  : 'assets/img/eq-vk1000.png',
@@ -32,33 +31,34 @@ window.PULSAR = window.PULSAR || {};
     'eq-mim'     : 'assets/img/eq-mim.png',
     'eq-formolder':'assets/img/eq-formolder.png',
 
-    // оборудование — сток по теме прибора
-    'eq-massspec': 'assets/img/eq-massspec.jpg',               // масс-спектрометр / анализатор
-    'eq-sem'     : 'assets/img/eq-sem.jpg',               // электронный микроскоп
-    'eq-tem'     : 'assets/img/eq-tem.jpg',               // микроскоп
-    'eq-nmr'     : 'assets/img/eq-nmr.jpg',               // крупный прибор/магнит (ЯМР)
-    'eq-raman'   : 'assets/img/eq-raman.jpg',               // спектрометр
-    'eq-xrd'     : 'assets/img/eq-xrd.jpg',               // приборная панель
-    'eq-hplc'    : 'assets/img/eq-hplc.jpg',               // лабораторный стол/прибор
-    'eq-pcr'     : 'assets/img/eq-pcr.jpg',               // молекулярная лаборатория
-    'eq-facs'    : 'assets/img/eq-facs.jpg',               // приборы на столе
-    'eq-meter'   : 'assets/img/eq-meter.jpg',               // стекло/анализ (Zetasizer)
-    'eq-its1'    : 'assets/img/eq-its1.jpg',                       // реальное фото ИТС-1
-    'eq-lyo':'assets/img/eq-lyo.jpg', 'eq-3d':'assets/img/eq-3d.jpg',                                       // → брендовый плейсхолдер
+    // оборудование — реальные фото приборов
+    'eq-massspec': 'assets/img/eq-massspec.jpg',      // масс-спектрометр / анализатор
+    'eq-sem'     : 'assets/img/eq-sem.jpg',           // электронный микроскоп
+    'eq-tem'     : 'assets/img/eq-tem.jpg',           // микроскоп
+    'eq-nmr'     : 'assets/img/eq-nmr.jpg',           // крупный прибор/магнит (ЯМР)
+    'eq-raman'   : 'assets/img/eq-raman.jpg',         // спектрометр
+    'eq-xrd'     : 'assets/img/eq-xrd.jpg',           // приборная панель
+    'eq-hplc'    : 'assets/img/eq-hplc.jpg',          // лабораторный стол/прибор
+    'eq-pcr'     : 'assets/img/eq-pcr.jpg',           // молекулярная лаборатория
+    'eq-facs'    : 'assets/img/eq-facs.jpg',          // приборы на столе
+    'eq-meter'   : 'assets/img/eq-meter.jpg',         // стекло/анализ (Zetasizer)
+    'eq-its1'    : 'assets/img/eq-its1.jpg',          // реальное фото ИТС-1
+    'eq-lyo'     : 'assets/img/eq-lyo.jpg',
+    'eq-3d'      : 'assets/img/eq-3d.jpg',
 
-    // специалисты — роль в лаборатории (все разные)
-    'sp-em'     : u('1668600418879-c461f6079c06'),                // у микроскопа
-    'sp-ms'     : u('1627704671340-0969d7dbac25'),                // приборная консоль
-    'sp-nmr'    : u('1572884267966-02340ebc90ac'),                // микроскоп/оптика
-    'sp-clean'  : u('1669101283107-b32aab60587a'),                // инженер чистых зон
-    'sp-bioinf' : u('1669101283985-ab2b293923df'),               // работа с планшетом
-    'sp-test'   : u('1707328196182-94771ce34207'),               // испытательная установка
+    // специалисты — брендовый плейсхолдер (роль в лаборатории)
+    'sp-em'     : '',
+    'sp-ms'     : '',
+    'sp-nmr'    : '',
+    'sp-clean'  : '',
+    'sp-bioinf' : '',
+    'sp-test'   : '',
 
-    // услуги под ключ — по теме анализа (без дублей!)
-    'srv-analysis': u('1676545228858-b4d9de95704b'),              // (запасной ключ)
-    'srv-icp'     : u('1676545228858-b4d9de95704b'),              // ICP-MS: спектрометр
-    'srv-sem'     : 'assets/img/srv-sem.jpg',                     // СЭМ+EDX — реальное фото
-    'srv-xrd'     : u('1627817471035-3333a9ece240'),              // XRD: приборная панель
-    'srv-lyo'     : 'assets/img/srv-lyo.jpg'                                            // → брендовый плейсхолдер (фарма)
+    // услуги под ключ — реальные фото / брендовый плейсхолдер по направлению
+    'srv-analysis': '',
+    'srv-icp'     : '',
+    'srv-sem'     : 'assets/img/srv-sem.jpg',         // СЭМ+EDX — реальное фото
+    'srv-xrd'     : '',
+    'srv-lyo'     : 'assets/img/srv-lyo.jpg'          // лиофилизация — реальное фото
   };
 })();

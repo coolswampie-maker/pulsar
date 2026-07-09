@@ -6,7 +6,7 @@
    ЦКП МГУ (ФНМ/нано), Справка «Лаборатории МГУ» (8 совместных лабораторий).
    ------------------------------------------------------------
    Единицы брони (bookMode):
-     shift   — помещения: дата + смена (8 ч)
+     range   — помещения: промежуток дат (заезд–выезд), цена за каждую смену
      day     — крупное оборудование: дата + кол-во суток
      hour    — приборы/специалисты: дата + время + часы (мин. minUnits)
      sample  — услуги «под ключ»: кол-во образцов (без времени)
@@ -25,7 +25,7 @@ window.PULSAR.baseResources = [
 
 /* ========================= ПОМЕЩЕНИЯ ========================= */
 {
-  id:'room-cleanroom-a', type:'room', bookMode:'shift', category:'pharma',
+  id:'room-cleanroom-a', type:'room', bookMode:'range', category:'pharma',
   title:'Чистая комната А — производственная фармацевтическая',
   lab:'Учебно-производственный фарм. блок', cleanClass:'GMP A/B · ISO 5',
   priceValue:18000, priceUnit:'смена',
@@ -35,7 +35,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'room-a'
 },
 {
-  id:'room-cleanroom-b', type:'room', bookMode:'shift', category:'bio',
+  id:'room-cleanroom-b', type:'room', bookMode:'range', category:'bio',
   title:'Чистая комната Б — биотехнологическая',
   lab:'Лаборатория молекулярной генетики', cleanClass:'GMP C · ISO 6',
   priceValue:9500, priceUnit:'смена',
@@ -45,7 +45,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:['eq-facs','eq-pcr'], img:'room-b'
 },
 {
-  id:'room-cleanroom-v', type:'room', bookMode:'shift', category:'micro',
+  id:'room-cleanroom-v', type:'room', bookMode:'range', category:'micro',
   title:'Чистая комната В — микроэлектронная',
   lab:'Блок микроэлектроники, сенсорики и фотоники', cleanClass:'ISO 7 · жёлтая зона',
   priceValue:12000, priceUnit:'смена',
@@ -55,7 +55,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:['eq-sem'], img:'room-v'
 },
 {
-  id:'room-vacuum', type:'room', bookMode:'shift', category:'vacuum',
+  id:'room-vacuum', type:'room', bookMode:'range', category:'vacuum',
   title:'Испытательный термовакуумный комплекс',
   lab:'Испытательный комплекс / ЦКП МГУ', cleanClass:'ISO 7 · УНУ',
   priceValue:32000, priceUnit:'смена',
@@ -65,7 +65,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:['eq-vk1000'], img:'room-vacuum'
 },
 {
-  id:'room-genomics', type:'room', bookMode:'shift', category:'genetics',
+  id:'room-genomics', type:'room', bookMode:'range', category:'genetics',
   title:'Лаборатория молекулярной геномики',
   lab:'Геномика, диагностика и биоинформатика', cleanClass:'BSL-1 / BSL-2',
   priceValue:15000, priceUnit:'смена',
@@ -75,7 +75,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:['eq-pcr'], img:'room-genomics'
 },
 {
-  id:'room-nutrition', type:'room', bookMode:'shift', category:'food',
+  id:'room-nutrition', type:'room', bookMode:'range', category:'food',
   title:'Лаборатория функционального питания',
   lab:'Функциональное питание и биоингредиенты', cleanClass:'ОПУ ГМП',
   priceValue:14000, priceUnit:'смена',
@@ -88,7 +88,7 @@ window.PULSAR.baseResources = [
 /* ========================= ОБОРУДОВАНИЕ ========================= */
 /* — испытания / климат / механика (реальный инвентарь Яглион/КромБио) — */
 {
-  id:'eq-vk1000', type:'equipment', bookMode:'day', category:'vacuum',
+  id:'eq-vk1000', type:'equipment', bookMode:'range', category:'vacuum',
   title:'Испытательная камера ВК-1000',
   lab:'Испытательный комплекс', priceValue:24000, priceUnit:'сутки', minUnits:1,
   specs:['Климатическая/испытательная камера большого объёма','Программируемые температурно-влажностные циклы',
@@ -97,7 +97,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-vk1000'
 },
 {
-  id:'eq-kthv1000', type:'equipment', bookMode:'day', category:'vacuum',
+  id:'eq-kthv1000', type:'equipment', bookMode:'range', category:'vacuum',
   title:'Камера тепло-холод-влага КТХВ-1000',
   lab:'Испытательный комплекс', priceValue:12000, priceUnit:'сутки', minUnits:1,
   specs:['Программируемые климатические циклы: T + влажность','Габариты 1450×2200×2150 мм, масса 980 кг','Питание 380 В / 50 Гц / 3Ф, до 16 кВт'],
@@ -105,7 +105,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-kthv1000'
 },
 {
-  id:'eq-bgd856', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-bgd856', type:'equipment', bookMode:'range', category:'materials',
   title:'УФ-камера ускоренного старения BGD 856',
   lab:'Испытательный комплекс', priceValue:9000, priceUnit:'сутки', minUnits:1,
   specs:['Ускоренное УФ-старение материалов и покрытий','Лампы UV-A/UV-B, циклы облучения и конденсации',
@@ -114,7 +114,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-bgd856'
 },
 {
-  id:'eq-fcc1000', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-fcc1000', type:'equipment', bookMode:'range', category:'materials',
   title:'Камера испытаний на выброс формальдегида ВК-FCC1000',
   lab:'Испытательный комплекс', priceValue:11000, priceUnit:'сутки', minUnits:1,
   specs:['Определение эмиссии формальдегида','Объём камеры 1 м³','Габариты 1750×1150×1860 мм, масса 450 кг','Питание 220 В, 50/60 Гц'],
@@ -122,7 +122,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-fcc1000'
 },
 {
-  id:'eq-mim', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-mim', type:'equipment', bookMode:'range', category:'materials',
   title:'Машина испытательная универсальная МИМ.2-100',
   lab:'Механические и теплофизические испытания', priceValue:18000, priceUnit:'сутки', minUnits:1,
   specs:['Растяжение / сжатие / изгиб','Усилие до ~100 кН','Термокамера СТИ от −70 до +300 °C','Габариты 1100×2260×700 мм, масса 750 кг'],
@@ -130,7 +130,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-mim'
 },
 {
-  id:'eq-its1', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-its1', type:'equipment', bookMode:'range', category:'materials',
   title:'Измеритель теплопроводности ИТС-1',
   lab:'Механические и теплофизические испытания', priceValue:4500, priceUnit:'сутки', minUnits:1,
   specs:['Теплопроводность методом стационарного потока','Контрольные образцы (пеноплэкс, оргстекло) в комплекте','Транспортный кофр','Поверка 2024 г.'],
@@ -138,7 +138,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'eq-its1'
 },
 {
-  id:'eq-3dprint', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-3dprint', type:'equipment', bookMode:'range', category:'materials',
   title:'3D-принтер Bambu Lab X1E Combo (FDM)',
   lab:'Аддитивное производство', priceValue:3500, priceUnit:'сутки', minUnits:1,
   specs:['Промышленный FDM, закрытая камера (EU-версия)','Мультиматериальная подача AMS','Внешняя сушка филамента','Расходники PLA в наличии'],
@@ -146,7 +146,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'eq-3d'
 },
 {
-  id:'eq-formolder', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-formolder', type:'equipment', bookMode:'range', category:'materials',
   title:'Термопластавтомат Formolder PRO 200/300',
   lab:'Переработка полимеров', priceValue:8000, priceUnit:'сутки', minUnits:1,
   specs:['Литьё пластика под давлением','Малые серии и образцы','Чиллер ICM-100 в комплекте','Габариты 2300×1150×1200 мм, 560 кг'],
@@ -154,7 +154,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-formolder'
 },
 {
-  id:'eq-lyo', type:'equipment', bookMode:'day', category:'pharma',
+  id:'eq-lyo', type:'equipment', bookMode:'range', category:'pharma',
   title:'Лиофильная сушка CHRIST Alpha 1-4 LSCbasic',
   lab:'Учебно-производственный фарм. блок', priceValue:6800, priceUnit:'сутки', minUnits:1,
   specs:['Вакуумная сублимационная сушка','Программируемые циклы','Плазма крови / биопрепараты','Контроль давления и температуры полок'],
@@ -164,7 +164,7 @@ window.PULSAR.baseResources = [
 
 /* — аналитика / ЦКП МГУ — */
 {
-  id:'eq-massspec', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-massspec', type:'equipment', bookMode:'range', category:'analytics',
   title:'Масс-спектрометр Agilent 6545 QTOF LC/MS',
   lab:'Центр химического анализа', priceValue:6500, priceUnit:'час', minUnits:2,
   specs:['Жидкостная хроматография + QTOF','Высокое разрешение масс','Идентификация и количественный анализ','Работа только с оператором'],
@@ -172,7 +172,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-ms', bundledWith:[], img:'eq-massspec'
 },
 {
-  id:'eq-sem', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-sem', type:'equipment', bookMode:'range', category:'analytics',
   title:'Сканирующий электронный микроскоп Zeiss Supra 50 VP',
   lab:'Лаборатория электронной микроскопии', priceValue:8000, priceUnit:'час', minUnits:2,
   specs:['Разрешение до единиц нм','Режим переменного вакуума (VP)','Микроанализ EDX','Работа только с оператором'],
@@ -180,7 +180,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-em', bundledWith:[], img:'eq-sem'
 },
 {
-  id:'eq-tem', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-tem', type:'equipment', bookMode:'range', category:'analytics',
   title:'Просвечивающий электронный микроскоп JEOL JEM-2000FX',
   lab:'Лаборатория электронной микроскопии', priceValue:9000, priceUnit:'час', minUnits:2,
   specs:['Просвечивающая электронная микроскопия','Анализ наноструктур и кристаллической решётки','Электронная дифракция','Работа только с оператором'],
@@ -188,7 +188,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-em', bundledWith:[], img:'eq-tem'
 },
 {
-  id:'eq-nmr', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-nmr', type:'equipment', bookMode:'range', category:'analytics',
   title:'ЯМР-спектрометр Bruker AVANCE III 400 МГц',
   lab:'Центр химического анализа', priceValue:5500, priceUnit:'час', minUnits:2,
   specs:['Рабочая частота 400 МГц','Жидкостной и твердотельный ЯМР','Установление структуры соединений','Работа только с оператором'],
@@ -196,7 +196,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-nmr', bundledWith:[], img:'eq-nmr'
 },
 {
-  id:'eq-raman', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-raman', type:'equipment', bookMode:'range', category:'analytics',
   title:'Раман-спектрометр Renishaw inVia',
   lab:'Лаборатория спектроскопических методов', priceValue:4800, priceUnit:'час', minUnits:2,
   specs:['Конфокальная рамановская спектроскопия','Картирование распределения фаз','Идентификация химических связей','Работа только с оператором'],
@@ -204,7 +204,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-ms', bundledWith:[], img:'eq-raman'
 },
 {
-  id:'eq-xrd', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-xrd', type:'equipment', bookMode:'range', category:'analytics',
   title:'Рентгеновский дифрактометр Rigaku D/MAX-2500V',
   lab:'Лаборатория рентгеновских методов', priceValue:4000, priceUnit:'час', minUnits:2,
   specs:['Фазовый и структурный анализ','Порошковая дифракция','Определение параметров решётки','Работа только с оператором'],
@@ -212,7 +212,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-em', bundledWith:[], img:'eq-xrd'
 },
 {
-  id:'eq-pcr', type:'equipment', bookMode:'hour', category:'genetics',
+  id:'eq-pcr', type:'equipment', bookMode:'range', category:'genetics',
   title:'ПЦР-амплификатор Bio-Rad CFX96 Touch',
   lab:'Лаборатория молекулярной генетики', priceValue:2800, priceUnit:'час', minUnits:2,
   specs:['ПЦР в реальном времени (real-time)','96 лунок','5 каналов флуоресценции','Самообслуживание после обучения'],
@@ -220,7 +220,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'eq-pcr'
 },
 {
-  id:'eq-facs', type:'equipment', bookMode:'hour', category:'bio',
+  id:'eq-facs', type:'equipment', bookMode:'range', category:'bio',
   title:'Проточный цитометр BD FACSLyric',
   lab:'Лаборатория молекулярной генетики', priceValue:3600, priceUnit:'час', minUnits:2,
   specs:['Многопараметрический анализ клеток','До 8 параметров','Иммунофенотипирование','Самообслуживание после обучения'],
@@ -228,7 +228,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'eq-facs'
 },
 {
-  id:'eq-hplc', type:'equipment', bookMode:'hour', category:'analytics',
+  id:'eq-hplc', type:'equipment', bookMode:'range', category:'analytics',
   title:'ВЭЖХ Agilent 1260 Infinity II (DAD)',
   lab:'Центр контроля качества', priceValue:2200, priceUnit:'час', minUnits:2,
   specs:['Высокоэффективная жидкостная хроматография','Диодно-матричный детектор (DAD)','Фармацевтический анализ','Самообслуживание'],
@@ -236,7 +236,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'eq-hplc'
 },
 {
-  id:'eq-zeta', type:'equipment', bookMode:'hour', category:'materials',
+  id:'eq-zeta', type:'equipment', bookMode:'range', category:'materials',
   title:'Анализатор Malvern Zetasizer Nano ZS',
   lab:'Лаборатория реологии наноматериалов', priceValue:2500, priceUnit:'час', minUnits:2,
   specs:['Размер частиц (DLS)','Дзета-потенциал','Диапазон 0,3 нм – 10 мкм','Самообслуживание после обучения'],
@@ -246,7 +246,7 @@ window.PULSAR.baseResources = [
 
 /* ========================= СПЕЦИАЛИСТЫ ========================= */
 {
-  id:'sp-em', type:'specialist', bookMode:'hour', category:'analytics',
+  id:'sp-em', type:'specialist', bookMode:'range', category:'analytics',
   title:'Инженер-оператор электронной микроскопии',
   lab:'Лаборатория электронной микроскопии', priceValue:2500, priceUnit:'час', minUnits:2,
   specs:['СЭМ / ПЭМ, пробоподготовка','Микроанализ EDX, дифракция','Интерпретация изображений'],
@@ -254,7 +254,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'sp-em'
 },
 {
-  id:'sp-ms', type:'specialist', bookMode:'hour', category:'analytics',
+  id:'sp-ms', type:'specialist', bookMode:'range', category:'analytics',
   title:'Специалист масс-спектрометрии и хроматографии',
   lab:'Центр химического анализа', priceValue:2500, priceUnit:'час', minUnits:2,
   specs:['ВЭЖХ-МС, QTOF, ГХ-МС','Разработка методик разделения','Обработка спектров'],
@@ -262,7 +262,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'sp-ms'
 },
 {
-  id:'sp-nmr', type:'specialist', bookMode:'hour', category:'analytics',
+  id:'sp-nmr', type:'specialist', bookMode:'range', category:'analytics',
   title:'Специалист ЯМР-спектроскопии',
   lab:'Центр химического анализа', priceValue:2500, priceUnit:'час', minUnits:2,
   specs:['1D/2D ЯМР, жидкость и твёрдое тело','Установление структуры','Настройка импульсных программ'],
@@ -270,7 +270,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'sp-nmr'
 },
 {
-  id:'sp-cleanroom', type:'specialist', bookMode:'hour', category:'pharma',
+  id:'sp-cleanroom', type:'specialist', bookMode:'range', category:'pharma',
   title:'Инженер чистых помещений (инструктаж GMP/ISO)',
   lab:'Служба эксплуатации чистых зон', priceValue:1800, priceUnit:'час', minUnits:2,
   specs:['Вводный инструктаж по чистым зонам','Правила гоуна и поведения в GMP','Контроль параметров среды'],
@@ -278,7 +278,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'sp-clean'
 },
 {
-  id:'sp-bioinf', type:'specialist', bookMode:'hour', category:'genetics',
+  id:'sp-bioinf', type:'specialist', bookMode:'range', category:'genetics',
   title:'Биоинформатик / молекулярная генетика',
   lab:'Геномика, диагностика и биоинформатика', priceValue:3000, priceUnit:'час', minUnits:2,
   specs:['Анализ данных NGS','Дизайн тест-систем и праймеров','Обработка геномных и транскриптомных данных'],
@@ -286,7 +286,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'sp-bioinf'
 },
 {
-  id:'sp-test', type:'specialist', bookMode:'hour', category:'vacuum',
+  id:'sp-test', type:'specialist', bookMode:'range', category:'vacuum',
   title:'Инженер испытательного комплекса',
   lab:'Испытательный комплекс', priceValue:2200, priceUnit:'час', minUnits:2,
   specs:['Термовакуум, климатика, механика','Составление программ испытаний','Оформление протоколов'],

@@ -27,6 +27,19 @@
     if(aS==null||bS==null) return true;
     return toMin(aS) < toMin(bE) && toMin(bS) < toMin(aE);
   }
+  // абсолютная минута = индекс дня * 1440 + время суток (для интервалов, переходящих через сутки)
+  function dayIndex(dateISO){ return Math.round(new Date(dateISO+'T12:00:00').getTime()/86400000); }
+  function absMin(dateISO, hhmm, fallbackMin){
+    var m = hhmm!=null ? toMin(hhmm) : fallbackMin;
+    return dayIndex(dateISO)*1440 + m;
+  }
+  // datetime-интервал строки/слота как [начало, конец] в абсолютных минутах
+  function slotAbs(dateStart, timeStart, dateEnd, timeEnd){
+    if(timeStart==null){ // весь день (сменная/дневная бронь без времени)
+      return [ dayIndex(dateStart)*1440, dayIndex(dateEnd||dateStart)*1440 + 1440 ];
+    }
+    return [ absMin(dateStart, timeStart, 0), absMin(dateEnd||dateStart, timeEnd, 1440) ];
+  }
 
   /* ---- проверка конфликта: занятость + уже добавленное ---- */
   Cart.conflict = function(resId, date, slotStart, slotEnd){
@@ -41,9 +54,43 @@
     return clash;
   };
 
+  /* ---- проверка конфликта для datetime-промежутка (помещения) ---- */
+  // интервал брони: [дата+время начала .. дата+время конца]; даты могут различаться.
+  // конфликт — реальное пересечение интервалов (учитывает переход через сутки).
+  Cart.conflictInterval = function(resId, startDate, startTime, endDate, endTime){
+    if(!startDate) return null;
+    var iv = slotAbs(startDate, startTime, endDate, endTime), clash=null;
+    function hit(a){ return iv[0] < a[1] && a[0] < iv[1]; }
+    P.getBusy(resId).forEach(function(b){
+      if(hit(slotAbs(b.date, b.slotStart, b.date, b.slotEnd))) clash='занято в расписании';
+    });
+    read().forEach(function(l){
+      if(l.resourceId!==resId) return;
+      var a = l.bookMode==='range'
+        ? slotAbs(l.startDate||l.date, l.slotStart, l.endDate||l.date, l.slotEnd)
+        : slotAbs(l.date, l.slotStart, l.date, l.slotEnd);
+      if(hit(a)) clash='уже занято в вашей брони';
+    });
+    return clash;
+  };
+
+  /* ---- datetime-интервал → часы и единицы тарифа ---- */
+  // длина интервала брони в часах
+  var UNIT_HOURS = { 'час':1, 'смена':8, 'сутки':24 };
+  Cart.rangeHours = function(o){
+    var iv=slotAbs(o.startDate, o.slotStart, o.endDate||o.startDate, o.slotEnd);
+    return Math.max(0, (iv[1]-iv[0])/60);
+  };
+  // сколько тарифных единиц (час/смена/сутки) укладывается в интервал, с учётом минимума
+  Cart.rangeUnits = function(res, o){
+    var uh = UNIT_HOURS[res.priceUnit] || 1;
+    return Math.max(Math.ceil(Cart.rangeHours(o)/uh), res.minUnits||1);
+  };
+
   /* ---- расчёт цены строки ---- */
   function priceLine(res, opts){
     var v=res.priceValue;
+    if(res.bookMode==='range') return { line:v*Cart.rangeUnits(res,opts), unit:v };
     if(res.bookMode==='shift') return { line:v*(opts.qty||1), unit:v };
     if(res.bookMode==='day')   return { line:v*(opts.qty||1), unit:v };
     if(res.bookMode==='hour')  return { line:v*(opts.hours||res.minUnits||1), unit:v };
@@ -55,6 +102,7 @@
   function operatorHours(parentRes, opts){
     if(parentRes.bookMode==='hour')  return opts.hours||parentRes.minUnits||2;
     if(parentRes.bookMode==='day')   return 8*(opts.qty||1);
+    if(parentRes.bookMode==='range') return Math.max(Math.ceil(Cart.rangeHours(opts)),1);
     if(parentRes.bookMode==='shift') return 8;
     return 8;
   }
@@ -65,18 +113,28 @@
     opts=opts||{};
     var res=P.getById(resId); if(!res) return {ok:false,msg:'Ресурс не найден'};
 
-    // конфликт по времени
-    var c=Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
-    if(c) return {ok:false,msg:'Этот слот '+c+'. Выберите другое время.'};
+    // конфликт: помещения — по datetime-интервалу, остальное — по времени в дне
+    var c = res.bookMode==='range'
+      ? Cart.conflictInterval(resId, opts.startDate, opts.slotStart||null, opts.endDate, opts.slotEnd||null)
+      : Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
+    if(c){
+      return res.bookMode==='range'
+        ? {ok:false,msg:'Выбранное время '+c+'. Укажите другой промежуток.'}
+        : {ok:false,msg:'Этот слот '+c+'. Выберите другое время.'};
+    }
 
     var lines=read();
+    var isRange=res.bookMode==='range';
     var pr=priceLine(res,opts);
     var parentId=uid();
     lines.push({
       lineId:parentId, resourceId:res.id, type:res.type, bookMode:res.bookMode,
       title:res.title, lab:res.lab, img:res.img, unit:res.priceUnit,
       date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
-      qty:opts.qty||1, hours:opts.hours||null,
+      startDate:opts.startDate||null, endDate:opts.endDate||null,
+      days: isRange ? P.dates.days(opts.startDate, opts.endDate) : (opts.days||null),
+      units: isRange ? Cart.rangeUnits(res,opts) : null,
+      qty:opts.qty||1, hours: isRange ? Cart.rangeHours(opts) : (opts.hours||null),
       unitPrice:pr.unit, linePrice:pr.line,
       linkedTo:null, isOperator:false
     });
@@ -89,7 +147,11 @@
         lines.push({
           lineId:uid(), resourceId:op.id, type:'specialist', bookMode:'hour',
           title:op.title, lab:op.lab, img:op.img, unit:'час',
-          date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
+          date:opts.date||null,
+          // при интервальной брони оператор идёт на весь промежуток (показываем длительность, а не слот)
+          slotStart: isRange ? null : (opts.slotStart||null),
+          slotEnd:   isRange ? null : (opts.slotEnd||null),
+          startDate:opts.startDate||null, endDate:opts.endDate||null,
           qty:1, hours:h, unitPrice:op.priceValue, linePrice:op.priceValue*h,
           linkedTo:parentId, isOperator:true
         });

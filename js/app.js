@@ -284,7 +284,12 @@
   function viewResource(id){
     var r=P.getById(id);
     if(!r) return render('<section class="section"><div class="wrap empty"><h3>Ресурс не найден</h3><a class="btn btn-primary" href="#/catalog">В каталог</a></div></section>');
-    book={ res:r, date:P.dates.plusISO(1), start:null, hours:r.minUnits||2, qty:1, shift:'day', err:'' };
+    // разумный дефолт интервала = «1 тарифная единица» от 10:00
+    var d1=P.dates.plusISO(1), endD=d1, endT='18:00';
+    if(r.priceUnit==='час'){ endT=('0'+(10+(r.minUnits||2))).slice(-2)+':00'; }
+    else if(r.priceUnit==='сутки'){ endD=P.dates.plusISO(2); endT='10:00'; }
+    book={ res:r, date:d1, start:null, hours:r.minUnits||2, qty:1, shift:'day',
+           startDate:d1, endDate:endD, startTime:'10:00', endTime:endT, err:'' };
     var bundled=P.cart.bundledFor(r);
     render(''+
     '<section class="detail"><div class="wrap">'+
@@ -314,6 +319,19 @@
     var a=[]; for(var h=9;h<=16;h++) a.push((h<10?'0':'')+h+':00'); return a;
   }
   function computeEnd(start,hours){ var h=parseInt(start,10)+hours; return (h<10?'0':'')+h+':00'; }
+  function rangeInvalid(){ return (book.startDate+'T'+book.startTime) >= (book.endDate+'T'+book.endTime); }
+  function rangeNoteHtml(){
+    var r=book.res;
+    if(rangeInvalid()) return '<span class="rn-err">Окончание должно быть позже начала.</span>';
+    var o=currentOpts(), hrs=P.cart.rangeHours(o), units=P.cart.rangeUnits(r,o);
+    var uw=P.unitShort[r.priceUnit]||r.priceUnit;
+    var span = book.startDate===book.endDate
+      ? P.dates.human(book.startDate)+', '+book.startTime+'–'+book.endTime
+      : P.dates.human(book.startDate)+' '+book.startTime+' → '+P.dates.human(book.endDate)+' '+book.endTime;
+    var dur = (hrs%1===0? hrs : hrs.toFixed(1))+' ч';
+    return span+' · <strong>'+units+' '+esc(uw)+'</strong> ('+dur+')';
+  }
+  function refreshRange(){ var n=el('rnote'); if(n) n.innerHTML=rangeNoteHtml(); updateEstimate(); }
 
   function renderBooking(){
     var r=book.res, b=el('booking'); if(!b) return;
@@ -324,6 +342,16 @@
       html+='<div class="field"><label>Количество образцов</label>'+
         '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
+    } else if(r.bookMode==='range'){
+      html+='<div class="field"><label>Начало</label><div class="field-row">'+
+          '<input type="date" id="bstartd" min="'+P.dates.todayISO()+'" value="'+book.startDate+'">'+
+          '<input type="time" id="bstartt" step="1800" value="'+book.startTime+'">'+
+        '</div></div>'+
+        '<div class="field"><label>Окончание</label><div class="field-row">'+
+          '<input type="date" id="bendd" min="'+book.startDate+'" value="'+book.endDate+'">'+
+          '<input type="time" id="bendt" step="1800" value="'+book.endTime+'">'+
+        '</div></div>'+
+        '<div class="range-note" id="rnote">'+rangeNoteHtml()+'</div>';
     } else {
       html+='<div class="field"><label>Дата</label><input type="date" id="bdate" min="'+P.dates.todayISO()+'" value="'+book.date+'"></div>';
       if(r.bookMode==='shift'){
@@ -363,6 +391,10 @@
   function bindBooking(){
     var r=book.res;
     if(el('bdate')) el('bdate').onchange=function(){ book.date=this.value; book.start=null; renderBooking(); };
+    if(el('bstartd')) el('bstartd').onchange=function(){ book.startDate=this.value; if(book.endDate<book.startDate) book.endDate=book.startDate; renderBooking(); };
+    if(el('bstartt')) el('bstartt').onchange=function(){ book.startTime=this.value; refreshRange(); };
+    if(el('bendd')) el('bendd').onchange=function(){ book.endDate=this.value; if(book.endDate<book.startDate) book.endDate=book.startDate; renderBooking(); };
+    if(el('bendt')) el('bendt').onchange=function(){ book.endTime=this.value; refreshRange(); };
     if(el('bshift')) el('bshift').onchange=function(){ book.shift=this.value; };
     if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
@@ -374,6 +406,11 @@
   function currentOpts(){
     var r=book.res, o={};
     if(r.type==='service'){ o.qty=book.qty; return o; }
+    if(r.bookMode==='range'){
+      o.startDate=book.startDate; o.endDate=book.endDate;
+      o.slotStart=book.startTime; o.slotEnd=book.endTime; o.date=book.startDate;
+      return o;
+    }
     o.date=book.date;
     if(r.bookMode==='shift'){ o.qty=1; o.slotStart=book.shift==='day'?'09:00':'18:00'; o.slotEnd=book.shift==='day'?'17:00':'26:00'; }
     else if(r.bookMode==='day'){ o.qty=book.qty; }
@@ -382,6 +419,7 @@
   }
   function estimatePrice(){
     var r=book.res, o=currentOpts();
+    if(r.bookMode==='range') return r.priceValue*P.cart.rangeUnits(r,o);
     if(r.bookMode==='hour') return r.priceValue*(o.hours||r.minUnits||1);
     if(r.bookMode==='sample'||r.bookMode==='day') return r.priceValue*(o.qty||1);
     return r.priceValue*(o.qty||1);
@@ -391,7 +429,7 @@
     var base=estimatePrice(), opLine='';
     if(r.requiresOperator){
       var op=P.getById(r.requiresOperator);
-      var h = r.bookMode==='hour'?book.hours : r.bookMode==='day'?8*book.qty : 8;
+      var h = r.bookMode==='hour'?book.hours : r.bookMode==='day'?8*book.qty : r.bookMode==='range'?Math.max(Math.ceil(P.cart.rangeHours(currentOpts())),1) : 8;
       if(op){ opLine='<div class="est-line"><span>Оператор ('+h+' ч)</span><span>'+fmt(op.priceValue*h)+'</span></div>'; base+=op.priceValue*h; }
     }
     box.innerHTML='<div class="est-line"><span>'+esc(P.typeMeta[r.type].single)+'</span><span>'+fmt(estimatePrice())+'</span></div>'+
@@ -400,11 +438,12 @@
   function addToCart(){
     var r=book.res, o=currentOpts(), msg=el('bmsg');
     if(r.bookMode==='hour' && !book.start){ msg.innerHTML='<div class="form-msg err">Выберите время начала.</div>'; return; }
+    if(r.bookMode==='range' && rangeInvalid()){ msg.innerHTML='<div class="form-msg err">Окончание должно быть позже начала.</div>'; return; }
     var res=P.cart.add(r.id,o);
     if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
     msg.innerHTML='<div class="form-msg ok">Добавлено в бронирование'+(r.requiresOperator?' вместе с оператором':'')+'.</div>';
     toast('Добавлено в бронирование');
-    if(r.bookMode==='hour') renderBooking(); // обновить занятые слоты
+    if(r.bookMode==='hour'||r.bookMode==='range') renderBooking(); // обновить занятость
   }
 
   /* ==========================================================
@@ -412,9 +451,23 @@
      ========================================================== */
   function slotText(l){
     if(l.bookMode==='sample') return l.qty+' образец(ов)';
+    if(l.bookMode==='range'){
+      var sd=l.startDate||l.date, ed=l.endDate||sd;
+      var uw=P.unitShort[l.unit]||l.unit||'';
+      var units=l.units? ' · '+l.units+' '+uw : '';
+      return sd===ed
+        ? P.dates.human(sd)+', '+(l.slotStart||'')+'–'+(l.slotEnd||'')+units
+        : P.dates.human(sd)+' '+(l.slotStart||'')+' → '+P.dates.human(ed)+' '+(l.slotEnd||'')+units;
+    }
     var d=P.dates.human(l.date);
     if(l.bookMode==='shift') return d+' · '+(l.slotStart==='09:00'?'дневная смена':'вечерняя смена');
     if(l.bookMode==='day') return d+' · '+l.qty+' сут.';
+    // час без конкретного времени (напр. оператор при суточной/промежуточной брони)
+    if(!l.slotStart){
+      var span=(l.startDate&&l.endDate&&l.startDate!==l.endDate)
+        ? P.dates.human(l.startDate)+' — '+P.dates.human(l.endDate) : d;
+      return span+' · '+(l.hours||'')+' ч';
+    }
     return d+' · '+(l.slotStart||'')+'–'+(l.slotEnd||'')+' ('+(l.hours||'')+' ч)';
   }
   function viewCart(){
@@ -621,7 +674,7 @@
     el('e_save').onclick=function(){
       var title=el('e_title').value.trim(); if(!title){ el('e_msg').innerHTML='<div class="form-msg err">Введите наименование.</div>'; return; }
       var type=el('e_type').value;
-      var modeMap={room:'shift',equipment:'hour',specialist:'hour',service:'sample'};
+      var modeMap={room:'range',equipment:'range',specialist:'range',service:'sample'};
       var out={ id:r.id||('x-'+Math.random().toString(36).slice(2,8)), type:type, bookMode:r.id?r.bookMode:modeMap[type],
         title:title, lab:el('e_lab').value.trim()||'ПУЛЬСАР', category:r.category||'analytics',
         priceValue:parseInt(el('e_price').value,10)||0, priceUnit:el('e_unit').value.trim()||'час',

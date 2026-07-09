@@ -21,7 +21,17 @@
       if(!s) return '';
       var p=s.split('-'); var m=['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
       return parseInt(p[2],10)+' '+m[parseInt(p[1],10)-1]+' '+p[0];
-    }
+    },
+    // список ISO-дат в промежутке [startISO..endISO] включительно
+    range:function(startISO,endISO){
+      if(!startISO) return [];
+      if(!endISO || endISO<startISO) return [startISO];
+      var out=[], cur=new Date(startISO+'T12:00:00'), end=new Date(endISO+'T12:00:00'), guard=0;
+      while(cur<=end && guard<400){ out.push(iso(cur)); cur=addDays(cur,1); guard++; }
+      return out;
+    },
+    // число суток в промежутке (включительно), минимум 1
+    days:function(startISO,endISO){ return this.range(startISO,endISO).length||1; }
   };
 
   /* ---------- каталог (base + overlay) ---------- */
@@ -79,7 +89,20 @@
     P.getOrders().forEach(function(o){
       if(o.status!=='confirmed') return;
       o.lines.forEach(function(l){
-        if(l.resourceId===id) out.push({date:l.date, slotStart:l.slotStart||null, slotEnd:l.slotEnd||null});
+        if(l.resourceId!==id) return;
+        if(l.bookMode==='range' && l.startDate){
+          // интервальная бронь: разворачиваем по дням, сохраняя время начала/конца по краям
+          var end=l.endDate||l.startDate, days=P.dates.range(l.startDate,end);
+          days.forEach(function(d){
+            out.push({
+              date:d,
+              slotStart: d===l.startDate ? (l.slotStart||null) : '00:00',
+              slotEnd:   d===end        ? (l.slotEnd||null)   : '24:00'
+            });
+          });
+        } else {
+          out.push({date:l.date, slotStart:l.slotStart||null, slotEnd:l.slotEnd||null});
+        }
       });
     });
     return out;

@@ -270,6 +270,9 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .slot:hover:not(:disabled){border-color:var(--navy);}
 .slot.sel{background:var(--navy);color:#fff;border-color:var(--navy);}
 .slot:disabled{opacity:.4;cursor:not-allowed;text-decoration:line-through;}
+.range-note{font-size:13px;color:var(--ink-soft);background:var(--paper-2);border:1px solid var(--line);border-radius:var(--r);padding:10px 13px;margin:2px 0 15px;line-height:1.5;}
+.range-note strong{color:var(--navy);}
+.range-note .rn-err{color:var(--busy);font-weight:600;}
 .op-note{font-size:13px;color:var(--busy);background:var(--busy-bg);border-radius:var(--r);padding:11px 13px;margin:14px 0;line-height:1.5;display:flex;gap:9px;}
 .bundle-note{font-size:13px;color:var(--ok);background:var(--ok-bg);border-radius:var(--r);padding:11px 13px;margin:14px 0;line-height:1.5;}
 .est-line{display:flex;justify-content:space-between;font-size:14px;margin-bottom:7px;color:var(--ink-soft);}
