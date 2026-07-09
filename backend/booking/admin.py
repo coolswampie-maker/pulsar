@@ -9,7 +9,7 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
-from .models import BookingLine, BusySlot, Company, Kpi, Order, Resource
+from .models import BookingLine, BusySlot, Company, Kpi, KpiEntry, Order, Resource
 
 # Управление доступом (пока за всё отвечает один администратор) — прячем
 # стандартный блок «Пользователи и группы», чтобы не путал в CRM.
@@ -121,6 +121,13 @@ class CompanyAdmin(admin.ModelAdmin):
         self.message_user(request, f'Подтверждено компаний: {n}')
 
 
+class KpiEntryInline(admin.TabularInline):
+    model = KpiEntry
+    extra = 0
+    fields = ('title', 'amount', 'date', 'document', 'source', 'created_at')
+    readonly_fields = ('created_at',)
+
+
 @admin.register(Kpi)
 class KpiAdmin(admin.ModelAdmin):
     list_display = ('company', 'year', 'key', 'plan', 'fact', 'status_col', 'updated_at')
@@ -128,6 +135,8 @@ class KpiAdmin(admin.ModelAdmin):
     list_filter = ('year', 'key', 'company')
     search_fields = ('company__name',)
     ordering = ('company', '-year', 'key')
+    readonly_fields = ('fact',)        # факт считается из позиций
+    inlines = [KpiEntryInline]
 
     @admin.display(description='Статус')
     def status_col(self, obj):

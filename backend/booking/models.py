@@ -218,17 +218,23 @@ class BookingLine(models.Model):
 
 
 # 6 ключевых показателей по Методологии оценки деятельности участников ИНТЦ.
-# (key, наименование, единица, норма-подсказка)
+# (key, наименование, единица, норма-подсказка, требуемые подтверждающие документы)
 KPI_DEFS = [
-    ('rid',     'Количество РИД',                'шт',        ''),
-    ('rnd',     'Инвестиции в НИОКР',            '% выручки', 'норма ≥ 10%'),
-    ('infra',   'Инвестиции в инфраструктуру',   '% выручки', 'норма ≥ 1%'),
-    ('staff',   'Численность работников',        'чел',       ''),
-    ('revenue', 'Выручка',                       '₽',         ''),
-    ('export',  'Доля экспорта',                 '%',         ''),
+    ('rid',     'Количество РИД',              'шт',        '',
+     'Копии патентов и заявок на регистрацию (изобретение, ПО, БД), оформленные ноу-хау; основание права.'),
+    ('rnd',     'Инвестиции в НИОКР',          '% выручки', 'норма ≥ 10%',
+     'Бухбаланс (стр. 1120), отчёт о фин. результатах, форма П-2 (инвест); при 5–10% — обоснование.'),
+    ('infra',   'Инвестиции в инфраструктуру', '% выручки', 'норма ≥ 1%',
+     'Договоры и документы, подтверждающие инвестиции в инфраструктуру ИНТЦ.'),
+    ('staff',   'Численность работников',      'чел',       '',
+     'Документы по штату из календарного плана (трудовые договоры, штатное расписание).'),
+    ('revenue', 'Выручка',                     '₽',         '',
+     'Договоры продаж и бухотчётность; форма по ОКУД 0710002; оборотно-сальдовая по счёту 90.'),
+    ('export',  'Доля экспорта',               '%',         '',
+     'Экспортные договоры и бухотчётность (продажи за рубеж без обязательства обратного ввоза).'),
 ]
 KPI_KEYS = [d[0] for d in KPI_DEFS]
-KPI_META = {d[0]: {'label': d[1], 'unit': d[2], 'hint': d[3]} for d in KPI_DEFS}
+KPI_META = {d[0]: {'label': d[1], 'unit': d[2], 'hint': d[3], 'docs': d[4]} for d in KPI_DEFS}
 
 
 class Kpi(models.Model):
@@ -250,15 +256,67 @@ class Kpi(models.Model):
     def __str__(self):
         return f'{self.company_id} · {self.year} · {self.get_key_display()}'
 
+    # Показатели-доли считаются в % от выручки (нормы методологии заданы в %).
+    PERCENT_KEYS = ('rnd', 'infra', 'export')
+
+    def recompute(self):
+        """Факт = сумма позиций (что компания завела в ЛК)."""
+        from django.db.models import Sum
+        self.fact = self.entries.aggregate(s=Sum('amount'))['s']
+        self.save(update_fields=['fact', 'updated_at'])
+
+    @property
+    def value(self):
+        """Сравнимое с планом значение: для долей — процент от выручки, иначе — факт."""
+        if self.fact is None:
+            return None
+        if self.key in self.PERCENT_KEYS:
+            rev = (Kpi.objects.filter(company_id=self.company_id, year=self.year, key='revenue')
+                   .values_list('fact', flat=True).first())
+            if not rev:
+                return None
+            return round(float(self.fact) / float(rev) * 100, 2)
+        return float(self.fact)
+
     @property
     def status(self):
         """ok — достигнут; warn — ниже плана, но в пределах 20%; bad — существенное
         недовыполнение (>20%); none — нет данных. По п.3.5 Методологии."""
-        if self.plan in (None, 0) or self.fact is None:
+        val = self.value
+        if self.plan in (None, 0) or val is None:
             return 'none'
-        ratio = float(self.fact) / float(self.plan)
+        ratio = float(val) / float(self.plan)
         if ratio >= 1:
             return 'ok'
         if ratio >= 0.8:
             return 'warn'
         return 'bad'
+
+
+class KpiEntry(models.Model):
+    """Позиция показателя: что сделано / на что потрачено. Факт показателя = их сумма."""
+    SOURCES = [('manual', 'Вручную'), ('auto', 'Из документа')]
+    kpi = models.ForeignKey(Kpi, on_delete=models.CASCADE, related_name='entries', verbose_name='Показатель')
+    title = models.CharField('Наименование', max_length=300)
+    amount = models.DecimalField('Сумма / количество', max_digits=16, decimal_places=2, null=True, blank=True)
+    date = models.DateField('Дата', null=True, blank=True)
+    document = models.FileField('Документ', upload_to='kpi_docs/', null=True, blank=True)
+    source = models.CharField('Источник', max_length=8, choices=SOURCES, default='manual')
+    created_at = models.DateTimeField('Добавлена', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Позиция показателя'
+        verbose_name_plural = 'Позиции показателей'
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.kpi.recompute()
+
+    def delete(self, *args, **kwargs):
+        kpi = self.kpi
+        super().delete(*args, **kwargs)
+        kpi.recompute()

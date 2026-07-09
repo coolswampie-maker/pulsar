@@ -404,32 +404,46 @@ class KpiApiTests(TestCase):
         self.assertIn('rid', keys)
         self.assertIn('export', keys)
         self.assertTrue(all(i['status'] == 'none' for i in d['items']))
+        self.assertTrue(all(i['docs'] for i in d['items']))   # текст требуемых документов
 
-    def test_company_updates_fact_and_status(self):
-        co = Company.objects.get(user__email='k@k.ru')
-        self.c.get('/api/kpi/?year=2026', **self.auth)               # автосоздание
-        Kpi.objects.filter(company=co, year=2026, key='rid').update(plan=3)   # план — оператор
-        r = self.c.patch('/api/kpi/rid/?year=2026', data=json.dumps({'fact': 2}),
-                         content_type='application/json', **self.auth)         # 2/3 = 0.67 → недовыполн.
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(json.loads(r.content)['status'], 'bad')
-        r2 = self.c.patch('/api/kpi/rid/?year=2026', data=json.dumps({'fact': 3}),
-                          content_type='application/json', **self.auth)        # 3/3 → норма
-        self.assertEqual(json.loads(r2.content)['status'], 'ok')
+    def _add(self, key, title, amount):
+        return self.c.post('/api/kpi/' + key + '/entries/?year=2026',
+                           data=json.dumps({'title': title, 'amount': amount}),
+                           content_type='application/json', **self.auth)
 
-    def test_kpi_plan_read_only_for_company(self):
+    def test_entries_recompute_fact_and_status(self):
         co = Company.objects.get(user__email='k@k.ru')
         self.c.get('/api/kpi/?year=2026', **self.auth)
-        self.c.patch('/api/kpi/rid/?year=2026', data=json.dumps({'plan': 99, 'fact': 1}),
-                     content_type='application/json', **self.auth)
-        obj = Kpi.objects.get(company=co, year=2026, key='rid')
-        self.assertIsNone(obj.plan)          # компания не может задать план
-        self.assertEqual(obj.fact, 1)
+        Kpi.objects.filter(company=co, year=2026, key='rid').update(plan=3)   # план — оператор
+        self.assertEqual(self._add('rid', 'Патент А', 1).status_code, 201)
+        self._add('rid', 'Патент Б', 1)
+        kpi = Kpi.objects.get(company=co, year=2026, key='rid')
+        self.assertEqual(float(kpi.fact), 2)
+        self.assertEqual(kpi.status, 'bad')          # 2/3 = 0.67
+        self._add('rid', 'Патент В', 1)
+        kpi.refresh_from_db()
+        self.assertEqual(kpi.status, 'ok')           # 3/3
 
-    def test_kpi_unknown_key(self):
-        r = self.c.patch('/api/kpi/xxx/?year=2026', data=json.dumps({'fact': 1}),
-                         content_type='application/json', **self.auth)
-        self.assertEqual(r.status_code, 404)
+    def test_delete_entry_recomputes(self):
+        co = Company.objects.get(user__email='k@k.ru')
+        self.c.get('/api/kpi/?year=2026', **self.auth)
+        eid = json.loads(self._add('revenue', 'Договор', 1000).content)['id']
+        self.assertEqual(float(Kpi.objects.get(company=co, year=2026, key='revenue').fact), 1000)
+        d = self.c.delete('/api/kpi/revenue/entries/%d/' % eid, **self.auth)
+        self.assertEqual(d.status_code, 204)
+        self.assertIsNone(Kpi.objects.get(company=co, year=2026, key='revenue').fact)
+
+    def test_percent_indicator_from_revenue(self):
+        co = Company.objects.get(user__email='k@k.ru')
+        self.c.get('/api/kpi/?year=2026', **self.auth)
+        self._add('revenue', 'Выручка', 100)
+        self._add('rnd', 'НИОКР-расходы', 8)         # 8 / 100 = 8%
+        self.assertEqual(Kpi.objects.get(company=co, year=2026, key='rnd').value, 8.0)
+
+    def test_entry_requires_auth(self):
+        r = self.c.post('/api/kpi/rid/entries/', data=json.dumps({'title': 'x', 'amount': 1}),
+                        content_type='application/json')
+        self.assertIn(r.status_code, (401, 403))
 
 
 class CatalogImportTests(TestCase):

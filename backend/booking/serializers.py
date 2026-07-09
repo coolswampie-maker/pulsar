@@ -1,26 +1,41 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import KPI_META, BookingLine, Company, Kpi, Order, Resource
+from .models import KPI_META, BookingLine, Company, Kpi, KpiEntry, Order, Resource
 
 User = get_user_model()
 
 
+class KpiEntrySerializer(serializers.ModelSerializer):
+    """Позиция показателя: что сделано / на что потрачено."""
+    class Meta:
+        model = KpiEntry
+        fields = ('id', 'title', 'amount', 'date', 'document', 'source', 'created_at')
+        read_only_fields = ('id', 'source', 'created_at')
+
+
 class KpiSerializer(serializers.ModelSerializer):
-    """Показатель компании: план (только чтение — ставит оператор) + факт (компания)."""
+    """Показатель: план (оператор), факт из позиций, значение (для долей — % от выручки)."""
     label = serializers.SerializerMethodField()
     unit = serializers.SerializerMethodField()
     hint = serializers.SerializerMethodField()
+    docs = serializers.SerializerMethodField()
     status = serializers.ReadOnlyField()
+    value = serializers.ReadOnlyField()
+    percent = serializers.SerializerMethodField()
+    entries = KpiEntrySerializer(many=True, read_only=True)
 
     class Meta:
         model = Kpi
-        fields = ('key', 'label', 'unit', 'hint', 'plan', 'fact', 'status', 'document', 'updated_at', 'year')
-        read_only_fields = ('key', 'plan', 'year', 'updated_at')
+        fields = ('key', 'label', 'unit', 'hint', 'docs', 'plan', 'fact', 'value',
+                  'percent', 'status', 'entries', 'updated_at', 'year')
+        read_only_fields = ('key', 'plan', 'fact', 'year', 'updated_at')
 
     def get_label(self, o): return KPI_META[o.key]['label']
     def get_unit(self, o): return KPI_META[o.key]['unit']
     def get_hint(self, o): return KPI_META[o.key]['hint']
+    def get_docs(self, o): return KPI_META[o.key]['docs']
+    def get_percent(self, o): return o.key in Kpi.PERCENT_KEYS
 
 
 class CompanySerializer(serializers.ModelSerializer):
