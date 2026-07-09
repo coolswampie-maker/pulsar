@@ -300,7 +300,7 @@
     var d1=P.dates.plusISO(1);
     book={ res:r, date:d1, start:null, hours:r.minUnits||2, qty:1, shift:'day',
            startDate:d1, endDate:d1, rangePick:'start',
-           shiftStart:'day', shiftEnd:'day',
+           shiftType:'day',
            cal:new Date(parseInt(d1.slice(0,4),10), parseInt(d1.slice(5,7),10)-1, 1), err:'' };
     var bundled=P.cart.bundledFor(r);
     render(''+
@@ -385,27 +385,21 @@
     return span+' · <strong>'+days+' '+unitWord(days, r.priceUnit==='сутки'?'сутки':'день')+'</strong>';
   }
 
-  /* ---- смены (лаборатории): заезд/выезд + подсчёт смен ---- */
-  var SHIFT_LABEL={day:'дневная', eve:'ночная'}, SHIFT_TIME={day:'09:00–17:00', eve:'18:00–02:00'}, SHIFT_IDX={day:0, eve:1};
-  function calDayIndex(iso){ return Math.round(new Date(iso+'T12:00:00').getTime()/86400000); }
-  function shiftCount(){
-    var a=calDayIndex(book.startDate)*2+SHIFT_IDX[book.shiftStart];
-    var b=calDayIndex(book.endDate)*2+SHIFT_IDX[book.shiftEnd];
-    return Math.max(b-a+1, 1);
-  }
-  function shiftToggle(id, val){
-    return '<div class="seg" id="'+id+'">'+
-      ['day','eve'].map(function(s){
-        return '<button type="button" class="seg-b'+(val===s?' on':'')+'" data-s="'+s+'">'+
-          (s==='day'?'Дневная':'Ночная')+'</button>';
-      }).join('')+'</div>';
+  /* ---- смены (лаборатории): тип смены на весь период ---- */
+  // day/eve = 1 смена в день, full (круглосуточно) = 2 смены в день
+  var SHIFT_TYPES=[{k:'day',label:'Дневная',per:1},{k:'eve',label:'Ночная',per:1},{k:'full',label:'Круглосуточно',per:2}];
+  var SHIFT_DESC={day:'дневная смена (09:00–17:00)', eve:'ночная смена (18:00–02:00)', full:'круглосуточно'};
+  function shiftPerDay(){ var t=book.shiftType; return t==='full'?2:1; }
+  function shiftCount(){ return P.dates.days(book.startDate,book.endDate)*shiftPerDay(); }
+  function shiftTypeSelector(){
+    return '<div class="seg" id="bshiftType">'+SHIFT_TYPES.map(function(t){
+      return '<button type="button" class="seg-b'+(book.shiftType===t.k?' on':'')+'" data-s="'+t.k+'">'+t.label+'</button>';
+    }).join('')+'</div>';
   }
   function shiftSummaryHtml(){
     var n=shiftCount(), s=book.startDate, e=book.endDate;
-    var span = (s===e && book.shiftStart===book.shiftEnd)
-      ? P.dates.human(s)+', '+SHIFT_LABEL[book.shiftStart]+' смена'
-      : P.dates.human(s)+' ('+SHIFT_LABEL[book.shiftStart]+') – '+P.dates.human(e)+' ('+SHIFT_LABEL[book.shiftEnd]+')';
-    return span+' · <strong>'+n+' '+unitWord(n,'смена')+'</strong>';
+    var span = s===e ? P.dates.human(s) : P.dates.human(s)+' – '+P.dates.human(e);
+    return span+' · '+SHIFT_DESC[book.shiftType]+' · <strong>'+n+' '+unitWord(n,'смена')+'</strong>';
   }
 
   function renderBooking(){
@@ -419,10 +413,7 @@
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
     } else if(r.bookMode==='shift'){
       html+=rangeCalendarHtml()+
-        '<div class="field-row" style="margin-top:12px">'+
-          '<div class="field"><label>Смена заезда</label>'+shiftToggle('bshiftStart',book.shiftStart)+'</div>'+
-          '<div class="field"><label>Смена выезда</label>'+shiftToggle('bshiftEnd',book.shiftEnd)+'</div>'+
-        '</div>'+
+        '<div class="field" style="margin-top:12px"><label>Смена</label>'+shiftTypeSelector()+'</div>'+
         '<div class="range-note" id="rnote">'+shiftSummaryHtml()+'</div>';
     } else if(r.bookMode==='range'){
       html+=rangeCalendarHtml()+
@@ -480,9 +471,8 @@
       if(c.disabled || !c.getAttribute('data-cal')) return;
       c.onclick=function(){ pickCalDay(c.getAttribute('data-cal')); };
     });
-    // переключатели смен заезда/выезда (лаборатории)
-    qsAll('#bshiftStart .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftStart=bt.getAttribute('data-s'); renderBooking(); }; });
-    qsAll('#bshiftEnd .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftEnd=bt.getAttribute('data-s'); renderBooking(); }; });
+    // выбор типа смены (лаборатории)
+    qsAll('#bshiftType .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftType=bt.getAttribute('data-s'); renderBooking(); }; });
     if(el('bshift')) el('bshift').onchange=function(){ book.shift=this.value; };
     if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
@@ -497,7 +487,7 @@
     if(r.type==='service'){ o.qty=book.qty; return o; }
     if(r.bookMode==='shift'){
       o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
-      o.shiftStart=book.shiftStart; o.shiftEnd=book.shiftEnd; o.shifts=shiftCount();
+      o.shiftType=book.shiftType; o.days=P.dates.days(book.startDate,book.endDate); o.shifts=shiftCount();
       return o;
     }
     if(r.bookMode==='range'){
@@ -547,11 +537,10 @@
   function slotText(l){
     if(l.bookMode==='sample') return l.qty+' '+unitWord(l.qty,'образец');
     if(l.bookMode==='shift'){
-      var ss=l.startDate||l.date, se=l.endDate||ss, n=l.shifts||1, SL={day:'дневная',eve:'ночная'};
-      var sp = (ss===se && l.shiftStart===l.shiftEnd)
-        ? P.dates.human(ss)+', '+(SL[l.shiftStart]||'')+' смена'
-        : P.dates.human(ss)+' ('+(SL[l.shiftStart]||'')+') – '+P.dates.human(se)+' ('+(SL[l.shiftEnd]||'')+')';
-      return sp+' · '+n+' '+unitWord(n,'смена');
+      var ss=l.startDate||l.date, se=l.endDate||ss, n=l.shifts||1;
+      var SD={day:'дневная',eve:'ночная',full:'круглосуточно'};
+      var sp = ss===se ? P.dates.human(ss) : P.dates.human(ss)+' – '+P.dates.human(se);
+      return sp+' · '+(SD[l.shiftType]||'')+' · '+n+' '+unitWord(n,'смена');
     }
     if(l.bookMode==='range'){
       var sd=l.startDate||l.date, ed=l.endDate||sd, days=l.days||P.dates.days(sd,ed);

@@ -124,7 +124,7 @@
       title:res.title, lab:res.lab, img:res.img, unit:res.priceUnit,
       date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
       startDate:opts.startDate||null, endDate:opts.endDate||null,
-      shiftStart:opts.shiftStart||null, shiftEnd:opts.shiftEnd||null, shifts:opts.shifts||null,
+      shiftType:opts.shiftType||null, shifts:opts.shifts||null,
       days: isRange ? P.dates.days(opts.startDate, opts.endDate) : (opts.days||null),
       units: isRange ? Cart.rangeUnits(res,opts) : null,
       qty:opts.qty||1, hours: (isRange||isShift) ? null : (opts.hours||null),
