@@ -7,6 +7,9 @@
 (function(){
   var P = window.PULSAR = window.PULSAR || {};
   var CATALOG_KEY = 'pulsar_catalog_v1';
+  // Версия структуры каталога. Повышаем при изменении baseResources (напр. смена bookMode),
+  // чтобы старый сохранённый в браузере каталог не перекрывал обновление на GitHub Pages.
+  var CATALOG_VER = 2;
 
   /* ---------- даты ---------- */
   function pad(n){ return (n<10?'0':'')+n; }
@@ -37,11 +40,18 @@
   /* ---------- каталог (base + overlay) ---------- */
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
 
-  P.getResources = function(){
-    var stored = localStorage.getItem(CATALOG_KEY);
-    if(stored){ try{ return JSON.parse(stored); }catch(e){} }
-    return clone(P.baseResources);
-  };
+  // читаем сохранённый каталог только если он актуальной версии;
+  // старый формат (голый массив без ver) или иная версия — игнорируем → берём baseResources
+  function readCatalog(){
+    try{
+      var o=JSON.parse(localStorage.getItem(CATALOG_KEY));
+      if(o && o.ver===CATALOG_VER && Array.isArray(o.list)) return o.list;
+    }catch(e){}
+    return null;
+  }
+  function writeCatalog(list){ localStorage.setItem(CATALOG_KEY, JSON.stringify({ver:CATALOG_VER, list:list})); }
+
+  P.getResources = function(){ return readCatalog() || clone(P.baseResources); };
   P.getById = function(id){
     var all=P.getResources(); for(var i=0;i<all.length;i++) if(all[i].id===id) return all[i];
     return null;
@@ -55,15 +65,15 @@
   };
   P.unitShort = { 'смена':'смена','сутки':'сут','час':'ч','образец':'образец','партия':'партия' };
 
-  // admin CRUD (пишет полную копию каталога в localStorage)
+  // admin CRUD (пишет полную копию каталога в localStorage, с версией)
   P.saveResource = function(res){
     var all=P.getResources(); var i=all.findIndex(function(r){return r.id===res.id;});
     if(i>=0) all[i]=res; else all.push(res);
-    localStorage.setItem(CATALOG_KEY, JSON.stringify(all));
+    writeCatalog(all);
   };
   P.deleteResource = function(id){
     var all=P.getResources().filter(function(r){return r.id!==id;});
-    localStorage.setItem(CATALOG_KEY, JSON.stringify(all));
+    writeCatalog(all);
   };
   P.resetCatalog = function(){ localStorage.removeItem(CATALOG_KEY); };
 
