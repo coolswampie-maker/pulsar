@@ -300,7 +300,8 @@
     if(r.priceUnit==='час'){ endT=('0'+(10+(r.minUnits||2))).slice(-2)+':00'; }
     else if(r.priceUnit==='сутки'){ endD=P.dates.plusISO(2); endT='10:00'; }
     book={ res:r, date:d1, start:null, hours:r.minUnits||2, qty:1, shift:'day',
-           startDate:d1, endDate:endD, startTime:'10:00', endTime:endT, err:'' };
+           startDate:d1, endDate:endD, startTime:'10:00', endTime:endT,
+           rangePick:'start', cal:new Date(parseInt(d1.slice(0,4),10), parseInt(d1.slice(5,7),10)-1, 1), err:'' };
     var bundled=P.cart.bundledFor(r);
     render(''+
     '<section class="detail"><div class="wrap">'+
@@ -340,9 +341,58 @@
       : P.dates.human(book.startDate)+' '+book.startTime+' → '+P.dates.human(book.endDate)+' '+book.endTime;
     var dur = (hrs%1===0? hrs : hrs.toFixed(1))+' '+unitWord(hrs,'час');
     var tail = r.priceUnit==='час' ? '' : ' ('+dur+')';
-    return span+' · <strong>'+units+' '+esc(unitWord(units,r.priceUnit))+'</strong>'+tail;
+    var base = span+' · <strong>'+units+' '+esc(unitWord(units,r.priceUnit))+'</strong>'+tail;
+    var conflict = P.cart.conflictInterval(r.id, book.startDate, book.startTime, book.endDate, book.endTime);
+    if(conflict) base += '<br><span class="rn-err">⚠ Пересекается с занятым временем ('+esc(conflict)+').</span>';
+    return base;
   }
   function refreshRange(){ var n=el('rnote'); if(n) n.innerHTML=rangeNoteHtml(); updateEstimate(); }
+
+  /* ---- календарь занятости для интервальной брони ---- */
+  function pad2(n){ return (n<10?'0':'')+n; }
+  // статус дня: past | busy (весь день занят) | partial (частично) | free
+  function dayStatus(resId, iso){
+    if(iso < P.dates.todayISO()) return 'past';
+    var busy=P.getBusy(resId).filter(function(b){ return b.date===iso; });
+    if(!busy.length) return 'free';
+    if(busy.some(function(b){ return b.slotStart==null; })) return 'busy';
+    return 'partial';
+  }
+  var CAL_WD=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  var CAL_MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  function rangeCalendarHtml(){
+    var r=book.res, cal=book.cal, y=cal.getFullYear(), m=cal.getMonth();
+    var startWd=(new Date(y,m,1).getDay()+6)%7, dim=new Date(y,m+1,0).getDate();
+    var cells='';
+    for(var i=0;i<startWd;i++) cells+='<span class="cal-cell empty"></span>';
+    for(var d=1;d<=dim;d++){
+      var iso=y+'-'+pad2(m+1)+'-'+pad2(d);
+      var st=dayStatus(r.id,iso), cls='cal-cell '+st;
+      if(book.startDate&&book.endDate&&iso>book.startDate&&iso<book.endDate) cls+=' inrange';
+      if(iso===book.startDate) cls+=' start';
+      if(iso===book.endDate) cls+=' end';
+      var dis=(st==='past'||st==='busy');
+      cells+='<button type="button" class="'+cls+'"'+(dis?' disabled':'')+' data-cal="'+iso+'">'+d+'</button>';
+    }
+    return '<div class="cal">'+
+      '<div class="cal-head"><span class="cal-title">'+CAL_MON[m]+' '+y+'</span>'+
+        '<span class="cal-nav"><button type="button" id="calPrev" aria-label="Предыдущий месяц">‹</button>'+
+        '<button type="button" id="calNext" aria-label="Следующий месяц">›</button></span></div>'+
+      '<div class="cal-wd">'+CAL_WD.map(function(w){return '<span>'+w+'</span>';}).join('')+'</div>'+
+      '<div class="cal-grid" id="calGrid">'+cells+'</div>'+
+      '<div class="cal-legend"><span><i class="lg-busy"></i>занято</span>'+
+        '<span><i class="lg-part"></i>частично</span>'+
+        '<span><i class="lg-sel"></i>выбрано</span></div>'+
+    '</div>';
+  }
+  function pickCalDay(iso){
+    if(book.rangePick==='start' || iso<book.startDate){
+      book.startDate=iso; book.endDate=iso; book.rangePick='end';
+    } else {
+      book.endDate=iso; book.rangePick='start';
+    }
+    renderBooking();
+  }
 
   function renderBooking(){
     var r=book.res, b=el('booking'); if(!b) return;
@@ -354,14 +404,11 @@
         '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
     } else if(r.bookMode==='range'){
-      html+='<div class="field"><label>Начало</label><div class="field-row">'+
-          '<input type="date" id="bstartd" min="'+P.dates.todayISO()+'" value="'+book.startDate+'">'+
-          '<input type="time" id="bstartt" step="1800" value="'+book.startTime+'">'+
-        '</div></div>'+
-        '<div class="field"><label>Окончание</label><div class="field-row">'+
-          '<input type="date" id="bendd" min="'+book.startDate+'" value="'+book.endDate+'">'+
-          '<input type="time" id="bendt" step="1800" value="'+book.endTime+'">'+
-        '</div></div>'+
+      html+='<div class="field"><label>Выберите даты</label>'+rangeCalendarHtml()+'</div>'+
+        '<div class="field-row">'+
+          '<div class="field"><label>Время начала</label><input type="time" id="bstartt" step="1800" value="'+book.startTime+'"></div>'+
+          '<div class="field"><label>Время окончания</label><input type="time" id="bendt" step="1800" value="'+book.endTime+'"></div>'+
+        '</div>'+
         '<div class="range-note" id="rnote">'+rangeNoteHtml()+'</div>';
     } else {
       html+='<div class="field"><label>Дата</label><input type="date" id="bdate" min="'+P.dates.todayISO()+'" value="'+book.date+'"></div>';
@@ -402,10 +449,15 @@
   function bindBooking(){
     var r=book.res;
     if(el('bdate')) el('bdate').onchange=function(){ book.date=this.value; book.start=null; renderBooking(); };
-    if(el('bstartd')) el('bstartd').onchange=function(){ book.startDate=this.value; if(book.endDate<book.startDate) book.endDate=book.startDate; renderBooking(); };
     if(el('bstartt')) el('bstartt').onchange=function(){ book.startTime=this.value; refreshRange(); };
-    if(el('bendd')) el('bendd').onchange=function(){ book.endDate=this.value; if(book.endDate<book.startDate) book.endDate=book.startDate; renderBooking(); };
     if(el('bendt')) el('bendt').onchange=function(){ book.endTime=this.value; refreshRange(); };
+    // календарь занятости
+    if(el('calPrev')) el('calPrev').onclick=function(){ book.cal=new Date(book.cal.getFullYear(),book.cal.getMonth()-1,1); renderBooking(); };
+    if(el('calNext')) el('calNext').onclick=function(){ book.cal=new Date(book.cal.getFullYear(),book.cal.getMonth()+1,1); renderBooking(); };
+    qsAll('#calGrid .cal-cell').forEach(function(c){
+      if(c.disabled || !c.getAttribute('data-cal')) return;
+      c.onclick=function(){ pickCalDay(c.getAttribute('data-cal')); };
+    });
     if(el('bshift')) el('bshift').onchange=function(){ book.shift=this.value; };
     if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
