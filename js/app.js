@@ -636,30 +636,33 @@
     var msg=el('c_msg');
     if(!org||!name||!email||!phone){ msg.innerHTML='<div class="form-msg err">Заполните обязательные поля (*).</div>'; return; }
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.innerHTML='<div class="form-msg err">Проверьте email.</div>'; return; }
-    var res=P.cart.checkout({org:org,name:name,email:email,phone:phone,note:el('c_note').value.trim()});
-    if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
-    location.hash='#/order/'+res.order.id;
+    var btn=el('submitorder'); if(btn){ btn.disabled=true; btn.textContent='Отправка…'; }
+    P.cart.checkout({org:org,name:name,email:email,phone:phone,note:el('c_note').value.trim()}).then(function(res){
+      if(btn){ btn.disabled=false; btn.textContent='Отправить заявку'; }
+      if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+      location.hash='#/order/'+res.order.id;
+    });
   }
 
   /* ==========================================================
      ПОДТВЕРЖДЕНИЕ ЗАЯВКИ
      ========================================================== */
   function viewOrder(id){
-    var o=P.getOrders().find(function(x){return x.id===id;});
-    if(!o) return render('<section class="section"><div class="wrap empty"><h3>Заявка не найдена</h3><a class="btn btn-primary" href="#/catalog">В каталог</a></div></section>');
-    render('<section class="confirm"><div class="wrap">'+
-      '<div class="check-ic">'+icon('check',34)+'</div>'+
-      '<h1>Заявка принята</h1>'+
-      '<div class="onum">№ '+esc(o.id)+'</div>'+
-      '<p class="muted">Спасибо, '+esc(o.contact.name.split(' ')[0]||o.contact.name)+'. Оператор ПУЛЬСАР свяжется с вами для подтверждения бронирования и оформления договора.</p>'+
-      '<div class="confirm-card">'+
+    var o=(P.lastOrder && P.lastOrder.id===id) ? P.lastOrder : null;
+    var name=o && o.contact && o.contact.name ? (o.contact.name.split(' ')[0]||o.contact.name) : '';
+    var linesHtml = o ? '<div class="confirm-card">'+
         o.lines.map(function(l){ return '<div class="cl"><span>'+esc(l.title)+(l.isOperator?' <em style="color:var(--brass)">(оператор)</em>':'')+'</span><span>'+fmt(l.linePrice)+'</span></div>'; }).join('')+
         (o.discount?'<div class="cl"><span>Скидка резидента ИНТЦ</span><span>−'+fmt(o.discount)+'</span></div>':'')+
         '<div class="cl" style="font-weight:700;color:var(--navy)"><span>Итого</span><span>'+fmt(o.total)+'</span></div>'+
-      '</div>'+
+      '</div>' : '';
+    render('<section class="confirm"><div class="wrap">'+
+      '<div class="check-ic">'+icon('check',34)+'</div>'+
+      '<h1>Заявка принята</h1>'+
+      '<div class="onum">№ '+esc(id)+'</div>'+
+      '<p class="muted">Спасибо'+(name?', '+esc(name):'')+'. Заявка отправлена оператору ПУЛЬСАР — он свяжется с вами для подтверждения бронирования и оформления договора.</p>'+
+      linesHtml+
       '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">'+
         '<a class="btn btn-primary" href="#/catalog">Продолжить в каталоге</a>'+
-        '<a class="btn btn-outline" href="#/admin">Открыть кабинет оператора</a>'+
       '</div>'+
     '</div></section>');
   }
@@ -873,6 +876,10 @@
   el('navtoggle').onclick=function(){ el('navlinks').classList.toggle('open'); };
   qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ el('navlinks').classList.remove('open'); }); });
 
-  // старт
-  route(); syncCart();
+  // ссылки «Кабинет оператора» ведут в Django-админку
+  qsAll('a[data-admin]').forEach(function(a){ a.setAttribute('href', window.PULSAR_ADMIN_URL || '/admin/'); a.setAttribute('target','_blank'); });
+
+  // старт: сначала подтягиваем занятость из бэкенда, затем рисуем
+  syncCart();
+  P.loadBusy(function(){ route(); });
 })();

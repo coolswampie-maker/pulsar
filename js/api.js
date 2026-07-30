@@ -7,6 +7,11 @@
 (function(){
   var P = window.PULSAR = window.PULSAR || {};
   var CATALOG_KEY = 'pulsar_catalog_v1';
+  // база REST-API Django. По умолчанию тот же домен (/api). Если бэкенд на другом
+  // хосте — задайте window.PULSAR_API_BASE в index.html.
+  var API_BASE = (window.PULSAR_API_BASE || '/api').replace(/\/+$/,'');
+  P.API_BASE = API_BASE;
+  P.apiFetch = function(path, opts){ return fetch(API_BASE+path, opts); };
   // Версия структуры каталога. Повышаем при изменении baseResources (напр. смена bookMode),
   // чтобы старый сохранённый в браузере каталог не перекрывал обновление на GitHub Pages.
   var CATALOG_VER = 2;
@@ -77,42 +82,17 @@
   };
   P.resetCatalog = function(){ localStorage.removeItem(CATALOG_KEY); };
 
-  /* ---------- занятость (демо busy + подтверждённые заявки) ---------- */
-  // сид: id -> [{off:деньОтСегодня, s:'HH:MM', e:'HH:MM'}] ; для shift/day s/e опускаем
-  var SEED = {
-    'eq-massspec':[{off:0,s:'09:00',e:'13:00'},{off:1,s:'10:00',e:'14:00'},{off:2,s:'09:00',e:'12:00'}],
-    'eq-sem':[{off:1,s:'12:00',e:'16:00'}],
-    'eq-nmr':[{off:3,s:'10:00',e:'13:00'}],
-    // помещения/оборудование бронируются по сменам/суткам → занятые дни целиком
-    'room-cleanroom-a':[{off:2},{off:6}],
-    'room-vacuum':[{off:0},{off:4}],
-    'eq-vk1000':[{off:2},{off:3}],
-    'eq-mim':[{off:5}]
+  /* ---------- занятость (из бэкенда: подтверждённые оператором брони) ---------- */
+  P._busy = {};           // кэш: slug -> [{date, slotStart, slotEnd}]
+  P.busyLoaded = false;
+  // грузим всю занятость одним запросом при старте; при сбое — работаем без блокировок
+  P.loadBusy = function(cb){
+    P.apiFetch('/busy/').then(function(r){ return r.json(); })
+      .then(function(data){ P._busy = data || {}; })
+      .catch(function(){ P._busy = {}; })
+      .then(function(){ P.busyLoaded = true; if(cb) cb(); });
   };
-  function seedBusy(id){
-    return (SEED[id]||[]).map(function(b){
-      return { date:P.dates.plusISO(b.off), slotStart:b.s||null, slotEnd:b.e||null };
-    });
-  }
-  P.getBusy = function(id){
-    var out = seedBusy(id);
-    // добавляем слоты из подтверждённых заявок
-    P.getOrders().forEach(function(o){
-      if(o.status!=='confirmed') return;
-      o.lines.forEach(function(l){
-        if(l.resourceId!==id) return;
-        if((l.bookMode==='range'||l.bookMode==='shift') && l.startDate){
-          // бронь по дням/сменам: каждый день диапазона занят целиком
-          P.dates.range(l.startDate, l.endDate||l.startDate).forEach(function(d){
-            out.push({date:d, slotStart:null, slotEnd:null});
-          });
-        } else {
-          out.push({date:l.date, slotStart:l.slotStart||null, slotEnd:l.slotEnd||null});
-        }
-      });
-    });
-    return out;
-  };
+  P.getBusy = function(id){ return (P._busy[id] || []).slice(); };
   // статус на СЕГОДНЯ: занят ли ресурс сегодня (бронь — на конкретный день, не навсегда)
   P.availabilityLabel = function(id){
     var t=P.dates.todayISO();

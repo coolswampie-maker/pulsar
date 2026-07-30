@@ -6,8 +6,8 @@
 <title>ПУЛЬСАР — платформа лабораторной инфраструктуры МГУ</title>
 <meta name="description" content="Аренда чистых комнат, научного оборудования, времени специалистов и аналитических услуг на базе ИНТЦ МГУ «Воробьёвы горы» и ЦКП МГУ.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%230E2A47'/%3E%3Cg transform='rotate(-28 20 20)'%3E%3Cellipse cx='20' cy='20' rx='11.5' ry='4.6' fill='none' stroke='%23CBA968' stroke-width='2'/%3E%3Cpath d='M20 16.4 L17.6 5 L22.4 5 Z' fill='%23CBA968'/%3E%3Cpath d='M20 23.6 L17.6 35 L22.4 35 Z' fill='%23CBA968'/%3E%3Ccircle cx='20' cy='20' r='3.6' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/fonts.css?v=19">
-<link rel="stylesheet" href="css/styles.css?v=19">
+<link rel="stylesheet" href="css/fonts.css?v=20">
+<link rel="stylesheet" href="css/styles.css?v=20">
 </head>
 <body>
 
@@ -24,7 +24,7 @@
     </span>
     <span class="topbar-right">
       <a href="mailto:info@pulsar-mgu.ru">info@pulsar-mgu.ru</a>
-      <a href="#/admin">Кабинет оператора</a>
+      <a data-admin href="/admin/">Кабинет оператора</a>
     </span>
   </div>
 </div>
@@ -97,7 +97,7 @@
           <li><a href="#/about">О платформе</a></li>
           <li><a href="#/about">Резидентам ИНТЦ</a></li>
           <li><a href="#/contacts">Контакты</a></li>
-          <li><a href="#/admin">Кабинет оператора</a></li>
+          <li><a data-admin href="/admin/">Кабинет оператора</a></li>
         </ul>
       </div>
       <div>
@@ -110,7 +110,7 @@
       </div>
     </div>
     <div class="wrap footer-bottom">
-      <div>© 2026 ПУЛЬСАР · ИНТЦ МГУ «Воробьёвы горы» · демонстрационная версия</div>
+      <div>© 2026 ПУЛЬСАР · ИНТЦ МГУ «Воробьёвы горы»</div>
       <div>Правовая основа — 216 ФЗ и 332 ПП РФ</div>
     </div>
   </div>
@@ -118,13 +118,22 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Конфигурация подключения к бэкенду.
+     Если фронт и Django на одном домене (Django отдаёт и статику, и /api, /admin) —
+     оставьте как есть. Если бэкенд на другом хосте — впишите его полный адрес, напр.:
+     window.PULSAR_API_BASE   = 'https://api.pulsar-mgu.ru/api';
+     window.PULSAR_ADMIN_URL  = 'https://api.pulsar-mgu.ru/admin/'; -->
+<script>
+  window.PULSAR_API_BASE  = window.PULSAR_API_BASE  || '/api';
+  window.PULSAR_ADMIN_URL = window.PULSAR_ADMIN_URL || '/admin/';
+</script>
 <!-- данные (классические скрипты → работают и с file://, и с GitHub Pages) -->
-<script src="data/resources.js?v=19"></script>
-<script src="data/images.js?v=19"></script>
+<script src="data/resources.js?v=20"></script>
+<script src="data/images.js?v=20"></script>
 <!-- логика -->
-<script src="js/images.js?v=19"></script>
-<script src="js/api.js?v=19"></script>
-<script src="js/store.js?v=19"></script>
-<script src="js/app.js?v=19"></script>
+<script src="js/images.js?v=20"></script>
+<script src="js/api.js?v=20"></script>
+<script src="js/store.js?v=20"></script>
+<script src="js/app.js?v=20"></script>
 </body>
 </html>

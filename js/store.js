@@ -174,22 +174,69 @@
     return { subtotal:subtotal, resident:resident, discount:discount, total:subtotal-discount, count:lines.length };
   };
 
-  /* ---- оформить заявку ---- */
+  /* ---- разворот брони в строки-по-дню под модель бэкенда ---- */
+  // Бэкенд хранит одну дату на строку и считает цену = цена×(часы для почасовых)×кол-во.
+  // Поэтому многодневную/сменную бронь разворачиваем в отдельные строки на каждый день,
+  // где каждая строка = ровно одна единица (1 смена / 1 сутки / N часов).
+  var SHIFT_WIN = { day:{s:'09:00', e:'17:00'}, eve:{s:'18:00', e:'02:00'} };
+  function daysOf(l){ return P.dates.range(l.startDate||l.date, l.endDate||l.startDate||l.date); }
+  function expandLine(l){
+    var base={ resourceId:l.resourceId, unitPrice:l.unitPrice||0, isOperator:!!l.isOperator };
+    var out=[];
+    if(l.isOperator){ // оператор — одной строкой, часы = суммарные
+      out.push(Object.assign({date:l.startDate||l.date||null, slotStart:null, slotEnd:null,
+        qty:1, hours:l.hours||null, linePrice:l.linePrice}, base));
+      return out;
+    }
+    if(l.bookMode==='sample'){
+      out.push(Object.assign({date:null, slotStart:null, slotEnd:null, qty:l.qty||1, hours:null,
+        linePrice:l.linePrice}, base));
+      return out;
+    }
+    if(l.bookMode==='shift'){
+      var shifts = l.shiftType==='full' ? ['day','eve'] : [l.shiftType||'day'];
+      daysOf(l).forEach(function(d){ shifts.forEach(function(s){
+        out.push(Object.assign({date:d, slotStart:SHIFT_WIN[s].s, slotEnd:SHIFT_WIN[s].e,
+          qty:1, hours:null, linePrice:l.unitPrice||0}, base));
+      }); });
+      return out;
+    }
+    if(l.bookMode==='hour'){
+      daysOf(l).forEach(function(d){
+        out.push(Object.assign({date:d, slotStart:l.slotStart||null, slotEnd:l.slotEnd||null,
+          qty:1, hours:l.hours||null, linePrice:(l.unitPrice||0)*(l.hours||1)}, base));
+      });
+      return out;
+    }
+    // range/day (суточное оборудование) — по одной строке на день
+    daysOf(l).forEach(function(d){
+      out.push(Object.assign({date:d, slotStart:null, slotEnd:null, qty:1, hours:null,
+        linePrice:l.unitPrice||0}, base));
+    });
+    return out;
+  }
+
+  /* ---- оформить заявку (POST в бэкенд) ---- */
   Cart.checkout = function(contact){
-    var lines=read(); if(!lines.length) return {ok:false,msg:'Корзина пуста'};
+    var lines=read(); if(!lines.length) return Promise.resolve({ok:false,msg:'Корзина пуста'});
     var t=Cart.totals();
-    var orders=P.getOrders();
-    var num = 'PLS-' + String(1000+orders.length+1);
-    var order={
-      id:num,
-      createdAt:new Date().toISOString(),
-      createdHuman: new Date().toLocaleString('ru-RU',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}),
-      lines:lines, contact:contact, resident:t.resident,
-      subtotal:t.subtotal, discount:t.discount, total:t.total, status:'new'
-    };
-    orders.unshift(order);
-    P.saveOrders(orders);
-    Cart.clear();
-    return {ok:true, order:order};
+    // сводка для страницы подтверждения (данные корзины ещё есть до очистки)
+    var summary={ lines:lines.slice(), contact:contact, subtotal:t.subtotal,
+                  discount:t.discount, total:t.total };
+    var apiLines=[];
+    lines.forEach(function(l){ apiLines=apiLines.concat(expandLine(l)); });
+    var payload={ contact:contact, resident:t.resident, lines:apiLines };
+    return P.apiFetch('/orders/', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+    }).then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
+      .then(function(res){
+        if(res.status>=200 && res.status<300 && res.body && res.body.ok){
+          summary.id=res.body.id; P.lastOrder=summary; Cart.clear();
+          return {ok:true, order:summary};
+        }
+        var msg=(res.body && (res.body.detail || res.body.lines)) || 'Не удалось оформить заявку. Попробуйте ещё раз.';
+        return {ok:false, msg:(typeof msg==='string'?msg:'Проверьте данные и попробуйте снова.')};
+      })
+      .catch(function(){ return {ok:false, msg:'Нет связи с сервером. Проверьте подключение и попробуйте снова.'}; });
   };
 })();

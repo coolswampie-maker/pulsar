@@ -43,6 +43,22 @@ class ResourceViewSet(viewsets.ReadOnlyModelViewSet):
             for s in slots])
 
 
+class AllBusyView(APIView):
+    """GET /api/busy/ — вся занятость по всем ресурсам: {slug: [{date, slotStart, slotEnd}]}.
+    Фронт забирает один раз при загрузке, чтобы показывать доступность в каталоге и календаре."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        out = {}
+        for s in BusySlot.objects.values('resource_id', 'date', 'slot_start', 'slot_end'):
+            out.setdefault(s['resource_id'], []).append({
+                'date': str(s['date']),
+                'slotStart': s['slot_start'].strftime('%H:%M') if s['slot_start'] else None,
+                'slotEnd': s['slot_end'].strftime('%H:%M') if s['slot_end'] else None,
+            })
+        return Response(out)
+
+
 # ---------- заявки ----------
 class OrderViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
     """POST /api/orders/ — оформить заявку. GET /api/orders/ — заявки своей компании."""
