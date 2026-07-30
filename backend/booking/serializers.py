@@ -6,12 +6,37 @@ from .models import KPI_META, BookingLine, Company, Kpi, KpiEntry, Order, Resour
 User = get_user_model()
 
 
+# Подтверждающие документы отдаются с того же домена, что и сайт, поэтому
+# загружать можно только форматы, которые браузер не исполнит. HTML/SVG/JS
+# на своём домене — это чужой скрипт в кабинете оператора.
+DOC_EXTS = ('pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic',
+            'doc', 'docx', 'xls', 'xlsx', 'odt', 'ods', 'rtf', 'txt', 'zip', 'rar', '7z')
+DOC_MAX_MB = 25
+
+
+def validate_document(f):
+    """Проверка загружаемого документа: расширение и размер."""
+    if not f:
+        return f
+    import os
+    ext = os.path.splitext(getattr(f, 'name', '') or '')[1].lower().lstrip('.')
+    if ext not in DOC_EXTS:
+        raise serializers.ValidationError(
+            'Недопустимый формат файла. Разрешены: ' + ', '.join(DOC_EXTS) + '.')
+    if getattr(f, 'size', 0) > DOC_MAX_MB * 1024 * 1024:
+        raise serializers.ValidationError(f'Файл больше {DOC_MAX_MB} МБ.')
+    return f
+
+
 class KpiEntrySerializer(serializers.ModelSerializer):
     """Позиция показателя: что сделано / на что потрачено."""
     class Meta:
         model = KpiEntry
         fields = ('id', 'title', 'amount', 'date', 'document', 'source', 'created_at')
         read_only_fields = ('id', 'source', 'created_at')
+
+    def validate_document(self, f):
+        return validate_document(f)
 
 
 class KpiSerializer(serializers.ModelSerializer):
@@ -130,12 +155,18 @@ class ResourceSerializer(serializers.ModelSerializer):
 
 
 class BookingLineInSerializer(serializers.Serializer):
+    """Позиция заявки от фронта.
+
+    unitPrice/linePrice принимаем только для совместимости и НЕ используем в
+    расчётах: цену берём из каталога на сервере (см. BookingLine.save и
+    OrderCreateSerializer.create). Иначе можно было бы прислать свою цену.
+    """
     resourceId = serializers.CharField()
     date = serializers.DateField(required=False, allow_null=True)
     slotStart = serializers.TimeField(required=False, allow_null=True)
     slotEnd = serializers.TimeField(required=False, allow_null=True)
-    qty = serializers.IntegerField(default=1)
-    hours = serializers.IntegerField(required=False, allow_null=True)
+    qty = serializers.IntegerField(default=1, min_value=1)
+    hours = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=24)
     unitPrice = serializers.IntegerField(default=0)
     linePrice = serializers.IntegerField(default=0)
     isOperator = serializers.BooleanField(default=False)
@@ -145,13 +176,43 @@ class OrderCreateSerializer(serializers.Serializer):
     """Приём заявки из корзины фронта."""
     contact = serializers.DictField()
     resident = serializers.BooleanField(default=False)
-    lines = BookingLineInSerializer(many=True)
+    lines = BookingLineInSerializer(many=True, allow_empty=False)
+
+    def validate_lines(self, lines):
+        """Проверяем то, что влияет на деньги и на реальную доступность.
+
+        Полный BookingLine.clean() здесь применить нельзя: ночная смена
+        лаборатории (18:00–02:00) законно выходит за рабочие часы и «заканчивается
+        раньше, чем начинается», поэтому проверяем выборочно.
+        """
+        from django.utils import timezone
+        today = timezone.localdate()
+        slugs = {l['resourceId'] for l in lines}
+        found = {r.slug: r for r in Resource.objects.filter(slug__in=slugs, is_active=True)}
+        errors = []
+        for i, l in enumerate(lines):
+            res = found.get(l['resourceId'])
+            if not res:
+                errors.append(f'Позиция {i + 1}: ресурс «{l["resourceId"]}» не найден или снят с публикации.')
+                continue
+            # У услуг «под ключ» qty — это количество образцов, а не одновременно
+            # занятых единиц, поэтому наличием оно не ограничено.
+            if res.book_mode != 'sample':
+                if l.get('qty', 1) > res.units_total:
+                    errors.append(f'Позиция {i + 1}: доступно единиц — {res.units_total}.')
+                # услуги бронируются без даты, остальное — только не в прошлом
+                if not l.get('date'):
+                    errors.append(f'Позиция {i + 1}: не указана дата.')
+                elif l['date'] < today:
+                    errors.append(f'Позиция {i + 1}: дата в прошлом.')
+        if errors:
+            raise serializers.ValidationError(errors)
+        return lines
 
     def create(self, validated):
         from django.db import transaction
         c = validated['contact']
         lines = validated['lines']
-        subtotal = sum(l['linePrice'] for l in lines)
         # компания из ЛК, если запрос авторизован
         request = self.context.get('request')
         company = getattr(getattr(request, 'user', None), 'company', None) if request else None
@@ -162,7 +223,6 @@ class OrderCreateSerializer(serializers.Serializer):
         # проставит скидку в заявке вручную.
         resident = bool(company and company.resident and company.confirmed)
         claimed = bool(validated['resident'])
-        discount = round(subtotal * 0.25) if resident else 0
         note = c.get('note', '')
         if claimed and not resident:
             mark = 'Заявлен статус резидента ИНТЦ — требуется проверка оператором.'
@@ -175,14 +235,19 @@ class OrderCreateSerializer(serializers.Serializer):
                 contact_name=(company.contact_name if company else c.get('name', '')),
                 email=(company.user.email if company else c.get('email', '')),
                 phone=(company.phone if company else c.get('phone', '')),
-                note=note,
-                resident=resident, subtotal=subtotal, discount=discount,
-                total=subtotal - discount)
+                note=note, resident=resident, subtotal=0, discount=0, total=0)
             for l in lines:
+                # unit_price/line_price сознательно не берём из запроса:
+                # BookingLine.save() считает их по цене ресурса из каталога.
                 BookingLine.objects.create(
                     order=order, resource_id=l['resourceId'], date=l.get('date'),
                     slot_start=l.get('slotStart'), slot_end=l.get('slotEnd'),
                     qty=l.get('qty', 1), hours=l.get('hours'),
-                    unit_price=l.get('unitPrice', 0), line_price=l.get('linePrice', 0),
                     is_operator=l.get('isOperator', False))
+            # Итог считаем по сохранённым строкам, а не по присланным суммам —
+            # иначе можно оформить бронь за любую цену, вплоть до рубля.
+            subtotal = sum(order.lines.values_list('line_price', flat=True))
+            discount = round(subtotal * 0.25) if resident else 0
+            order.subtotal, order.discount, order.total = subtotal, discount, subtotal - discount
+            order.save(update_fields=['subtotal', 'discount', 'total'])
         return order

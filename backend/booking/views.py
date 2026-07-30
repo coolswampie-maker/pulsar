@@ -267,6 +267,14 @@ class KpiExtractView(APIView):
         f = request.FILES.get('document')
         if not f:
             return Response({'detail': 'Прикрепите файл.'}, status=400)
+        # тот же фильтр форматов, что и при обычном добавлении позиции
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
+        from .serializers import validate_document
+        try:
+            validate_document(f)
+        except DRFValidationError as e:
+            return Response({'detail': ' '.join(map(str, e.detail))}, status=400)
         year = _kpi_year(request)
         kpi, _ = Kpi.objects.get_or_create(company=company, year=year, key=key)
         title, amount = _extract_from_pdf(f)

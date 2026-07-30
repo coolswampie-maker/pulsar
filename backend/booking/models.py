@@ -189,8 +189,11 @@ class BookingLine(models.Model):
         from django.core.exceptions import ValidationError
         from django.utils import timezone
         errors = {}
-        # Нельзя забронировать больше единиц, чем есть в наличии.
-        if self.resource_id and self.qty and self.qty > self.resource.units_total:
+        # Нельзя забронировать больше единиц, чем есть в наличии. У услуг «под ключ»
+        # qty — это количество образцов в партии, а не одновременно занятые единицы,
+        # поэтому наличием оно не ограничивается.
+        if (self.resource_id and self.qty and self.resource.book_mode != 'sample'
+                and self.qty > self.resource.units_total):
             errors['qty'] = f'Больше, чем есть в наличии ({self.resource.units_total}).'
         # Окончание должно быть позже начала.
         if self.slot_start and self.slot_end and self.slot_end <= self.slot_start:

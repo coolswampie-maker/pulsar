@@ -4,15 +4,30 @@
 рендер страниц админки. Демо-данные не трогаются — тесты идут в отдельной БД.
 """
 import json
-from datetime import date, time
+from datetime import time, timedelta
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from booking.models import BookingLine, BusySlot, Company, Kpi, Order, Resource
+
+# Даты тестов считаем от сегодняшнего дня, а не фиксируем в календаре: модели и
+# планировщик отклоняют бронь в прошлом, поэтому зашитые даты со временем
+# становились прошлым и тесты начинали падать сами по себе.
+
+
+def D(offset=0):
+    """Дата теста: опорная (сегодня + 5 дней) плюс смещение в днях."""
+    return timezone.localdate() + timedelta(days=5 + offset)
+
+
+def S(offset=0):
+    """Та же дата строкой ISO — для JSON-запросов и формсетов админки."""
+    return D(offset).isoformat()
 
 
 class Base(TestCase):
@@ -27,7 +42,7 @@ class Base(TestCase):
             slug='srv1', type='service', book_mode='sample', title='Услуга',
             price_value=500, units_total=3)
         self.api = reverse('admin:booking_busyslot_gantt_api')
-        self.d = date(2026, 7, 20)
+        self.d = D()
 
     def post(self, payload):
         return self.c.post(self.api, data=json.dumps(payload), content_type='application/json')
@@ -154,7 +169,7 @@ class PlannerApiTests(Base):
     def test_move_cross_day_syncs_line(self):
         c = self.api_ok({'action': 'create', 'resource': 'eq1', 'date': self.d.isoformat(),
                          'start': '09:00', 'end': '11:00'})
-        newd = date(2026, 7, 22)
+        newd = D(2)
         res = self.api_ok({'action': 'move', 'id': c['id'], 'start': '09:00', 'end': '11:00',
                            'date': newd.isoformat()})
         self.assertTrue(res['ok'])
@@ -243,7 +258,7 @@ class AdminFormTests(Base):
             'lines-TOTAL_FORMS': '1', 'lines-INITIAL_FORMS': '1',
             'lines-MIN_NUM_FORMS': '0', 'lines-MAX_NUM_FORMS': '1000',
             'lines-0-id': str(line.pk), 'lines-0-order': str(o.pk),
-            'lines-0-resource': self.eq.slug, 'lines-0-date': '2026-07-20',
+            'lines-0-resource': self.eq.slug, 'lines-0-date': S(),
             'lines-0-slot_start': '09:00:00', 'lines-0-slot_end': '12:00:00',
             'lines-0-qty': '1', 'lines-0-hours': '5',
             '_save': 'Save',
@@ -270,7 +285,7 @@ class AdminFormTests(Base):
             'lines-TOTAL_FORMS': '1', 'lines-INITIAL_FORMS': '1',
             'lines-MIN_NUM_FORMS': '0', 'lines-MAX_NUM_FORMS': '1000',
             'lines-0-id': str(line.pk), 'lines-0-order': str(o.pk),
-            'lines-0-resource': self.eq.slug, 'lines-0-date': '2026-07-20',
+            'lines-0-resource': self.eq.slug, 'lines-0-date': S(),
             'lines-0-slot_start': '09:00:00', 'lines-0-slot_end': '12:00:00',
             'lines-0-qty': '9', 'lines-0-hours': '3',
             '_save': 'Save',
@@ -291,8 +306,10 @@ class CabinetApiTests(TestCase):
     def _j(self, r):
         return json.loads(r.content)
 
+    # пароль должен проходить AUTH_PASSWORD_VALIDATORS (8+ символов, не из
+    # словаря утечек, не только цифры) — иначе регистрация вернёт 400
     def register(self, email='co@x.ru', **kw):
-        data = {'email': email, 'password': 'secret1', 'name': 'ООО Тест', 'resident': True}
+        data = {'email': email, 'password': 'Nauka2026lab', 'name': 'ООО Тест', 'resident': True}
         data.update(kw)
         return self.c.post('/api/auth/register/', data=json.dumps(data), content_type='application/json')
 
@@ -312,7 +329,7 @@ class CabinetApiTests(TestCase):
 
     def test_login_ok_and_bad(self):
         self.register(email='a@a.ru')
-        ok = self.c.post('/api/auth/login/', data=json.dumps({'email': 'a@a.ru', 'password': 'secret1'}),
+        ok = self.c.post('/api/auth/login/', data=json.dumps({'email': 'a@a.ru', 'password': 'Nauka2026lab'}),
                          content_type='application/json')
         self.assertEqual(ok.status_code, 200)
         self.assertTrue(self._j(ok)['token'])
@@ -333,7 +350,7 @@ class CabinetApiTests(TestCase):
 
     def _order_payload(self):
         return {'contact': {}, 'resident': False, 'lines': [
-            {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '11:00',
+            {'resourceId': 'eq1', 'date': S(), 'slotStart': '09:00', 'slotEnd': '11:00',
              'qty': 1, 'hours': 2, 'unitPrice': 1000, 'linePrice': 2000, 'isOperator': False}]}
 
     def test_registration_is_unconfirmed_and_not_resident(self):
@@ -367,7 +384,7 @@ class CabinetApiTests(TestCase):
         a = self._auth(self.register(email='a@a.ru'))
         b = self._auth(self.register(email='b@b.ru'))
         payload = {'contact': {}, 'resident': False, 'lines': [
-            {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '10:00',
+            {'resourceId': 'eq1', 'date': S(), 'slotStart': '09:00', 'slotEnd': '10:00',
              'qty': 1, 'hours': 1, 'unitPrice': 1000, 'linePrice': 1000, 'isOperator': False}]}
         self.c.post('/api/orders/', data=json.dumps(payload), content_type='application/json', **a)
         self.assertEqual(len(self._j(self.c.get('/api/orders/', **a))), 1)
@@ -376,7 +393,7 @@ class CabinetApiTests(TestCase):
     def test_guest_order_not_linked(self):
         payload = {'contact': {'org': 'Гость', 'name': 'Иван', 'email': 'i@i.ru', 'phone': '123'},
                    'resident': False, 'lines': [
-                       {'resourceId': 'eq1', 'date': '2026-07-20', 'slotStart': '09:00', 'slotEnd': '10:00',
+                       {'resourceId': 'eq1', 'date': S(), 'slotStart': '09:00', 'slotEnd': '10:00',
                         'qty': 1, 'hours': 1, 'unitPrice': 1000, 'linePrice': 1000, 'isOperator': False}]}
         r = self.c.post('/api/orders/', data=json.dumps(payload), content_type='application/json')
         self.assertEqual(r.status_code, 201)
@@ -391,7 +408,7 @@ class KpiApiTests(TestCase):
     def setUp(self):
         self.c = Client()
         r = self.c.post('/api/auth/register/',
-                        data=json.dumps({'email': 'k@k.ru', 'password': 'secret1', 'name': 'ООО КПЭ'}),
+                        data=json.dumps({'email': 'k@k.ru', 'password': 'Nauka2026lab', 'name': 'ООО КПЭ'}),
                         content_type='application/json')
         self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
 
@@ -460,7 +477,7 @@ class ConnectivityTests(TestCase):
 
     def _reg(self, email='c@c.ru'):
         r = self.c.post('/api/auth/register/',
-                        data=json.dumps({'email': email, 'password': 'secret1', 'name': 'ООО Связь'}),
+                        data=json.dumps({'email': email, 'password': 'Nauka2026lab', 'name': 'ООО Связь'}),
                         content_type='application/json')
         return {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
 
@@ -471,7 +488,7 @@ class ConnectivityTests(TestCase):
         co.save()
         # фронт оформляет заявку
         payload = {'contact': {}, 'resident': False, 'lines': [
-            {'resourceId': 'eqc', 'date': '2026-08-01', 'slotStart': '09:00', 'slotEnd': '11:00',
+            {'resourceId': 'eqc', 'date': S(12), 'slotStart': '09:00', 'slotEnd': '11:00',
              'qty': 1, 'hours': 2, 'unitPrice': 1000, 'linePrice': 2000, 'isOperator': False}]}
         num = json.loads(self.c.post('/api/orders/', data=json.dumps(payload),
                                      content_type='application/json', **auth).content)['id']
@@ -485,7 +502,7 @@ class ConnectivityTests(TestCase):
         self.assertEqual(BusySlot.objects.filter(note=f'Заявка {num}').count(), 1)
         # фронтовый эндпоинт занятости видит слот
         busy = json.loads(self.c.get('/api/resources/eqc/busy/').content)
-        self.assertTrue(any(b['date'] == '2026-08-01' for b in busy))
+        self.assertTrue(any(b['date'] == S(12) for b in busy))
         # компания видит подтверждённую заявку в своём ЛК
         mine = json.loads(self.c.get('/api/orders/', **auth).content)
         self.assertEqual(mine[0]['status'], 'confirmed')
@@ -551,7 +568,7 @@ class ValidationTests(Base):
         line = BookingLine.objects.create(order=o, resource=self.eq, date=self.d,
                                           slot_start=time(9), slot_end=time(12), hours=3)
         r = self.order_change_post(o, 'confirmed', [
-            {'id': line.pk, 'resource': 'eq1', 'date': '2026-07-20',
+            {'id': line.pk, 'resource': 'eq1', 'date': S(),
              'start': '09:00:00', 'end': '12:00:00', 'hours': 3}], resident=True)
         self.assertEqual(r.status_code, 302)
         o.refresh_from_db()
@@ -572,8 +589,8 @@ class OverlapFormTests(Base):
         l2 = BookingLine.objects.create(order=o, resource=self.eq, date=self.d,
                                         slot_start=time(13), slot_end=time(15), hours=2)
         r = self.order_change_post(o, 'new', [
-            {'id': l1.pk, 'resource': 'eq1', 'date': '2026-07-20', 'start': '09:00:00', 'end': '11:00:00', 'hours': 2},
-            {'id': l2.pk, 'resource': 'eq1', 'date': '2026-07-20', 'start': '10:00:00', 'end': '12:00:00', 'hours': 2},
+            {'id': l1.pk, 'resource': 'eq1', 'date': S(), 'start': '09:00:00', 'end': '11:00:00', 'hours': 2},
+            {'id': l2.pk, 'resource': 'eq1', 'date': S(), 'start': '10:00:00', 'end': '12:00:00', 'hours': 2},
         ])
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'пересек')
@@ -582,7 +599,7 @@ class OverlapFormTests(Base):
         self._order_line('confirmed', time(9), time(11))          # чужая подтверждённая бронь 9–11
         b, lb = self._order_line('new', time(9), time(10))
         r = self.order_change_post(b, 'confirmed', [
-            {'id': lb.pk, 'resource': 'eq1', 'date': '2026-07-20', 'start': '09:00:00', 'end': '10:00:00', 'hours': 1}])
+            {'id': lb.pk, 'resource': 'eq1', 'date': S(), 'start': '09:00:00', 'end': '10:00:00', 'hours': 1}])
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'уже занят')
 
@@ -590,7 +607,7 @@ class OverlapFormTests(Base):
         self._order_line('confirmed', time(9), time(11))
         b, lb = self._order_line('new', time(13), time(14))
         r = self.order_change_post(b, 'confirmed', [
-            {'id': lb.pk, 'resource': 'eq1', 'date': '2026-07-20', 'start': '13:00:00', 'end': '14:00:00', 'hours': 1}])
+            {'id': lb.pk, 'resource': 'eq1', 'date': S(), 'start': '13:00:00', 'end': '14:00:00', 'hours': 1}])
         self.assertEqual(r.status_code, 302)
 
     def test_new_request_over_confirmed_allowed(self):
@@ -598,7 +615,7 @@ class OverlapFormTests(Base):
         self._order_line('confirmed', time(9), time(11))
         b, lb = self._order_line('new', time(9), time(10))
         r = self.order_change_post(b, 'new', [
-            {'id': lb.pk, 'resource': 'eq1', 'date': '2026-07-20', 'start': '09:00:00', 'end': '10:00:00', 'hours': 1}])
+            {'id': lb.pk, 'resource': 'eq1', 'date': S(), 'start': '09:00:00', 'end': '10:00:00', 'hours': 1}])
         self.assertEqual(r.status_code, 302)
 
 
@@ -608,7 +625,7 @@ class PlannerGuardTests(Base):
                             'date': (d or self.d).isoformat(), 'start': start, 'end': end})
 
     def test_move_cross_day_into_conflict_blocked(self):
-        day_b = date(2026, 7, 21)
+        day_b = D(1)
         a = self._create(d=self.d)
         self._create(d=day_b)                                  # занятость на дне-приёмнике
         res = self.api_ok({'action': 'move', 'id': a['id'], 'start': '09:00', 'end': '11:00',
@@ -619,19 +636,19 @@ class PlannerGuardTests(Base):
     def test_move_cross_day_free_ok(self):
         a = self._create(d=self.d)
         res = self.api_ok({'action': 'move', 'id': a['id'], 'start': '09:00', 'end': '11:00',
-                           'date': date(2026, 7, 25).isoformat()})
+                           'date': S(5)})
         self.assertTrue(res['ok'])
-        self.assertEqual(BusySlot.objects.get(pk=a['id']).date, date(2026, 7, 25))
+        self.assertEqual(BusySlot.objects.get(pk=a['id']).date, D(5))
 
     def test_create_in_past_blocked(self):
-        res = self._create(d=date(2020, 1, 1))
+        res = self._create(d=D(-100))
         self.assertFalse(res['ok'])
         self.assertIn('прошл', res['error'])
 
     def test_move_into_past_blocked(self):
         a = self._create(d=self.d)
         res = self.api_ok({'action': 'move', 'id': a['id'], 'start': '09:00', 'end': '11:00',
-                           'date': date(2020, 1, 1).isoformat()})
+                           'date': S(-100)})
         self.assertFalse(res['ok'])
         self.assertIn('прошл', res['error'])
 
