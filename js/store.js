@@ -27,35 +27,66 @@
     if(aS==null||bS==null) return true;
     return toMin(aS) < toMin(bE) && toMin(bS) < toMin(aE);
   }
+  // абсолютная минута = индекс дня * 1440 + время суток (для интервалов, переходящих через сутки)
+  function dayIndex(dateISO){ return Math.round(new Date(dateISO+'T12:00:00').getTime()/86400000); }
+  function absMin(dateISO, hhmm, fallbackMin){
+    var m = hhmm!=null ? toMin(hhmm) : fallbackMin;
+    return dayIndex(dateISO)*1440 + m;
+  }
+  // datetime-интервал строки/слота как [начало, конец] в абсолютных минутах
+  function slotAbs(dateStart, timeStart, dateEnd, timeEnd){
+    if(timeStart==null){ // весь день (сменная/дневная бронь без времени)
+      return [ dayIndex(dateStart)*1440, dayIndex(dateEnd||dateStart)*1440 + 1440 ];
+    }
+    return [ absMin(dateStart, timeStart, 0), absMin(dateEnd||dateStart, timeEnd, 1440) ];
+  }
 
-  /* ---- проверка конфликта: занятость + уже добавленное ---- */
+  /* ---- проверка конфликта по времени (только расписание, не корзина) ---- */
+  // свою корзину не блокируем — можно бронировать несколько пересекающихся позиций.
   Cart.conflict = function(resId, date, slotStart, slotEnd){
     var clash=null;
     P.getBusy(resId).forEach(function(b){
       if(b.date===date && overlap(slotStart,slotEnd,b.slotStart,b.slotEnd)) clash='занято в расписании';
     });
-    read().forEach(function(l){
-      if(l.resourceId===resId && l.date===date && overlap(slotStart,slotEnd,l.slotStart,l.slotEnd))
-        clash='уже в вашей корзине';
+    return clash;
+  };
+
+  /* ---- проверка конфликта диапазона дат (только расписание, не корзина) ---- */
+  // занятые дни в календаре и так недоступны для выбора; свою корзину не блокируем —
+  // можно бронировать несколько пересекающихся позиций.
+  Cart.conflictRange = function(resId, startDate, endDate){
+    if(!startDate) return null;
+    var busy=P.getBusy(resId), clash=null;
+    P.dates.range(startDate, endDate).forEach(function(d){
+      if(busy.some(function(b){ return b.date===d; })) clash='занято в расписании ('+P.dates.human(d)+')';
     });
     return clash;
+  };
+
+  /* ---- дни → тарифные единицы (смена/сутки = 1/день, час = 8/день) ---- */
+  var UNIT_PER_DAY = { 'час':8, 'смена':1, 'сутки':1, 'образец':1, 'партия':1 };
+  Cart.rangeUnits = function(res, o){
+    var days = o.days || P.dates.days(o.startDate, o.endDate);
+    return Math.max(days,1) * (UNIT_PER_DAY[res.priceUnit] || 1);
   };
 
   /* ---- расчёт цены строки ---- */
   function priceLine(res, opts){
     var v=res.priceValue;
-    if(res.bookMode==='shift') return { line:v*(opts.qty||1), unit:v };
+    if(res.bookMode==='range') return { line:v*Cart.rangeUnits(res,opts), unit:v };
+    if(res.bookMode==='shift') return { line:v*(opts.shifts||1), unit:v };
     if(res.bookMode==='day')   return { line:v*(opts.qty||1), unit:v };
-    if(res.bookMode==='hour')  return { line:v*(opts.hours||res.minUnits||1), unit:v };
+    if(res.bookMode==='hour')  return { line:v*(opts.hours||res.minUnits||1)*(opts.days||1), unit:v };
     if(res.bookMode==='sample')return { line:v*(opts.qty||1), unit:v };
     return { line:v, unit:v };
   }
 
   // сколько часов работы оператора нужно на родительскую строку
   function operatorHours(parentRes, opts){
-    if(parentRes.bookMode==='hour')  return opts.hours||parentRes.minUnits||2;
+    if(parentRes.bookMode==='hour')  return (opts.hours||parentRes.minUnits||2)*(opts.days||1);
     if(parentRes.bookMode==='day')   return 8*(opts.qty||1);
-    if(parentRes.bookMode==='shift') return 8;
+    if(parentRes.bookMode==='range') return 8*(opts.days||P.dates.days(opts.startDate,opts.endDate)||1);
+    if(parentRes.bookMode==='shift') return 8*(opts.shifts||1);
     return 8;
   }
 
@@ -65,18 +96,38 @@
     opts=opts||{};
     var res=P.getById(resId); if(!res) return {ok:false,msg:'Ресурс не найден'};
 
-    // конфликт по времени
-    var c=Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
-    if(c) return {ok:false,msg:'Этот слот '+c+'. Выберите другое время.'};
+    // конфликт по расписанию (свою корзину не блокируем)
+    var byDays = res.bookMode==='range' || res.bookMode==='shift';
+    var c=null;
+    if(byDays){
+      c=Cart.conflictRange(resId, opts.startDate, opts.endDate);
+    } else if(res.bookMode==='hour'){
+      // почасово, возможно на несколько дней — проверяем слот в каждый день
+      P.dates.range(opts.startDate||opts.date, opts.endDate||opts.date).forEach(function(d){
+        if(!c){ var x=Cart.conflict(resId, d, opts.slotStart||null, opts.slotEnd||null); if(x) c=x; }
+      });
+    } else {
+      c=Cart.conflict(resId, opts.date, opts.slotStart||null, opts.slotEnd||null);
+    }
+    if(c){
+      return byDays
+        ? {ok:false,msg:'Часть дат '+c+'. Выберите другие даты.'}
+        : {ok:false,msg:'Этот слот '+c+'. Выберите другое время.'};
+    }
 
     var lines=read();
+    var isRange=res.bookMode==='range', isShift=res.bookMode==='shift';
     var pr=priceLine(res,opts);
     var parentId=uid();
     lines.push({
       lineId:parentId, resourceId:res.id, type:res.type, bookMode:res.bookMode,
       title:res.title, lab:res.lab, img:res.img, unit:res.priceUnit,
       date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
-      qty:opts.qty||1, hours:opts.hours||null,
+      startDate:opts.startDate||null, endDate:opts.endDate||null,
+      shiftType:opts.shiftType||null, shifts:opts.shifts||null,
+      days: isRange ? P.dates.days(opts.startDate, opts.endDate) : (opts.days||null),
+      units: isRange ? Cart.rangeUnits(res,opts) : null,
+      qty:opts.qty||1, hours: (isRange||isShift) ? null : (opts.hours||null),
       unitPrice:pr.unit, linePrice:pr.line,
       linkedTo:null, isOperator:false
     });
@@ -89,7 +140,10 @@
         lines.push({
           lineId:uid(), resourceId:op.id, type:'specialist', bookMode:'hour',
           title:op.title, lab:op.lab, img:op.img, unit:'час',
-          date:opts.date||null, slotStart:opts.slotStart||null, slotEnd:opts.slotEnd||null,
+          date:opts.date||null,
+          // оператор показывается общей длительностью (а не слотом)
+          slotStart:null, slotEnd:null,
+          startDate:opts.startDate||null, endDate:opts.endDate||null,
           qty:1, hours:h, unitPrice:op.priceValue, linePrice:op.priceValue*h,
           linkedTo:parentId, isOperator:true
         });

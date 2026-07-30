@@ -12,6 +12,18 @@
   function el(id){ return document.getElementById(id); }
   function qsAll(s,root){ return Array.prototype.slice.call((root||document).querySelectorAll(s)); }
   function unitLabel(r){ return '/ '+r.priceUnit; }
+  // склонение единиц по числу: 1 смена / 2 смены / 5 смен
+  var UNIT_FORMS = {
+    'смена':  ['смена','смены','смен'],
+    'час':    ['час','часа','часов'],
+    'сутки':  ['сутки','суток','суток'],
+    'день':   ['день','дня','дней'],
+    'образец':['образец','образца','образцов'],
+    'партия': ['партия','партии','партий']
+  };
+  function plural(n, f){ n=Math.abs(n)%100; var d=n%10;
+    if(n>10 && n<20) return f[2]; if(d>1 && d<5) return f[1]; if(d===1) return f[0]; return f[2]; }
+  function unitWord(n, unit){ var f=UNIT_FORMS[unit]; return f ? plural(n,f) : (unit||''); }
 
   var ICON = {
     building:'<path d="M4 21V5l8-3 8 3v16"/><path d="M4 21h16M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h.01M15 17h.01"/>',
@@ -120,10 +132,10 @@
           '<rect x="17" y="36" width="8" height="21"/><rect x="39" y="36" width="8" height="21"/>'+
           '<rect x="26" y="21" width="12" height="36"/><rect x="29.5" y="13" width="5" height="9"/>'+
           '<polygon points="32,3 29.5,13 34.5,13"/><circle cx="32" cy="4" r="1.7"/></g></svg>'+
-          '<span>МГУ им. М.В. Ломоносова · ИНТЦ «Воробьёвы&nbsp;горы»</span></div>'+
+          '<span>МГУ имени М.В. Ломоносова · ИНТЦ МГУ «Воробьёвы&nbsp;горы»</span></div>'+
         '<div class="eyebrow">Платформа лабораторной инфраструктуры</div>'+
         '<h1>Найдите и забронируйте <em>научную инфраструктуру</em> МГУ</h1>'+
-        '<p class="lead">Приборы, чистые комнаты, специалисты и аналитические услуги ИНТЦ «Воробьёвы горы» — в аренду по заявке.</p>'+
+        '<p class="lead">Приборы, чистые комнаты, специалисты и аналитические услуги ИНТЦ МГУ «Воробьёвы горы» — в аренду по заявке.</p>'+
         '<form class="searchbar" id="hsearch" onsubmit="return false">'+
           '<select id="hsel" aria-label="Раздел">'+
             '<option value="equipment">Оборудование</option>'+
@@ -168,7 +180,7 @@
       '<div>'+
         '<div class="eyebrow">Где мы находимся</div>'+
         '<h2 class="h-lg" style="margin-bottom:16px">Кластер «Ломоносов»</h2>'+
-        '<p class="prose"><p>Инфраструктура ПУЛЬСАР расположена в ИНТЦ МГУ «Воробьёвы горы» — научно-технологической долине МГУ им. М.В. Ломоносова. Кластер «Ломоносов» объединяет лаборатории, чистые комнаты и опытные производства ведущего университета страны.</p></p>'+
+        '<p class="prose"><p>Инфраструктура ПУЛЬСАР расположена на территории ИНТЦ МГУ «Воробьёвы горы» в кластере «Ломоносов» — научно-технологической долине МГУ имени М.В. Ломоносова.</p><p>ПУЛЬСАР имеет доступ к лабораториям, чистым комнатам и опытным производствам ведущего университета страны.</p></p>'+
         '<a class="btn btn-primary" href="#/catalog" style="margin-top:6px">Открыть каталог</a>'+
       '</div>'+
       '<div class="figure">'+img({img:'hero',title:'Кластер «Ломоносов»'},'','Кластер «Ломоносов» · ИНТЦ МГУ «Воробьёвы горы»')+
@@ -177,12 +189,12 @@
 
     /* ---- КАК РАБОТАЕМ (компактно) ---- */
     '<section class="section section-invert"><div class="wrap">'+
-      '<div class="eyebrow">Как работаем</div><h2 class="h-lg" style="margin-bottom:34px">Четыре шага до доступа</h2>'+
+      '<div class="eyebrow">Как работаем</div><h2 class="h-lg" style="margin-bottom:34px">Четыре шага для доступа к инфраструктуре</h2>'+
       '<div class="steps">'+[
         ['Найдите ресурс','Поиск по каталогу приборов, помещений и услуг'],
         ['Соберите заявку','Выберите дату и слот — оператор добавится автоматически'],
         ['Подтверждение','Оператор согласует бронирование и договор'],
-        ['Работа на объекте','Инструктаж, доступ и поддержка дежурного инженера']
+        ['Работа на объекте','Инструктаж, доступ и поддержка дежурного специалиста']
       ].map(function(s){ return '<div class="step"><h4>'+s[0]+'</h4><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
     '</div></section>'+
 
@@ -284,7 +296,12 @@
   function viewResource(id){
     var r=P.getById(id);
     if(!r) return render('<section class="section"><div class="wrap empty"><h3>Ресурс не найден</h3><a class="btn btn-primary" href="#/catalog">В каталог</a></div></section>');
-    book={ res:r, date:P.dates.plusISO(1), start:null, hours:r.minUnits||2, qty:1, shift:'day', err:'' };
+    // по умолчанию — один день / одна смена
+    var d1=P.dates.plusISO(1);
+    book={ res:r, date:d1, start:null, hours:r.minUnits||2, qty:1, shift:'day',
+           startDate:d1, endDate:d1, rangePick:'start',
+           shiftType:'day',
+           cal:new Date(parseInt(d1.slice(0,4),10), parseInt(d1.slice(5,7),10)-1, 1), err:'' };
     var bundled=P.cart.bundledFor(r);
     render(''+
     '<section class="detail"><div class="wrap">'+
@@ -315,6 +332,76 @@
   }
   function computeEnd(start,hours){ var h=parseInt(start,10)+hours; return (h<10?'0':'')+h+':00'; }
 
+  /* ---- календарь дат для брони по сменам/суткам ---- */
+  function pad2(n){ return (n<10?'0':'')+n; }
+  // статус дня: past | busy (день занят, выбрать нельзя) | free
+  function dayStatus(resId, iso){
+    if(iso < P.dates.todayISO()) return 'past';
+    var busy=P.getBusy(resId).filter(function(b){ return b.date===iso; });
+    if(!busy.length) return 'free';
+    // почасово день недоступен только если занят целиком; частичную занятость снимают слоты времени
+    if(book.res.bookMode==='hour') return busy.some(function(b){ return b.slotStart==null; }) ? 'busy' : 'free';
+    return 'busy'; // смены/сутки — любой занятый день недоступен
+  }
+  var CAL_WD=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  var CAL_MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  function rangeCalendarHtml(){
+    var r=book.res, cal=book.cal, y=cal.getFullYear(), m=cal.getMonth();
+    var startWd=(new Date(y,m,1).getDay()+6)%7, dim=new Date(y,m+1,0).getDate();
+    var cells='';
+    for(var i=0;i<startWd;i++) cells+='<span class="cal-cell empty"></span>';
+    for(var d=1;d<=dim;d++){
+      var iso=y+'-'+pad2(m+1)+'-'+pad2(d);
+      var st=dayStatus(r.id,iso), cls='cal-cell '+st;
+      if(book.startDate&&book.endDate&&iso>book.startDate&&iso<book.endDate) cls+=' inrange';
+      if(iso===book.startDate) cls+=' start';
+      if(iso===book.endDate) cls+=' end';
+      var dis=(st==='past'||st==='busy');
+      cells+='<button type="button" class="'+cls+'"'+(dis?' disabled':'')+' data-cal="'+iso+'">'+d+'</button>';
+    }
+    return '<div class="cal">'+
+      '<div class="cal-head"><span class="cal-title">'+CAL_MON[m]+' '+y+'</span>'+
+        '<span class="cal-nav"><button type="button" id="calPrev" aria-label="Предыдущий месяц">‹</button>'+
+        '<button type="button" id="calNext" aria-label="Следующий месяц">›</button></span></div>'+
+      '<div class="cal-wd">'+CAL_WD.map(function(w){return '<span>'+w+'</span>';}).join('')+'</div>'+
+      '<div class="cal-grid" id="calGrid">'+cells+'</div>'+
+    '</div>';
+  }
+  // выбор диапазона дат; занятые дни нельзя включить в интервал
+  function pickCalDay(iso){
+    if(book.rangePick==='start' || iso<book.startDate){
+      book.startDate=iso; book.endDate=iso; book.rangePick='end';
+    } else {
+      var spanBusy=P.dates.range(book.startDate, iso).some(function(d){ return dayStatus(book.res.id,d)==='busy'; });
+      if(spanBusy){ book.startDate=iso; book.endDate=iso; book.rangePick='end'; }
+      else { book.endDate=iso; book.rangePick='start'; }
+    }
+    renderBooking();
+  }
+  // короткая подпись выбранного периода (сутки — для оборудования)
+  function rangeSummaryHtml(){
+    var s=book.startDate, e=book.endDate, days=P.dates.days(s,e), r=book.res;
+    var span = s===e ? P.dates.human(s) : P.dates.human(s)+' – '+P.dates.human(e);
+    return span+' · <strong>'+days+' '+unitWord(days, r.priceUnit==='сутки'?'сутки':'день')+'</strong>';
+  }
+
+  /* ---- смены (лаборатории): тип смены на весь период ---- */
+  // day/eve = 1 смена в день, full (круглосуточно) = 2 смены в день
+  var SHIFT_TYPES=[{k:'day',label:'Дневная',per:1},{k:'eve',label:'Ночная',per:1},{k:'full',label:'Круглосуточно',per:2}];
+  var SHIFT_DESC={day:'дневная смена (09:00–17:00)', eve:'ночная смена (18:00–02:00)', full:'круглосуточно'};
+  function shiftPerDay(){ var t=book.shiftType; return t==='full'?2:1; }
+  function shiftCount(){ return P.dates.days(book.startDate,book.endDate)*shiftPerDay(); }
+  function shiftTypeSelector(){
+    return '<div class="seg" id="bshiftType">'+SHIFT_TYPES.map(function(t){
+      return '<button type="button" class="seg-b'+(book.shiftType===t.k?' on':'')+'" data-s="'+t.k+'">'+t.label+'</button>';
+    }).join('')+'</div>';
+  }
+  function shiftSummaryHtml(){
+    var n=shiftCount(), s=book.startDate, e=book.endDate;
+    var span = s===e ? P.dates.human(s) : P.dates.human(s)+' – '+P.dates.human(e);
+    return span+' · '+SHIFT_DESC[book.shiftType]+' · <strong>'+n+' '+unitWord(n,'смена')+'</strong>';
+  }
+
   function renderBooking(){
     var r=book.res, b=el('booking'); if(!b) return;
     var priceHead=fmt(r.priceValue)+' <small>'+unitLabel(r)+'</small>';
@@ -324,23 +411,25 @@
       html+='<div class="field"><label>Количество образцов</label>'+
         '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
-    } else {
-      html+='<div class="field"><label>Дата</label><input type="date" id="bdate" min="'+P.dates.todayISO()+'" value="'+book.date+'"></div>';
-      if(r.bookMode==='shift'){
-        html+='<div class="field"><label>Смена</label><select id="bshift"><option value="day">Дневная смена (09:00–17:00)</option><option value="eve">Вечерняя смена (18:00–02:00)</option></select></div>';
-      } else if(r.bookMode==='day'){
-        html+='<div class="field"><label>Количество суток</label><input type="number" id="bqty" min="1" max="14" value="'+book.qty+'"></div>';
-      } else { // hour
-        html+='<div class="field"><label>Время начала</label><div class="slots" id="bslots">'+
+    } else if(r.bookMode==='shift'){
+      html+=rangeCalendarHtml()+
+        '<div class="field" style="margin-top:12px"><label>Смена</label>'+shiftTypeSelector()+'</div>'+
+        '<div class="range-note" id="rnote">'+shiftSummaryHtml()+'</div>';
+    } else if(r.bookMode==='range'){
+      html+=rangeCalendarHtml()+
+        '<div class="range-note" id="rnote">'+rangeSummaryHtml()+'</div>';
+    } else { // hour — почасово, можно на несколько дат
+      html+=rangeCalendarHtml()+
+        '<div class="field" style="margin-top:12px"><label>Время начала (в каждый выбранный день)</label><div class="slots" id="bslots">'+
           timeStarts().map(function(t){
-            var busy=isStartBusy(r.id,book.date,t,book.hours);
+            var busy=isStartBusy(r.id,t,book.hours);
             return '<button class="slot'+(book.start===t?' sel':'')+'" data-t="'+t+'"'+(busy?' disabled':'')+'>'+t+'</button>';
           }).join('')+'</div></div>'+
-          '<div class="field"><label>Длительность</label><select id="bhours">'+
-            [2,3,4,5,6].filter(function(h){return h>=(r.minUnits||1);}).map(function(h){
-              return '<option value="'+h+'"'+(book.hours===h?' selected':'')+'>'+h+' ч</option>'; }).join('')+
-          '</select></div>';
-      }
+        '<div class="field"><label>Длительность</label><select id="bhours">'+
+          [2,3,4,5,6].filter(function(h){return h>=(r.minUnits||1);}).map(function(h){
+            return '<option value="'+h+'"'+(book.hours===h?' selected':'')+'>'+h+' ч</option>'; }).join('')+
+        '</select></div>'+
+        '<div class="range-note" id="rnote">'+hourSummaryHtml()+'</div>';
     }
 
     if(r.requiresOperator){
@@ -357,32 +446,66 @@
     updateEstimate();
   }
 
-  function isStartBusy(id,date,start,hours){
-    return !!P.cart.conflict(id,date,start,computeEnd(start,hours));
+  // слот занят, если конфликтует по расписанию хотя бы в один день выбранного диапазона
+  function isStartBusy(id,start,hours){
+    var end=computeEnd(start,hours);
+    return P.dates.range(book.startDate, book.endDate).some(function(d){ return !!P.cart.conflict(id,d,start,end); });
+  }
+  function hourSummaryHtml(){
+    var s=book.startDate, e=book.endDate, days=P.dates.days(s,e);
+    if(!book.start) return '<span class="rn-err">Выберите время начала.</span>';
+    var span = s===e ? P.dates.human(s) : P.dates.human(s)+' – '+P.dates.human(e);
+    var win = book.start+'–'+computeEnd(book.start,book.hours);
+    var strong = days>1
+      ? days+' '+unitWord(days,'день')+' × '+book.hours+' ч = '+(book.hours*days)+' ч'
+      : book.hours+' '+unitWord(book.hours,'час');
+    return span+', '+win+' · <strong>'+strong+'</strong>';
   }
   function bindBooking(){
     var r=book.res;
     if(el('bdate')) el('bdate').onchange=function(){ book.date=this.value; book.start=null; renderBooking(); };
+    // календарь дат
+    if(el('calPrev')) el('calPrev').onclick=function(){ book.cal=new Date(book.cal.getFullYear(),book.cal.getMonth()-1,1); renderBooking(); };
+    if(el('calNext')) el('calNext').onclick=function(){ book.cal=new Date(book.cal.getFullYear(),book.cal.getMonth()+1,1); renderBooking(); };
+    qsAll('#calGrid .cal-cell').forEach(function(c){
+      if(c.disabled || !c.getAttribute('data-cal')) return;
+      c.onclick=function(){ pickCalDay(c.getAttribute('data-cal')); };
+    });
+    // выбор типа смены (лаборатории)
+    qsAll('#bshiftType .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftType=bt.getAttribute('data-s'); renderBooking(); }; });
     if(el('bshift')) el('bshift').onchange=function(){ book.shift=this.value; };
     if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
     qsAll('#bslots .slot').forEach(function(s){ if(s.disabled) return;
-      s.onclick=function(){ book.start=s.getAttribute('data-t'); qsAll('#bslots .slot').forEach(function(x){x.classList.remove('sel');}); s.classList.add('sel'); updateEstimate(); };
+      s.onclick=function(){ book.start=s.getAttribute('data-t'); qsAll('#bslots .slot').forEach(function(x){x.classList.remove('sel');}); s.classList.add('sel');
+        var n=el('rnote'); if(n) n.innerHTML=hourSummaryHtml(); updateEstimate(); };
     });
     el('badd').onclick=addToCart;
   }
   function currentOpts(){
     var r=book.res, o={};
     if(r.type==='service'){ o.qty=book.qty; return o; }
-    o.date=book.date;
-    if(r.bookMode==='shift'){ o.qty=1; o.slotStart=book.shift==='day'?'09:00':'18:00'; o.slotEnd=book.shift==='day'?'17:00':'26:00'; }
-    else if(r.bookMode==='day'){ o.qty=book.qty; }
-    else { o.hours=book.hours; if(book.start){ o.slotStart=book.start; o.slotEnd=computeEnd(book.start,book.hours); } }
+    if(r.bookMode==='shift'){
+      o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
+      o.shiftType=book.shiftType; o.days=P.dates.days(book.startDate,book.endDate); o.shifts=shiftCount();
+      return o;
+    }
+    if(r.bookMode==='range'){
+      o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
+      o.days=P.dates.days(book.startDate,book.endDate);
+      return o;
+    }
+    // hour — почасово, диапазон дат + окно времени в каждый день
+    o.startDate=book.startDate; o.endDate=book.endDate; o.date=book.startDate;
+    o.days=P.dates.days(book.startDate,book.endDate); o.hours=book.hours;
+    if(book.start){ o.slotStart=book.start; o.slotEnd=computeEnd(book.start,book.hours); }
     return o;
   }
   function estimatePrice(){
     var r=book.res, o=currentOpts();
-    if(r.bookMode==='hour') return r.priceValue*(o.hours||r.minUnits||1);
+    if(r.bookMode==='shift') return r.priceValue*(o.shifts||1);
+    if(r.bookMode==='range') return r.priceValue*P.cart.rangeUnits(r,o);
+    if(r.bookMode==='hour') return r.priceValue*(o.hours||r.minUnits||1)*(o.days||1);
     if(r.bookMode==='sample'||r.bookMode==='day') return r.priceValue*(o.qty||1);
     return r.priceValue*(o.qty||1);
   }
@@ -391,7 +514,8 @@
     var base=estimatePrice(), opLine='';
     if(r.requiresOperator){
       var op=P.getById(r.requiresOperator);
-      var h = r.bookMode==='hour'?book.hours : r.bookMode==='day'?8*book.qty : 8;
+      var days1=P.dates.days(book.startDate,book.endDate);
+      var h = r.bookMode==='hour'?book.hours*days1 : r.bookMode==='day'?8*book.qty : r.bookMode==='range'?8*days1 : r.bookMode==='shift'?8*shiftCount() : 8;
       if(op){ opLine='<div class="est-line"><span>Оператор ('+h+' ч)</span><span>'+fmt(op.priceValue*h)+'</span></div>'; base+=op.priceValue*h; }
     }
     box.innerHTML='<div class="est-line"><span>'+esc(P.typeMeta[r.type].single)+'</span><span>'+fmt(estimatePrice())+'</span></div>'+
@@ -404,18 +528,37 @@
     if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
     msg.innerHTML='<div class="form-msg ok">Добавлено в бронирование'+(r.requiresOperator?' вместе с оператором':'')+'.</div>';
     toast('Добавлено в бронирование');
-    if(r.bookMode==='hour') renderBooking(); // обновить занятые слоты
+    if(r.bookMode==='hour'||r.bookMode==='range') renderBooking(); // обновить занятость
   }
 
   /* ==========================================================
      КОРЗИНА / БРОНИРОВАНИЕ
      ========================================================== */
   function slotText(l){
-    if(l.bookMode==='sample') return l.qty+' образец(ов)';
+    if(l.bookMode==='sample') return l.qty+' '+unitWord(l.qty,'образец');
+    if(l.bookMode==='shift'){
+      var ss=l.startDate||l.date, se=l.endDate||ss, n=l.shifts||1;
+      var SD={day:'дневная',eve:'ночная',full:'круглосуточно'};
+      var sp = ss===se ? P.dates.human(ss) : P.dates.human(ss)+' – '+P.dates.human(se);
+      return sp+' · '+(SD[l.shiftType]||'')+' · '+n+' '+unitWord(n,'смена');
+    }
+    if(l.bookMode==='range'){
+      var sd=l.startDate||l.date, ed=l.endDate||sd, days=l.days||P.dates.days(sd,ed);
+      var span = sd===ed ? P.dates.human(sd) : P.dates.human(sd)+' – '+P.dates.human(ed);
+      return span+' · '+days+' '+unitWord(days, l.unit==='сутки'?'сутки':'день');
+    }
     var d=P.dates.human(l.date);
-    if(l.bookMode==='shift') return d+' · '+(l.slotStart==='09:00'?'дневная смена':'вечерняя смена');
     if(l.bookMode==='day') return d+' · '+l.qty+' сут.';
-    return d+' · '+(l.slotStart||'')+'–'+(l.slotEnd||'')+' ('+(l.hours||'')+' ч)';
+    // час без конкретного времени (напр. оператор при суточной/сменной брони)
+    if(!l.slotStart){
+      var span=(l.startDate&&l.endDate&&l.startDate!==l.endDate)
+        ? P.dates.human(l.startDate)+' — '+P.dates.human(l.endDate) : d;
+      return span+' · '+(l.hours||'')+' ч';
+    }
+    // почасово (возможно на несколько дней)
+    var hs=l.startDate||l.date, he=l.endDate||hs, hd=l.days||1;
+    if(hs!==he) return P.dates.human(hs)+' – '+P.dates.human(he)+', '+l.slotStart+'–'+l.slotEnd+' · '+hd+' '+unitWord(hd,'день');
+    return P.dates.human(hs)+' · '+l.slotStart+'–'+l.slotEnd+' ('+(l.hours||'')+' ч)';
   }
   function viewCart(){
     var lines=P.cart.get();
@@ -621,7 +764,7 @@
     el('e_save').onclick=function(){
       var title=el('e_title').value.trim(); if(!title){ el('e_msg').innerHTML='<div class="form-msg err">Введите наименование.</div>'; return; }
       var type=el('e_type').value;
-      var modeMap={room:'shift',equipment:'hour',specialist:'hour',service:'sample'};
+      var modeMap={room:'range',equipment:'range',specialist:'range',service:'sample'};
       var out={ id:r.id||('x-'+Math.random().toString(36).slice(2,8)), type:type, bookMode:r.id?r.bookMode:modeMap[type],
         title:title, lab:el('e_lab').value.trim()||'ПУЛЬСАР', category:r.category||'analytics',
         priceValue:parseInt(el('e_price').value,10)||0, priceUnit:el('e_unit').value.trim()||'час',
@@ -639,36 +782,35 @@
     return '<section class="page-head"><div class="wrap"><div class="eyebrow">'+eyebrow+'</div><h1 class="h-lg">'+title+'</h1>'+(sub?'<p>'+sub+'</p>':'')+'</div></section>';
   }
   function viewAbout(){
-    render(pageHead('О платформе','Точка сборки науки и бизнеса','Единый оператор доступа к научной инфраструктуре МГУ и ИНТЦ «Воробьёвы горы».')+
+    render(pageHead('О платформе','Точка сборки науки и бизнеса','Единый оператор доступа к научной инфраструктуре МГУ и ИНТЦ МГУ «Воробьёвы горы».')+
     '<section class="section"><div class="wrap"><div class="grid-2">'+
       '<div class="prose">'+
-        '<p><strong>ПУЛЬСАР</strong> создан как механизм коммерциализации уникальной научной инфраструктуры кластера «Ломоносов». Мы соединяем компании глубоких технологий с ресурсами ведущего университета страны — аттестованными лабораториями, оборудованием и научными кадрами МГУ.</p>'+
-        '<p>Резиденты ИНТЦ получают налоговые преференции, ускоренную регистрацию интеллектуальной собственности и льготы на аренду научной инфраструктуры.</p>'+
-        '<p>Наша задача — соединить фундаментальную науку МГУ с индустрией: помочь отобрать перспективные разработки, провести их прикладную валидацию, довести до прототипов и вывести на рынок.</p>'+
+        '<p><strong>ПУЛЬСАР</strong> создан как механизм доступа технологических компаний к уникальной научно-технологической инфраструктуре ИНТЦ МГУ и ведущего научного университета страны. Мы даём бизнесу возможность использовать всю необходимую инфраструктуру, аттестованные лаборатории, оборудование, профильных специалистов и научные кадры МГУ для решения прикладных задач.</p>'+
+        '<p>Наша задача — соединить фундаментальную науку МГУ с реальным сектором экономики. Не только помочь компаниям получить доступ к оборудованию и научному потенциалу университета, но и довести разработки МГУ до прототипов и вывести на рынок через коллаборацию с технологическим бизнесом.</p>'+
         '<div class="tags">'+['Биотехнологии','Фармацевтика','Микроэлектроника','Вакуумные технологии','Молекулярная генетика','Новые материалы','Функциональное питание'].map(function(t){return '<span class="tag">'+t+'</span>';}).join('')+'</div>'+
       '</div>'+
       '<div class="figure">'+img({img:'about',title:'ИНТЦ МГУ'},'','ИНТЦ МГУ')+'<div class="figure-cap">ИНТЦ МГУ «Воробьёвы горы» · кластер «Ломоносов»</div></div>'+
     '</div></div></section>'+
     '<section class="section" style="background:#fff;border-top:1px solid var(--line)"><div class="wrap">'+
-      '<div class="eyebrow">Резидентам ИНТЦ</div><h2 class="h-lg" style="margin-bottom:32px">Что входит в резидентство</h2>'+
+      '<div class="eyebrow">Резидентам ИНТЦ</div><h2 class="h-lg" style="margin-bottom:32px">Что получают резиденты ИНТЦ МГУ «Воробьёвы горы»</h2>'+
       '<div class="cards-3">'+[
-        ['Льготы резидента ИНТЦ','Налоговые преференции, ускоренная регистрация ИС, упрощённый таможенный режим'],
+        ['Юридические и налоговые консультации','Налоговое и юридическое консультирование, регистрация ИС'],
         ['Доступ к науке МГУ','Совместные НИР, научный персонал, оборудование факультетов и ЦКП'],
         ['Скидка 25%','Резиденты получают скидку на бронирование оборудования и специалистов'],
         ['Грантовая поддержка','Сопровождение заявок в ФСИ, РНФ, Сколково — от стратегии до защиты'],
         ['Сеть партнёрств','Связи с промышленными предприятиями и государственными заказчиками'],
-        ['Правовое сопровождение','Договоры по 217-ФЗ, структурирование сделок, NDA, ТЗ на НИР']
+        ['Правовое сопровождение','Сопровождение договоров, согласование всех вопросов с МГУ и ИНТЦ, структурирование сделок, NDA, ТЗ на НИР']
       ].map(function(c,i){ return '<div class="card-flat"><div class="card-num">0'+(i+1)+'</div><h3>'+c[0]+'</h3><p>'+c[1]+'</p></div>'; }).join('')+'</div>'+
     '</div></section>');
   }
   function viewHow(){
-    render(pageHead('Как работаем','Четыре шага до доступа','Прозрачный процесс единого оператора — от заявки до работы на объекте.')+
+    render(pageHead('Как работаем','Четыре шага для доступа к инфраструктуре','Прозрачный процесс единого оператора — от заявки до работы на объекте.')+
     '<section class="section"><div class="wrap">'+
       '<div class="steps">'+[
         ['Оставьте заявку','Соберите ресурсы в каталоге и отправьте бронирование — или опишите задачу, мы подберём ресурс'],
         ['Подпишем договор','Типовой договор аренды или технологического хостинга — подготовим и согласуем'],
         ['Пройдите инструктаж','Вводный инструктаж по объекту, безопасности и регламентам чистых зон'],
-        ['Работайте','Полный доступ к инфраструктуре, поддержка дежурного инженера, отчёты по использованию']
+        ['Работайте','Полный доступ к инфраструктуре, поддержка дежурного специалиста, отчёты по использованию']
       ].map(function(s){ return '<div class="step"><h4>'+s[0]+'</h4><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
       '<div style="margin-top:44px;text-align:center"><a class="btn btn-brass" href="#/catalog">Перейти в каталог</a></div>'+
     '</div></section>'+
@@ -679,12 +821,12 @@
   }
   function viewContacts(){
     var items=[
-      ['pin','Адрес','Москва, Воробьёвское шоссе, 2',''],
+      ['pin','Адрес','Москва, Раменский бульвар, дом 1',''],
       ['mail','Email','info@pulsar-mgu.ru','mailto:info@pulsar-mgu.ru'],
       ['phone','Телефон','+7 (495) 123-45-67','tel:+74951234567'],
       ['clock','Часы работы','Пн–Пт, 9:00–18:00','']
     ];
-    var mapSrc='https://yandex.ru/map-widget/v1/?mode=search&text='+encodeURIComponent('ИНТЦ МГУ Воробьёвы горы')+'&z=15';
+    var mapSrc='https://yandex.ru/map-widget/v1/?mode=search&text='+encodeURIComponent('Москва, Раменский бульвар, 1')+'&z=16';
     render(pageHead('Контакты','Свяжитесь с нами','ИНТЦ МГУ «Воробьёвы горы» · кластер «Ломоносов». Бронирование оформляется через каталог — оператор свяжется для подтверждения.')+
     '<section class="section"><div class="wrap"><div class="contact-grid">'+
       '<div>'+

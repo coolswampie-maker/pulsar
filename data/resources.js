@@ -6,8 +6,8 @@
    ЦКП МГУ (ФНМ/нано), Справка «Лаборатории МГУ» (8 совместных лабораторий).
    ------------------------------------------------------------
    Единицы брони (bookMode):
-     shift   — помещения: дата + смена (8 ч)
-     day     — крупное оборудование: дата + кол-во суток
+     shift   — лаборатории: календарь дат + смена заезда/выезда (день/ночь)
+     range   — суточное оборудование: диапазон дат, цена за сутки × дни
      hour    — приборы/специалисты: дата + время + часы (мин. minUnits)
      sample  — услуги «под ключ»: кол-во образцов (без времени)
    requiresOperator — id специалиста, который добавится в корзину автоматически.
@@ -88,7 +88,7 @@ window.PULSAR.baseResources = [
 /* ========================= ОБОРУДОВАНИЕ ========================= */
 /* — испытания / климат / механика (реальный инвентарь Яглион/КромБио) — */
 {
-  id:'eq-vk1000', type:'equipment', bookMode:'day', category:'vacuum',
+  id:'eq-vk1000', type:'equipment', bookMode:'range', category:'vacuum',
   title:'Испытательная камера ВК-1000',
   lab:'Испытательный комплекс', priceValue:24000, priceUnit:'сутки', minUnits:1,
   specs:['Климатическая/испытательная камера большого объёма','Программируемые температурно-влажностные циклы',
@@ -97,7 +97,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-vk1000'
 },
 {
-  id:'eq-kthv1000', type:'equipment', bookMode:'day', category:'vacuum',
+  id:'eq-kthv1000', type:'equipment', bookMode:'range', category:'vacuum',
   title:'Камера тепло-холод-влага КТХВ-1000',
   lab:'Испытательный комплекс', priceValue:12000, priceUnit:'сутки', minUnits:1,
   specs:['Программируемые климатические циклы: T + влажность','Габариты 1450×2200×2150 мм, масса 980 кг','Питание 380 В / 50 Гц / 3Ф, до 16 кВт'],
@@ -105,7 +105,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-kthv1000'
 },
 {
-  id:'eq-bgd856', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-bgd856', type:'equipment', bookMode:'range', category:'materials',
   title:'УФ-камера ускоренного старения BGD 856',
   lab:'Испытательный комплекс', priceValue:9000, priceUnit:'сутки', minUnits:1,
   specs:['Ускоренное УФ-старение материалов и покрытий','Лампы UV-A/UV-B, циклы облучения и конденсации',
@@ -114,7 +114,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-bgd856'
 },
 {
-  id:'eq-fcc1000', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-fcc1000', type:'equipment', bookMode:'range', category:'materials',
   title:'Камера испытаний на выброс формальдегида ВК-FCC1000',
   lab:'Испытательный комплекс', priceValue:11000, priceUnit:'сутки', minUnits:1,
   specs:['Определение эмиссии формальдегида','Объём камеры 1 м³','Габариты 1750×1150×1860 мм, масса 450 кг','Питание 220 В, 50/60 Гц'],
@@ -122,7 +122,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-fcc1000'
 },
 {
-  id:'eq-mim', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-mim', type:'equipment', bookMode:'range', category:'materials',
   title:'Машина испытательная универсальная МИМ.2-100',
   lab:'Механические и теплофизические испытания', priceValue:18000, priceUnit:'сутки', minUnits:1,
   specs:['Растяжение / сжатие / изгиб','Усилие до ~100 кН','Термокамера СТИ от −70 до +300 °C','Габариты 1100×2260×700 мм, масса 750 кг'],
@@ -130,15 +130,15 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-mim'
 },
 {
-  id:'eq-its1', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-its1', type:'equipment', bookMode:'range', category:'materials',
   title:'Измеритель теплопроводности ИТС-1',
   lab:'Механические и теплофизические испытания', priceValue:4500, priceUnit:'сутки', minUnits:1,
   specs:['Теплопроводность методом стационарного потока','Контрольные образцы (пеноплэкс, оргстекло) в комплекте','Транспортный кофр','Поверка 2024 г.'],
   description:'Прибор для измерения теплопроводности строительных и теплоизоляционных материалов методом стационарного теплового потока. Доступ с инструктажем.',
-  requiresOperator:null, bundledWith:[], img:'eq-meter'
+  requiresOperator:null, bundledWith:[], img:'eq-its1'
 },
 {
-  id:'eq-3dprint', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-3dprint', type:'equipment', bookMode:'range', category:'materials',
   title:'3D-принтер Bambu Lab X1E Combo (FDM)',
   lab:'Аддитивное производство', priceValue:3500, priceUnit:'сутки', minUnits:1,
   specs:['Промышленный FDM, закрытая камера (EU-версия)','Мультиматериальная подача AMS','Внешняя сушка филамента','Расходники PLA в наличии'],
@@ -146,7 +146,7 @@ window.PULSAR.baseResources = [
   requiresOperator:null, bundledWith:[], img:'eq-3d'
 },
 {
-  id:'eq-formolder', type:'equipment', bookMode:'day', category:'materials',
+  id:'eq-formolder', type:'equipment', bookMode:'range', category:'materials',
   title:'Термопластавтомат Formolder PRO 200/300',
   lab:'Переработка полимеров', priceValue:8000, priceUnit:'сутки', minUnits:1,
   specs:['Литьё пластика под давлением','Малые серии и образцы','Чиллер ICM-100 в комплекте','Габариты 2300×1150×1200 мм, 560 кг'],
@@ -154,7 +154,7 @@ window.PULSAR.baseResources = [
   requiresOperator:'sp-test', bundledWith:[], img:'eq-formolder'
 },
 {
-  id:'eq-lyo', type:'equipment', bookMode:'day', category:'pharma',
+  id:'eq-lyo', type:'equipment', bookMode:'range', category:'pharma',
   title:'Лиофильная сушка CHRIST Alpha 1-4 LSCbasic',
   lab:'Учебно-производственный фарм. блок', priceValue:6800, priceUnit:'сутки', minUnits:1,
   specs:['Вакуумная сублимационная сушка','Программируемые циклы','Плазма крови / биопрепараты','Контроль давления и температуры полок'],
