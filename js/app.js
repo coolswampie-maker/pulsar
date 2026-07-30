@@ -143,7 +143,7 @@
             '<option value="specialist">Специалисты</option>'+
             '<option value="service">Услуги</option>'+
           '</select>'+
-          '<input id="hq" placeholder="Масс-спектрометр, чистая комната, ICP-MS…">'+
+          '<input id="hq" aria-label="Поиск по каталогу" placeholder="Масс-спектрометр, чистая комната, ICP-MS…">'+
           '<button id="hgo" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Найти</button>'+
         '</form>'+
         '<div class="chips">'+
@@ -195,7 +195,7 @@
         ['Соберите заявку','Выберите дату и слот — оператор добавится автоматически'],
         ['Подтверждение','Оператор согласует бронирование и договор'],
         ['Работа на объекте','Инструктаж, доступ и поддержка дежурного специалиста']
-      ].map(function(s){ return '<div class="step"><h4>'+s[0]+'</h4><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
+      ].map(function(s){ return '<div class="step"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
     '</div></section>'+
 
     /* ---- РЕЗИДЕНТАМ (лёгкая полоса) ---- */
@@ -251,9 +251,9 @@
       '<div class="tabs" id="tabs">'+tabs+'</div>'+
       '<div class="catalog-layout">'+
         '<aside class="filters">'+
-          '<div class="fgroup"><h4>Поиск</h4><input class="search-box" id="fsearch" placeholder="Название, прибор…" value="'+esc(catState.q)+'"></div>'+
-          '<div class="fgroup"><h4>Направление</h4><select id="fcat">'+catOpts+'</select></div>'+
-          '<div class="fgroup"><h4>Сортировка</h4><select id="fsort">'+
+          '<div class="fgroup"><h2><label for="fsearch">Поиск</label></h2><input class="search-box" id="fsearch" placeholder="Название, прибор…" value="'+esc(catState.q)+'"></div>'+
+          '<div class="fgroup"><h2><label for="fcat">Направление</label></h2><select id="fcat">'+catOpts+'</select></div>'+
+          '<div class="fgroup"><h2><label for="fsort">Сортировка</label></h2><select id="fsort">'+
             '<option value="default"'+(catState.sort==='default'?' selected':'')+'>По умолчанию</option>'+
             '<option value="price-asc"'+(catState.sort==='price-asc'?' selected':'')+'>Цена ↑</option>'+
             '<option value="price-desc"'+(catState.sort==='price-desc'?' selected':'')+'>Цена ↓</option>'+
@@ -313,7 +313,7 @@
           '<h1>'+esc(r.title)+'</h1>'+
           (r.cleanClass?'<div style="margin-bottom:14px"><span class="tag">'+esc(r.cleanClass)+'</span></div>':'')+
           '<p class="detail-desc">'+esc(r.description)+'</p>'+
-          '<h3 class="h-md" style="margin-bottom:14px">Характеристики</h3>'+
+          '<h2 class="h-md" style="margin-bottom:14px">Характеристики</h2>'+
           '<table class="spec-table"><tbody>'+
             r.specs.map(function(s){ var parts=s.split(':'); return parts.length>1
               ? '<tr><th>'+esc(parts[0])+'</th><td>'+esc(parts.slice(1).join(':').trim())+'</td></tr>'
@@ -408,24 +408,25 @@
     var html='<div class="price-lead">'+priceHead+'</div><hr>';
 
     if(r.type==='service'){
-      html+='<div class="field"><label>Количество образцов</label>'+
+      html+='<div class="field"><label for="bqty">Количество образцов</label>'+
         '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
     } else if(r.bookMode==='shift'){
       html+=rangeCalendarHtml()+
-        '<div class="field" style="margin-top:12px"><label>Смена</label>'+shiftTypeSelector()+'</div>'+
+        '<div class="field" style="margin-top:12px"><span class="field-cap" id="capShift">Смена</span>'+
+        '<div role="group" aria-labelledby="capShift">'+shiftTypeSelector()+'</div></div>'+
         '<div class="range-note" id="rnote">'+shiftSummaryHtml()+'</div>';
     } else if(r.bookMode==='range'){
       html+=rangeCalendarHtml()+
         '<div class="range-note" id="rnote">'+rangeSummaryHtml()+'</div>';
     } else { // hour — почасово, можно на несколько дат
       html+=rangeCalendarHtml()+
-        '<div class="field" style="margin-top:12px"><label>Время начала (в каждый выбранный день)</label><div class="slots" id="bslots">'+
+        '<div class="field" style="margin-top:12px"><span class="field-cap" id="capSlots">Время начала (в каждый выбранный день)</span><div class="slots" id="bslots" role="group" aria-labelledby="capSlots">'+
           timeStarts().map(function(t){
             var busy=isStartBusy(r.id,t,book.hours);
             return '<button class="slot'+(book.start===t?' sel':'')+'" data-t="'+t+'"'+(busy?' disabled':'')+'>'+t+'</button>';
           }).join('')+'</div></div>'+
-        '<div class="field"><label>Длительность</label><select id="bhours">'+
+        '<div class="field"><label for="bhours">Длительность</label><select id="bhours">'+
           [2,3,4,5,6].filter(function(h){return h>=(r.minUnits||1);}).map(function(h){
             return '<option value="'+h+'"'+(book.hours===h?' selected':'')+'>'+h+' ч</option>'; }).join('')+
         '</select></div>'+
@@ -619,11 +620,11 @@
     box.innerHTML='<div class="checkout-form"><h3>Контактные данные</h3>'+
       '<p class="sub">Гостевая заявка — регистрация не требуется. Мы свяжемся с вами для подтверждения.</p>'+
       '<div class="form-grid">'+
-        '<div class="field"><label>Организация *</label><input id="c_org" placeholder="ООО «Название»"></div>'+
-        '<div class="field"><label>Контактное лицо *</label><input id="c_name" placeholder="Иванов Иван Иванович"></div>'+
-        '<div class="field"><label>Email *</label><input id="c_email" type="email" placeholder="ivan@company.ru"></div>'+
-        '<div class="field"><label>Телефон *</label><input id="c_phone" placeholder="+7 (___) ___-__-__"></div>'+
-        '<div class="field full"><label>Комментарий</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
+        '<div class="field"><label for="c_org">Организация *</label><input id="c_org" placeholder="ООО «Название»"></div>'+
+        '<div class="field"><label for="c_name">Контактное лицо *</label><input id="c_name" placeholder="Иванов Иван Иванович"></div>'+
+        '<div class="field"><label for="c_email">Email *</label><input id="c_email" type="email" placeholder="ivan@company.ru"></div>'+
+        '<div class="field"><label for="c_phone">Телефон *</label><input id="c_phone" placeholder="+7 (___) ___-__-__"></div>'+
+        '<div class="field full"><label for="c_note">Комментарий</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
       '</div>'+
       '<div id="c_msg"></div>'+
       '<button class="btn btn-brass" id="submitorder" style="margin-top:8px">Отправить заявку</button>'+
@@ -749,12 +750,12 @@
     var isNew=!r; r=r||{id:'', type:'equipment', bookMode:'hour', title:'', lab:'', category:'analytics', priceValue:1000, priceUnit:'час', minUnits:2, specs:[], description:'', requiresOperator:null, bundledWith:[], img:'eq-meter'};
     el('editbox').innerHTML='<div class="checkout-form" style="margin-bottom:18px"><h3>'+(isNew?'Новая позиция':'Редактирование')+'</h3>'+
       '<div class="form-grid">'+
-        '<div class="field full"><label>Наименование</label><input id="e_title" value="'+esc(r.title)+'"></div>'+
-        '<div class="field"><label>Подразделение</label><input id="e_lab" value="'+esc(r.lab)+'"></div>'+
-        '<div class="field"><label>Тип</label><select id="e_type">'+['room','equipment','specialist','service'].map(function(t){return '<option value="'+t+'"'+(r.type===t?' selected':'')+'>'+P.typeMeta[t].single+'</option>';}).join('')+'</select></div>'+
-        '<div class="field"><label>Цена, ₽</label><input id="e_price" type="number" value="'+r.priceValue+'"></div>'+
-        '<div class="field"><label>Единица</label><input id="e_unit" value="'+esc(r.priceUnit)+'"></div>'+
-        '<div class="field full"><label>Описание</label><input id="e_desc" value="'+esc(r.description)+'"></div>'+
+        '<div class="field full"><label for="e_title">Наименование</label><input id="e_title" value="'+esc(r.title)+'"></div>'+
+        '<div class="field"><label for="e_lab">Подразделение</label><input id="e_lab" value="'+esc(r.lab)+'"></div>'+
+        '<div class="field"><label for="e_type">Тип</label><select id="e_type">'+['room','equipment','specialist','service'].map(function(t){return '<option value="'+t+'"'+(r.type===t?' selected':'')+'>'+P.typeMeta[t].single+'</option>';}).join('')+'</select></div>'+
+        '<div class="field"><label for="e_price">Цена, ₽</label><input id="e_price" type="number" value="'+r.priceValue+'"></div>'+
+        '<div class="field"><label for="e_unit">Единица</label><input id="e_unit" value="'+esc(r.priceUnit)+'"></div>'+
+        '<div class="field full"><label for="e_desc">Описание</label><input id="e_desc" value="'+esc(r.description)+'"></div>'+
       '</div>'+
       '<div id="e_msg"></div>'+
       '<button class="btn btn-brass" id="e_save" style="margin-top:8px">Сохранить</button> '+
@@ -811,7 +812,7 @@
         ['Подпишем договор','Типовой договор аренды или технологического хостинга — подготовим и согласуем'],
         ['Пройдите инструктаж','Вводный инструктаж по объекту, безопасности и регламентам чистых зон'],
         ['Работайте','Полный доступ к инфраструктуре, поддержка дежурного специалиста, отчёты по использованию']
-      ].map(function(s){ return '<div class="step"><h4>'+s[0]+'</h4><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
+      ].map(function(s){ return '<div class="step"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
       '<div style="margin-top:44px;text-align:center"><a class="btn btn-brass" href="#/catalog">Перейти в каталог</a></div>'+
     '</div></section>'+
     '<section class="section" style="background:var(--navy-deep)"><div class="wrap text-center">'+
@@ -870,8 +871,14 @@
   window.addEventListener('hashchange', route);
 
   // мобильное меню
-  el('navtoggle').onclick=function(){ el('navlinks').classList.toggle('open'); };
-  qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ el('navlinks').classList.remove('open'); }); });
+  // мобильное меню: состояние дублируем в aria-expanded, иначе с экранного
+  // диктора не понять, раскрыт список или нет
+  function setNavOpen(open){
+    el('navlinks').classList.toggle('open', open);
+    el('navtoggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  el('navtoggle').onclick=function(){ setNavOpen(!el('navlinks').classList.contains('open')); };
+  qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ setNavOpen(false); }); });
 
   // старт
   route(); syncCart();
