@@ -6,15 +6,13 @@
    ============================================================ */
 (function(){
   var P = window.PULSAR = window.PULSAR || {};
-  var CATALOG_KEY = 'pulsar_catalog_v1';
   // база REST-API Django. По умолчанию тот же домен (/api). Если бэкенд на другом
   // хосте — задайте window.PULSAR_API_BASE в index.html.
   var API_BASE = (window.PULSAR_API_BASE || '/api').replace(/\/+$/,'');
   P.API_BASE = API_BASE;
   P.apiFetch = function(path, opts){ return fetch(API_BASE+path, opts); };
-  // Версия структуры каталога. Повышаем при изменении baseResources (напр. смена bookMode),
-  // чтобы старый сохранённый в браузере каталог не перекрывал обновление на GitHub Pages.
-  var CATALOG_VER = 2;
+  // подчищаем данные демо-версии, если остались в браузере с прошлых визитов
+  try{ localStorage.removeItem('pulsar_catalog_v1'); localStorage.removeItem('pulsar_orders_v1'); }catch(e){}
 
   /* ---------- даты ---------- */
   function pad(n){ return (n<10?'0':'')+n; }
@@ -42,21 +40,37 @@
     days:function(startISO,endISO){ return this.range(startISO,endISO).length||1; }
   };
 
-  /* ---------- каталог (base + overlay) ---------- */
+  /* ---------- каталог ----------
+     Источник истины — бэкенд: GET /api/resources/ (то, что оператор ведёт
+     в кабинете). data/resources.js остаётся страховкой: если бэкенд не
+     ответил, сайт продолжает работать на встроенном каталоге. */
   function clone(o){ return JSON.parse(JSON.stringify(o)); }
 
-  // читаем сохранённый каталог только если он актуальной версии;
-  // старый формат (голый массив без ver) или иная версия — игнорируем → берём baseResources
-  function readCatalog(){
-    try{
-      var o=JSON.parse(localStorage.getItem(CATALOG_KEY));
-      if(o && o.ver===CATALOG_VER && Array.isArray(o.list)) return o.list;
-    }catch(e){}
-    return null;
+  P._catalog = null;          // каталог, полученный с бэкенда
+  P.catalogLoaded = false;
+  // Приводим ответ API к формату фронта:
+  //  · поле фото в API называется image, во фронте — img;
+  //  · суточный режим в базе называется 'day', во фронте — 'range'
+  //    (иначе бронь суток считалась бы по количеству, а не по диапазону дат).
+  function fromApi(r){
+    var o = clone(r);
+    o.img = r.img || r.image || '';
+    delete o.image;
+    if(o.bookMode==='day') o.bookMode='range';
+    o.specs = r.specs || [];
+    o.bundledWith = r.bundledWith || [];
+    return o;
   }
-  function writeCatalog(list){ localStorage.setItem(CATALOG_KEY, JSON.stringify({ver:CATALOG_VER, list:list})); }
+  P.loadCatalog = function(cb){
+    P.apiFetch('/resources/').then(function(r){ return r.json(); })
+      .then(function(data){
+        if(Array.isArray(data) && data.length) P._catalog = data.map(fromApi);
+      })
+      .catch(function(){ P._catalog = null; })
+      .then(function(){ P.catalogLoaded = true; if(cb) cb(); });
+  };
 
-  P.getResources = function(){ return readCatalog() || clone(P.baseResources); };
+  P.getResources = function(){ return P._catalog ? clone(P._catalog) : clone(P.baseResources); };
   P.getById = function(id){
     var all=P.getResources(); for(var i=0;i<all.length;i++) if(all[i].id===id) return all[i];
     return null;
@@ -70,17 +84,8 @@
   };
   P.unitShort = { 'смена':'смена','сутки':'сут','час':'ч','образец':'образец','партия':'партия' };
 
-  // admin CRUD (пишет полную копию каталога в localStorage, с версией)
-  P.saveResource = function(res){
-    var all=P.getResources(); var i=all.findIndex(function(r){return r.id===res.id;});
-    if(i>=0) all[i]=res; else all.push(res);
-    writeCatalog(all);
-  };
-  P.deleteResource = function(id){
-    var all=P.getResources().filter(function(r){return r.id!==id;});
-    writeCatalog(all);
-  };
-  P.resetCatalog = function(){ localStorage.removeItem(CATALOG_KEY); };
+  // Каталог правится оператором в кабинете (Django /admin) — локального
+  // редактирования во фронте больше нет.
 
   /* ---------- занятость (из бэкенда: подтверждённые оператором брони) ---------- */
   P._busy = {};           // кэш: slug -> [{date, slotStart, slotEnd}]
@@ -106,14 +111,8 @@
     return future.length ? future[0] : null;
   };
 
-  /* ---------- заявки (orders) ---------- */
-  var ORDERS_KEY='pulsar_orders_v1';
-  P.getOrders = function(){
-    try{ return JSON.parse(localStorage.getItem(ORDERS_KEY)||'[]'); }catch(e){ return []; }
-  };
-  P.saveOrders = function(list){ localStorage.setItem(ORDERS_KEY, JSON.stringify(list)); };
-  P.setOrderStatus = function(id,status){
-    var l=P.getOrders(); var o=l.find(function(x){return x.id===id;});
-    if(o){ o.status=status; P.saveOrders(l); }
-  };
+  /* ---------- заявки (orders) ----------
+     Заявки хранятся в базе на бэкенде: создаются через POST /api/orders/
+     (см. store.js → Cart.checkout), а оператор ведёт их в Django /admin.
+     Локального хранилища заявок больше нет. */
 })();

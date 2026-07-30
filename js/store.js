@@ -180,12 +180,38 @@
   // где каждая строка = ровно одна единица (1 смена / 1 сутки / N часов).
   var SHIFT_WIN = { day:{s:'09:00', e:'17:00'}, eve:{s:'18:00', e:'02:00'} };
   function daysOf(l){ return P.dates.range(l.startDate||l.date, l.endDate||l.startDate||l.date); }
-  function expandLine(l){
+  function expandLine(l, parent){
     var base={ resourceId:l.resourceId, unitPrice:l.unitPrice||0, isOperator:!!l.isOperator };
     var out=[];
-    if(l.isOperator){ // оператор — одной строкой, часы = суммарные
-      out.push(Object.assign({date:l.startDate||l.date||null, slotStart:null, slotEnd:null,
-        qty:1, hours:l.hours||null, linePrice:l.linePrice}, base));
+    if(l.isOperator){
+      // Оператор занят ровно тогда же, когда и его прибор: те же дни и то же окно
+      // времени. Одной строкой без слота нельзя — иначе специалист блокируется на
+      // весь день при 2-часовой брони и, наоборот, остаётся «свободен» во 2-й и
+      // последующие дни многодневной брони.
+      var p = parent || l;
+      var opDays = daysOf(p);
+      if(p.bookMode==='sample'){ // услуга под ключ — без даты
+        out.push(Object.assign({date:null, slotStart:null, slotEnd:null,
+          qty:1, hours:l.hours||8, linePrice:(l.unitPrice||0)*(l.hours||8)}, base));
+        return out;
+      }
+      if(p.bookMode==='shift'){  // смена лаборатории = 8 ч работы оператора
+        var opShifts = p.shiftType==='full' ? ['day','eve'] : [p.shiftType||'day'];
+        opDays.forEach(function(d){ opShifts.forEach(function(s){
+          out.push(Object.assign({date:d, slotStart:SHIFT_WIN[s].s, slotEnd:SHIFT_WIN[s].e,
+            qty:1, hours:8, linePrice:(l.unitPrice||0)*8}, base));
+        }); });
+        return out;
+      }
+      // почасовое оборудование — окно прибора; суточное — весь день (8 ч)
+      var hPerDay = p.bookMode==='hour' ? (p.hours||2) : 8;
+      var byHour  = p.bookMode==='hour';
+      opDays.forEach(function(d){
+        out.push(Object.assign({date:d,
+          slotStart: byHour ? (p.slotStart||null) : null,
+          slotEnd:   byHour ? (p.slotEnd||null)   : null,
+          qty:1, hours:hPerDay, linePrice:(l.unitPrice||0)*hPerDay}, base));
+      });
       return out;
     }
     if(l.bookMode==='sample'){
@@ -224,7 +250,8 @@
     var summary={ lines:lines.slice(), contact:contact, subtotal:t.subtotal,
                   discount:t.discount, total:t.total };
     var apiLines=[];
-    lines.forEach(function(l){ apiLines=apiLines.concat(expandLine(l)); });
+    var byId={}; lines.forEach(function(l){ byId[l.lineId]=l; });
+    lines.forEach(function(l){ apiLines=apiLines.concat(expandLine(l, l.linkedTo?byId[l.linkedTo]:null)); });
     var payload={ contact:contact, resident:t.resident, lines:apiLines };
     return P.apiFetch('/orders/', {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)

@@ -668,114 +668,12 @@
   }
 
   /* ==========================================================
-     ДЕМО-КАБИНЕТ ОПЕРАТОРА
+     КАБИНЕТ ОПЕРАТОРА — настоящая CRM на бэкенде (Django /admin).
+     Прежний демо-кабинет на localStorage удалён: заявки теперь живут
+     в базе, а не в браузере.
      ========================================================== */
-  var adminTab='orders';
   function viewAdmin(){
-    render('<section class="admin-head"><div class="wrap">'+
-      '<div class="eyebrow">Демо-кабинет</div>'+
-      '<h1 class="h-lg">Кабинет оператора</h1>'+
-      '<p>Заявки, загрузка ресурсов и управление каталогом. Данные демо хранятся локально в браузере.</p>'+
-    '</div></section>'+
-    '<section class="section-sm"><div class="wrap">'+
-      '<div class="admin-tabs" id="atabs"></div>'+
-      '<div id="adminbody"></div>'+
-    '</div></section>', bindAdmin);
-  }
-  function bindAdmin(){
-    var tabs=[['orders','Заявки'],['load','Загрузка'],['catalog','Каталог']];
-    el('atabs').innerHTML=tabs.map(function(t){ return '<button class="tab '+(adminTab===t[0]?'on':'')+'" data-at="'+t[0]+'">'+t[1]+'</button>'; }).join('');
-    qsAll('#atabs .tab').forEach(function(b){ b.onclick=function(){ adminTab=b.getAttribute('data-at'); bindAdmin(); }; });
-    if(adminTab==='orders') adminOrders();
-    else if(adminTab==='load') adminLoad();
-    else adminCatalog();
-  }
-  function statusBadge(s){ return s==='confirmed'?'<span class="badge ok">Подтверждена</span>':s==='rejected'?'<span class="badge rej">Отклонена</span>':'<span class="badge new">Новая</span>'; }
-  function adminOrders(){
-    var orders=P.getOrders(), body=el('adminbody');
-    if(!orders.length){ body.innerHTML='<div class="empty"><h3>Заявок пока нет</h3><p>Оформите заявку в каталоге — она появится здесь.</p><a class="btn btn-primary" href="#/catalog">В каталог</a></div>'; return; }
-    body.innerHTML=orders.map(function(o){
-      return '<div class="order-card">'+
-        '<div class="order-top">'+
-          '<div><span class="order-id">№ '+esc(o.id)+'</span> &nbsp;'+statusBadge(o.status)+'<div class="cline-meta" style="margin-top:4px">'+esc(o.contact.org)+' · '+esc(o.contact.name)+' · '+esc(o.contact.email)+' · '+esc(o.contact.phone)+'</div></div>'+
-          '<div style="text-align:right"><div class="order-id">'+fmt(o.total)+'</div><div class="cline-meta">'+esc(o.createdHuman||'')+'</div></div>'+
-        '</div>'+
-        '<div class="order-lines">'+o.lines.map(function(l){ return '<div>• '+esc(l.title)+' — <span class="muted">'+slotText(l)+'</span> — '+fmt(l.linePrice)+'</div>'; }).join('')+
-          (o.contact.note?'<div style="margin-top:6px">💬 '+esc(o.contact.note)+'</div>':'')+'</div>'+
-        '<div class="order-actions">'+
-          '<button class="btn btn-primary btn-sm" data-ok="'+o.id+'">Подтвердить</button>'+
-          '<button class="btn btn-outline btn-sm" data-rej="'+o.id+'">Отклонить</button>'+
-          '<button class="btn btn-ghost btn-sm" data-new="'+o.id+'">Вернуть в новые</button>'+
-        '</div>'+
-      '</div>';
-    }).join('');
-    qsAll('[data-ok]').forEach(function(b){ b.onclick=function(){ P.setOrderStatus(b.getAttribute('data-ok'),'confirmed'); toast('Заявка подтверждена'); adminOrders(); }; });
-    qsAll('[data-rej]').forEach(function(b){ b.onclick=function(){ P.setOrderStatus(b.getAttribute('data-rej'),'rejected'); adminOrders(); }; });
-    qsAll('[data-new]').forEach(function(b){ b.onclick=function(){ P.setOrderStatus(b.getAttribute('data-new'),'new'); adminOrders(); }; });
-  }
-  function adminLoad(){
-    var body=el('adminbody');
-    // ближайшие 7 дней
-    var days=[]; for(var i=0;i<7;i++){ days.push(P.dates.plusISO(i)); }
-    var evByDay={}; days.forEach(function(d){ evByDay[d]=[]; });
-    P.getResources().forEach(function(r){
-      P.getBusy(r.id).forEach(function(b){
-        if(evByDay[b.date]!=null) evByDay[b.date].push({t:r.title,s:b.slotStart});
-      });
-    });
-    body.innerHTML='<p class="muted" style="margin-bottom:16px">Занятость ресурсов на ближайшую неделю: демо-расписание и подтверждённые заявки.</p>'+
-      '<div class="load-cal">'+days.map(function(d){
-        var ev=evByDay[d].slice(0,4).map(function(e){ return '<div class="ev">'+(e.s?e.s+' ':'')+esc(e.t.split(' ').slice(0,3).join(' '))+'</div>'; }).join('');
-        var more=evByDay[d].length>4?'<div class="cline-meta" style="font-size:11px">+'+(evByDay[d].length-4)+' ещё</div>':'';
-        return '<div class="load-day"><div class="d">'+P.dates.human(d)+'</div>'+(ev||'<div class="cline-meta" style="font-size:11px">свободно</div>')+more+'</div>';
-      }).join('')+'</div>';
-  }
-  function adminCatalog(){
-    var body=el('adminbody'), all=P.getResources();
-    body.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">'+
-        '<p class="muted">Всего позиций: '+all.length+'. Демо-CRUD: изменения сохраняются локально.</p>'+
-        '<div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" id="addres">+ Добавить позицию</button>'+
-        '<button class="btn btn-ghost btn-sm" id="resetcat">Сбросить каталог</button></div>'+
-      '</div>'+
-      '<div id="editbox"></div>'+
-      '<table class="admin-table"><thead><tr><th>Наименование</th><th>Тип</th><th>Цена</th><th></th></tr></thead><tbody>'+
-      all.map(function(r){ return '<tr><td>'+esc(r.title)+'</td><td>'+P.typeMeta[r.type].single+'</td><td>'+fmt(r.priceValue)+' '+unitLabel(r)+'</td>'+
-        '<td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" data-edit="'+r.id+'">Ред.</button> '+
-        '<button class="cline-remove" data-del="'+r.id+'">Удалить</button></td></tr>'; }).join('')+
-      '</tbody></table>';
-    el('addres').onclick=function(){ editForm(null); };
-    el('resetcat').onclick=function(){ if(confirm('Сбросить каталог к исходному?')){ P.resetCatalog(); toast('Каталог сброшен'); adminCatalog(); } };
-    qsAll('[data-edit]').forEach(function(b){ b.onclick=function(){ editForm(P.getById(b.getAttribute('data-edit'))); }; });
-    qsAll('[data-del]').forEach(function(b){ b.onclick=function(){ if(confirm('Удалить позицию?')){ P.deleteResource(b.getAttribute('data-del')); adminCatalog(); } }; });
-  }
-  function editForm(r){
-    var isNew=!r; r=r||{id:'', type:'equipment', bookMode:'hour', title:'', lab:'', category:'analytics', priceValue:1000, priceUnit:'час', minUnits:2, specs:[], description:'', requiresOperator:null, bundledWith:[], img:'eq-meter'};
-    el('editbox').innerHTML='<div class="checkout-form" style="margin-bottom:18px"><h3>'+(isNew?'Новая позиция':'Редактирование')+'</h3>'+
-      '<div class="form-grid">'+
-        '<div class="field full"><label>Наименование</label><input id="e_title" value="'+esc(r.title)+'"></div>'+
-        '<div class="field"><label>Подразделение</label><input id="e_lab" value="'+esc(r.lab)+'"></div>'+
-        '<div class="field"><label>Тип</label><select id="e_type">'+['room','equipment','specialist','service'].map(function(t){return '<option value="'+t+'"'+(r.type===t?' selected':'')+'>'+P.typeMeta[t].single+'</option>';}).join('')+'</select></div>'+
-        '<div class="field"><label>Цена, ₽</label><input id="e_price" type="number" value="'+r.priceValue+'"></div>'+
-        '<div class="field"><label>Единица</label><input id="e_unit" value="'+esc(r.priceUnit)+'"></div>'+
-        '<div class="field full"><label>Описание</label><input id="e_desc" value="'+esc(r.description)+'"></div>'+
-      '</div>'+
-      '<div id="e_msg"></div>'+
-      '<button class="btn btn-brass" id="e_save" style="margin-top:8px">Сохранить</button> '+
-      '<button class="btn btn-ghost" id="e_cancel" style="margin-top:8px">Отмена</button>'+
-    '</div>';
-    el('e_cancel').onclick=function(){ el('editbox').innerHTML=''; };
-    el('e_save').onclick=function(){
-      var title=el('e_title').value.trim(); if(!title){ el('e_msg').innerHTML='<div class="form-msg err">Введите наименование.</div>'; return; }
-      var type=el('e_type').value;
-      var modeMap={room:'range',equipment:'range',specialist:'range',service:'sample'};
-      var out={ id:r.id||('x-'+Math.random().toString(36).slice(2,8)), type:type, bookMode:r.id?r.bookMode:modeMap[type],
-        title:title, lab:el('e_lab').value.trim()||'ПУЛЬСАР', category:r.category||'analytics',
-        priceValue:parseInt(el('e_price').value,10)||0, priceUnit:el('e_unit').value.trim()||'час',
-        minUnits:r.minUnits||2, specs:r.specs&&r.specs.length?r.specs:['Демонстрационная позиция'],
-        description:el('e_desc').value.trim()||title, requiresOperator:r.requiresOperator||null,
-        bundledWith:r.bundledWith||[], img:r.img||'eq-meter', cleanClass:r.cleanClass };
-      P.saveResource(out); toast('Сохранено'); el('editbox').innerHTML=''; adminCatalog();
-    };
+    location.replace(window.PULSAR_ADMIN_URL || '/admin/');
   }
 
   /* ==========================================================
@@ -879,7 +777,12 @@
   // ссылки «Кабинет оператора» ведут в Django-админку
   qsAll('a[data-admin]').forEach(function(a){ a.setAttribute('href', window.PULSAR_ADMIN_URL || '/admin/'); a.setAttribute('target','_blank'); });
 
-  // старт: сначала подтягиваем занятость из бэкенда, затем рисуем
+  // Старт: подтягиваем из бэкенда каталог и занятость, затем рисуем страницу.
+  // Оба запроса идут параллельно; если бэкенд недоступен, каталог берётся из
+  // data/resources.js, а бронь работает без блокировок занятых слотов.
   syncCart();
-  P.loadBusy(function(){ route(); });
+  var pending=2;
+  function ready(){ if(--pending===0){ syncCart(); route(); } }
+  P.loadCatalog(ready);
+  P.loadBusy(ready);
 })();
