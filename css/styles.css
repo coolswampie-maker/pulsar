@@ -12,12 +12,12 @@
   --ink-soft:#586372;
   --line:#E4E7EC;
   --line-2:#EDF0F4;
-  --brass:#9C7638;
+  --brass:#87652F;
   --brass-soft:#CBA968;
   --brass-tint:#F1EBDF;
   --ok:#3B6E52;
   --ok-bg:#E7F0EA;
-  --busy:#9A5A3B;
+  --busy:#915537;
   --busy-bg:#F3E7DF;
   --white:#FFFFFF;
 
@@ -186,7 +186,7 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;counter-reset:s;}
 .step{position:relative;padding-top:26px;}
 .step::before{counter-increment:s;content:"0" counter(s);font-family:var(--serif);font-size:15px;color:#fff;background:var(--navy);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:16px;}
-.step h4{font-family:var(--sans);font-weight:700;font-size:16px;color:var(--navy);margin-bottom:7px;}
+.step h3{font-family:var(--sans);font-weight:700;font-size:16px;color:var(--navy);margin-bottom:7px;}
 .step p{font-size:14px;color:var(--ink-soft);line-height:1.6;}
 
 /* ============================================================ CATALOG */
@@ -206,7 +206,7 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 
 .catalog-layout{display:grid;grid-template-columns:250px 1fr;gap:34px;align-items:start;}
 .filters{position:sticky;top:88px;background:var(--white);border:1px solid var(--line);border-radius:var(--r-lg);padding:22px;}
-.filters h4{font-family:var(--sans);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:12px;font-weight:700;}
+.filters h2{font-family:var(--sans);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:12px;font-weight:700;}
 .filters .fgroup{margin-bottom:22px;}
 .filters .fgroup:last-child{margin-bottom:0;}
 .search-box{width:100%;padding:10px 13px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper-2);}
@@ -413,7 +413,7 @@ a.val:hover{color:var(--brass);}
 .footer-top{display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr;gap:40px;padding:56px 0 40px;}
 .footer .brand{color:#fff;margin-bottom:14px;}
 .footer-desc{font-size:13.5px;line-height:1.7;max-width:260px;color:rgba(255,255,255,.5);}
-.footer h5{color:rgba(255,255,255,.85);font-family:var(--sans);font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;font-weight:700;}
+.footer h2{color:rgba(255,255,255,.85);font-family:var(--sans);font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;font-weight:700;}
 .footer ul{list-style:none;display:flex;flex-direction:column;gap:9px;}
 .footer a:hover{color:#fff;}
 .footer-bottom{border-top:1px solid rgba(255,255,255,.1);padding:20px 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12.5px;color:rgba(255,255,255,.4);}
@@ -581,19 +581,20 @@ a.val:hover{color:var(--brass);}
 .section-invert .eyebrow::before{background:var(--brass-soft);}
 .section-invert h2{color:#fff;}
 .section-invert .step::before{background:var(--brass);color:var(--navy-deep);}
-.section-invert .step h4{color:#fff;}
+.section-invert .step h3{color:#fff;}
 .section-invert .step p{color:rgba(255,255,255,.66);}
 .section-invert .steps::before{background:rgba(255,255,255,.14);}
 
 /* акцентный блок резидентам — латунная полоса */
-.promo{background:linear-gradient(120deg,#B58A42 0%,#8C6A30 100%);border:none;color:#fff;position:relative;overflow:hidden;}
+.promo{background:linear-gradient(120deg,#8E6A31 0%,#6E5125 100%);border:none;color:#fff;position:relative;overflow:hidden;}
 .promo::before{content:"";position:absolute;inset:0;pointer-events:none;
   background-image:linear-gradient(rgba(255,255,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.08) 1px,transparent 1px);
   background-size:26px 26px;}
 .promo>*{position:relative;z-index:1;}
 .promo-badge{color:#fff;}
 .promo h3{color:#fff;}
-.promo p{color:rgba(255,255,255,.88);}
+/* при прозрачности .88 контраст падал до 4.23 на светлом краю градиента */
+.promo p{color:#fff;}
 
 /* ── HERO (сплит: копия + поиск слева, фото справа) ── */
 .hero2{background:#fff;border-bottom:1px solid var(--line);position:relative;overflow:hidden;}
@@ -722,3 +723,27 @@ a.val:hover{color:var(--brass);}
   .ord-head{flex-direction:column;}
   .ord-head>div:last-child{text-align:left!important;}
 }
+
+/* ============================================================ ДОСТУПНОСТЬ */
+/* Видимый фокус для клавиатуры. Поля выше снимают обводку (outline:none),
+   поэтому возвращаем её именно для :focus-visible — мышь рамку не увидит,
+   а Tab-навигация всегда показывает текущий элемент. */
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px;}
+.field input:focus-visible,.field select:focus-visible,.field textarea:focus-visible,
+.search-box:focus-visible,.searchbar input:focus-visible,.searchbar select:focus-visible{
+  outline:2px solid var(--brass);outline-offset:2px;}
+/* на тёмном фоне светлая латунь читается лучше */
+.footer :focus-visible,.topbar :focus-visible,.hero :focus-visible{outline-color:var(--brass-soft);}
+
+/* Подпись для группы кнопок (смена, время начала) — выглядит как label,
+   но не является им: там несколько элементов, а не одно поле. */
+.field-cap{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+
+/* Минимальный размер цели нажатия — 24px (WCAG 2.5.8). */
+.footer ul a{display:inline-flex;align-items:center;min-height:24px;}
+.filters .clearf{min-height:24px;padding:2px 0;}
+.contact-item a.val{display:inline-flex;align-items:center;min-height:24px;}
+.cab-tab{min-height:24px;display:inline-flex;align-items:center;}
+/* Цели нажатия в топбаре и «хлебных крошках» — до 24px (WCAG 2.5.8). */
+.topbar-right a{display:inline-flex;align-items:center;min-height:24px;}
+.crumbs a{display:inline-flex;align-items:center;min-height:24px;}

@@ -143,7 +143,7 @@
             '<option value="specialist">Специалисты</option>'+
             '<option value="service">Услуги</option>'+
           '</select>'+
-          '<input id="hq" placeholder="Масс-спектрометр, чистая комната, ICP-MS…">'+
+          '<input id="hq" aria-label="Поиск по каталогу" placeholder="Масс-спектрометр, чистая комната, ICP-MS…">'+
           '<button id="hgo" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Найти</button>'+
         '</form>'+
         '<div class="chips">'+
@@ -195,7 +195,7 @@
         ['Соберите заявку','Выберите дату и слот — оператор добавится автоматически'],
         ['Подтверждение','Оператор согласует бронирование и договор'],
         ['Работа на объекте','Инструктаж, доступ и поддержка дежурного специалиста']
-      ].map(function(s){ return '<div class="step"><h4>'+s[0]+'</h4><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
+      ].map(function(s){ return '<div class="step"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
     '</div></section>'+
 
     /* ---- РЕЗИДЕНТАМ (лёгкая полоса) ---- */
@@ -251,9 +251,9 @@
       '<div class="tabs" id="tabs">'+tabs+'</div>'+
       '<div class="catalog-layout">'+
         '<aside class="filters">'+
-          '<div class="fgroup"><h4>Поиск</h4><input class="search-box" id="fsearch" placeholder="Название, прибор…" value="'+esc(catState.q)+'"></div>'+
-          '<div class="fgroup"><h4>Направление</h4><select id="fcat">'+catOpts+'</select></div>'+
-          '<div class="fgroup"><h4>Сортировка</h4><select id="fsort">'+
+          '<div class="fgroup"><h2><label for="fsearch">Поиск</label></h2><input class="search-box" id="fsearch" placeholder="Название, прибор…" value="'+esc(catState.q)+'"></div>'+
+          '<div class="fgroup"><h2><label for="fcat">Направление</label></h2><select id="fcat">'+catOpts+'</select></div>'+
+          '<div class="fgroup"><h2><label for="fsort">Сортировка</label></h2><select id="fsort">'+
             '<option value="default"'+(catState.sort==='default'?' selected':'')+'>По умолчанию</option>'+
             '<option value="price-asc"'+(catState.sort==='price-asc'?' selected':'')+'>Цена ↑</option>'+
             '<option value="price-desc"'+(catState.sort==='price-desc'?' selected':'')+'>Цена ↓</option>'+
@@ -313,7 +313,7 @@
           '<h1>'+esc(r.title)+'</h1>'+
           (r.cleanClass?'<div style="margin-bottom:14px"><span class="tag">'+esc(r.cleanClass)+'</span></div>':'')+
           '<p class="detail-desc">'+esc(r.description)+'</p>'+
-          '<h3 class="h-md" style="margin-bottom:14px">Характеристики</h3>'+
+          '<h2 class="h-md" style="margin-bottom:14px">Характеристики</h2>'+
           '<table class="spec-table"><tbody>'+
             r.specs.map(function(s){ var parts=s.split(':'); return parts.length>1
               ? '<tr><th>'+esc(parts[0])+'</th><td>'+esc(parts.slice(1).join(':').trim())+'</td></tr>'
@@ -408,24 +408,25 @@
     var html='<div class="price-lead">'+priceHead+'</div><hr>';
 
     if(r.type==='service'){
-      html+='<div class="field"><label>Количество образцов</label>'+
+      html+='<div class="field"><label for="bqty">Количество образцов</label>'+
         '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
     } else if(r.bookMode==='shift'){
       html+=rangeCalendarHtml()+
-        '<div class="field" style="margin-top:12px"><label>Смена</label>'+shiftTypeSelector()+'</div>'+
+        '<div class="field" style="margin-top:12px"><span class="field-cap" id="capShift">Смена</span>'+
+        '<div role="group" aria-labelledby="capShift">'+shiftTypeSelector()+'</div></div>'+
         '<div class="range-note" id="rnote">'+shiftSummaryHtml()+'</div>';
     } else if(r.bookMode==='range'){
       html+=rangeCalendarHtml()+
         '<div class="range-note" id="rnote">'+rangeSummaryHtml()+'</div>';
     } else { // hour — почасово, можно на несколько дат
       html+=rangeCalendarHtml()+
-        '<div class="field" style="margin-top:12px"><label>Время начала (в каждый выбранный день)</label><div class="slots" id="bslots">'+
+        '<div class="field" style="margin-top:12px"><span class="field-cap" id="capSlots">Время начала (в каждый выбранный день)</span><div class="slots" id="bslots" role="group" aria-labelledby="capSlots">'+
           timeStarts().map(function(t){
             var busy=isStartBusy(r.id,t,book.hours);
             return '<button class="slot'+(book.start===t?' sel':'')+'" data-t="'+t+'"'+(busy?' disabled':'')+'>'+t+'</button>';
           }).join('')+'</div></div>'+
-        '<div class="field"><label>Длительность</label><select id="bhours">'+
+        '<div class="field"><label for="bhours">Длительность</label><select id="bhours">'+
           [2,3,4,5,6].filter(function(h){return h>=(r.minUnits||1);}).map(function(h){
             return '<option value="'+h+'"'+(book.hours===h?' selected':'')+'>'+h+' ч</option>'; }).join('')+
         '</select></div>'+
@@ -627,7 +628,7 @@
         '<p class="sub">Заявка от <strong>'+esc(c.name)+'</strong> ('+esc(c.email)+'). '+
           'Данные берутся из профиля кабинета — изменить их можно в <a href="#/cabinet">профиле</a>.</p>'+
         '<div class="form-grid">'+
-          '<div class="field full"><label>Комментарий к заявке</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
+          '<div class="field full"><label for="c_note">Комментарий к заявке</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
         '</div>'+
         '<div id="c_msg"></div>'+
         '<button class="btn btn-brass" id="submitorder" style="margin-top:8px">Отправить заявку</button>'+
@@ -637,11 +638,11 @@
         '<p class="sub">Гостевая заявка — регистрация не требуется. Мы свяжемся с вами для подтверждения. '+
           'С <a href="#/login">кабинетом компании</a> заявки хранятся в истории, а статус резидента подтверждается один раз.</p>'+
         '<div class="form-grid">'+
-          '<div class="field"><label>Организация *</label><input id="c_org" placeholder="ООО «Название»"></div>'+
-          '<div class="field"><label>Контактное лицо *</label><input id="c_name" placeholder="Иванов Иван Иванович"></div>'+
-          '<div class="field"><label>Email *</label><input id="c_email" type="email" placeholder="ivan@company.ru"></div>'+
-          '<div class="field"><label>Телефон *</label><input id="c_phone" placeholder="+7 (___) ___-__-__"></div>'+
-          '<div class="field full"><label>Комментарий</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
+          '<div class="field"><label for="c_org">Организация *</label><input id="c_org" placeholder="ООО «Название»"></div>'+
+          '<div class="field"><label for="c_name">Контактное лицо *</label><input id="c_name" placeholder="Иванов Иван Иванович"></div>'+
+          '<div class="field"><label for="c_email">Email *</label><input id="c_email" type="email" placeholder="ivan@company.ru"></div>'+
+          '<div class="field"><label for="c_phone">Телефон *</label><input id="c_phone" placeholder="+7 (___) ___-__-__"></div>'+
+          '<div class="field full"><label for="c_note">Комментарий</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
         '</div>'+
         '<div id="c_msg"></div>'+
         '<button class="btn btn-brass" id="submitorder" style="margin-top:8px">Отправить заявку</button>'+
@@ -739,7 +740,7 @@
         ['Подпишем договор','Типовой договор аренды или технологического хостинга — подготовим и согласуем'],
         ['Пройдите инструктаж','Вводный инструктаж по объекту, безопасности и регламентам чистых зон'],
         ['Работайте','Полный доступ к инфраструктуре, поддержка дежурного специалиста, отчёты по использованию']
-      ].map(function(s){ return '<div class="step"><h4>'+s[0]+'</h4><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
+      ].map(function(s){ return '<div class="step"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
       '<div style="margin-top:44px;text-align:center"><a class="btn btn-brass" href="#/catalog">Перейти в каталог</a></div>'+
     '</div></section>'+
     '<section class="section" style="background:var(--navy-deep)"><div class="wrap text-center">'+
@@ -824,8 +825,8 @@
     var b=el('authbody'); if(!b) return;
     if(loginTab==='login'){
       b.innerHTML='<div class="form-grid">'+
-        '<div class="field full"><label>E-mail *</label><input id="l_email" type="email" placeholder="company@mail.ru"></div>'+
-        '<div class="field full"><label>Пароль *</label><input id="l_pass" type="password" placeholder="••••••••"></div>'+
+        '<div class="field full"><label for="l_email">E-mail *</label><input id="l_email" type="email" placeholder="company@mail.ru"></div>'+
+        '<div class="field full"><label for="l_pass">Пароль *</label><input id="l_pass" type="password" placeholder="••••••••"></div>'+
       '</div><div id="l_msg"></div>'+
       '<button class="btn btn-brass" id="dologin">Войти</button>'+
       '<p class="sub" style="margin-top:12px">Нет кабинета? Откройте вкладку «Регистрация».</p>';
@@ -833,10 +834,10 @@
       el('l_pass').onkeydown=function(e){ if(e.key==='Enter') doLogin(); };
     } else {
       b.innerHTML='<div class="form-grid">'+
-        '<div class="field"><label>Организация *</label><input id="r_name" placeholder="ООО «Название»"></div>'+
-        '<div class="field"><label>Телефон</label><input id="r_phone" placeholder="+7 (___) ___-__-__"></div>'+
-        '<div class="field"><label>E-mail *</label><input id="r_email" type="email" placeholder="company@mail.ru"></div>'+
-        '<div class="field"><label>Пароль *</label><input id="r_pass" type="password" placeholder="не менее 8 символов"></div>'+
+        '<div class="field"><label for="r_name">Организация *</label><input id="r_name" placeholder="ООО «Название»"></div>'+
+        '<div class="field"><label for="r_phone">Телефон</label><input id="r_phone" placeholder="+7 (___) ___-__-__"></div>'+
+        '<div class="field"><label for="r_email">E-mail *</label><input id="r_email" type="email" placeholder="company@mail.ru"></div>'+
+        '<div class="field"><label for="r_pass">Пароль *</label><input id="r_pass" type="password" placeholder="не менее 8 символов"></div>'+
       '</div><div id="r_msg"></div>'+
       '<button class="btn btn-brass" id="doreg">Зарегистрировать компанию</button>'+
       '<p class="sub" style="margin-top:12px">Статус резидента ИНТЦ и скидку подтверждает оператор после проверки документов.</p>';
@@ -888,12 +889,12 @@
     box.innerHTML=statusNote(c)+
       '<div class="checkout-form"><h3>Данные организации</h3>'+
       '<div class="form-grid">'+
-        '<div class="field"><label>Организация *</label><input id="p_name" value="'+esc(c.name)+'"></div>'+
-        '<div class="field"><label>ИНН</label><input id="p_inn" value="'+esc(c.inn)+'" placeholder="10 или 12 цифр"></div>'+
-        '<div class="field"><label>Контактное лицо</label><input id="p_contact" value="'+esc(c.contact_name)+'"></div>'+
-        '<div class="field"><label>Телефон</label><input id="p_phone" value="'+esc(c.phone)+'"></div>'+
-        '<div class="field"><label>Направление</label><select id="p_cat"><option value="">— не выбрано —</option>'+opts+'</select></div>'+
-        '<div class="field"><label>E-mail (логин)</label><input value="'+esc(c.email)+'" disabled></div>'+
+        '<div class="field"><label for="p_name">Организация *</label><input id="p_name" value="'+esc(c.name)+'"></div>'+
+        '<div class="field"><label for="p_inn">ИНН</label><input id="p_inn" value="'+esc(c.inn)+'" placeholder="10 или 12 цифр"></div>'+
+        '<div class="field"><label for="p_contact">Контактное лицо</label><input id="p_contact" value="'+esc(c.contact_name)+'"></div>'+
+        '<div class="field"><label for="p_phone">Телефон</label><input id="p_phone" value="'+esc(c.phone)+'"></div>'+
+        '<div class="field"><label for="p_cat">Направление</label><select id="p_cat"><option value="">— не выбрано —</option>'+opts+'</select></div>'+
+        '<div class="field"><label for="p_email">E-mail (логин)</label><input id="p_email" value="'+esc(c.email)+'" disabled></div>'+
       '</div>'+
       '<div id="p_msg"></div>'+
       '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">'+
@@ -1067,9 +1068,9 @@
         : '<div class="cline-meta">Позиций пока нет.</div>')+'</div>'+
       '<details class="kpi-add"><summary>Добавить позицию</summary>'+
         '<div class="form-grid">'+
-          '<div class="field full"><label>Что сделано / на что потрачено</label><input id="ke_t_'+k.key+'" placeholder="Договор, патент, сотрудник…"></div>'+
-          '<div class="field"><label>Сумма / количество ('+esc(k.unit)+')</label><input id="ke_a_'+k.key+'" type="number" step="0.01" placeholder="0"></div>'+
-          '<div class="field"><label>Дата</label><input id="ke_d_'+k.key+'" type="date"></div>'+
+          '<div class="field full"><label for="ke_t_'+k.key+'">Что сделано / на что потрачено</label><input id="ke_t_'+k.key+'" placeholder="Договор, патент, сотрудник…"></div>'+
+          '<div class="field"><label for="ke_a_'+k.key+'">Сумма / количество ('+esc(k.unit)+')</label><input id="ke_a_'+k.key+'" type="number" step="0.01" placeholder="0"></div>'+
+          '<div class="field"><label for="ke_d_'+k.key+'">Дата</label><input id="ke_d_'+k.key+'" type="date"></div>'+
         '</div>'+
         '<button class="btn btn-brass btn-sm" data-kadd="'+k.key+'">Добавить</button>'+
         '<div class="kpi-up">'+
@@ -1170,8 +1171,14 @@
   window.addEventListener('hashchange', route);
 
   // мобильное меню
-  el('navtoggle').onclick=function(){ el('navlinks').classList.toggle('open'); };
-  qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ el('navlinks').classList.remove('open'); }); });
+  // мобильное меню: состояние дублируем в aria-expanded, иначе с экранного
+  // диктора не понять, раскрыт список или нет
+  function setNavOpen(open){
+    el('navlinks').classList.toggle('open', open);
+    el('navtoggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  el('navtoggle').onclick=function(){ setNavOpen(!el('navlinks').classList.contains('open')); };
+  qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ setNavOpen(false); }); });
 
   // ссылки «Кабинет оператора» ведут в Django-админку
   qsAll('a[data-admin]').forEach(function(a){ a.setAttribute('href', window.PULSAR_ADMIN_URL || '/admin/'); a.setAttribute('target','_blank'); });
