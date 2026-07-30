@@ -10,9 +10,115 @@
   // хосте — задайте window.PULSAR_API_BASE в index.html.
   var API_BASE = (window.PULSAR_API_BASE || '/api').replace(/\/+$/,'');
   P.API_BASE = API_BASE;
-  P.apiFetch = function(path, opts){ return fetch(API_BASE+path, opts); };
   // подчищаем данные демо-версии, если остались в браузере с прошлых визитов
   try{ localStorage.removeItem('pulsar_catalog_v1'); localStorage.removeItem('pulsar_orders_v1'); }catch(e){}
+
+  /* ---------- авторизация компании (личный кабинет) ---------- */
+  var AUTH_KEY='pulsar_auth_v1';
+  function readAuth(){
+    try{ var o=JSON.parse(localStorage.getItem(AUTH_KEY)); return (o&&o.token)?o:null; }catch(e){ return null; }
+  }
+  P.auth = readAuth();            // {token, company} либо null
+  function setAuth(o){
+    P.auth = o;
+    if(o) localStorage.setItem(AUTH_KEY, JSON.stringify(o));
+    else localStorage.removeItem(AUTH_KEY);
+  }
+  P.isLogged = function(){ return !!(P.auth && P.auth.token); };
+  P.company = function(){ return P.auth ? P.auth.company : null; };
+  // резидентская скидка действует, только когда оператор подтвердил статус
+  P.isResident = function(){ var c=P.company(); return !!(c && c.resident && c.confirmed); };
+
+  // Все запросы к API идут через apiFetch: он сам подставляет токен компании.
+  P.apiFetch = function(path, opts){
+    opts = opts || {};
+    var h = {};
+    for(var k in (opts.headers||{})) h[k]=opts.headers[k];
+    if(P.auth && P.auth.token && !h.Authorization) h.Authorization='Token '+P.auth.token;
+    opts.headers = h;
+    return fetch(API_BASE+path, opts);
+  };
+  // разбор ответа: {ok, data, msg} — сообщение об ошибке уже человекочитаемое
+  function parse(r){
+    return r.text().then(function(t){
+      var j=null; try{ j=t?JSON.parse(t):null; }catch(e){}
+      if(r.ok) return {ok:true, data:j};
+      return {ok:false, status:r.status, data:j, msg:errText(j) || ('Ошибка сервера ('+r.status+')')};
+    });
+  }
+  // DRF отдаёт ошибки как {поле:[текст]} или {detail:текст} — сводим к строке
+  function errText(j){
+    if(!j) return '';
+    if(typeof j==='string') return j;
+    if(j.detail) return j.detail;
+    var out=[];
+    for(var k in j){
+      var v=j[k];
+      out.push(Array.isArray(v)?v.join(' '):String(v));
+    }
+    return out.join(' ');
+  }
+  P.apiErrText = errText;
+
+  function postJson(path, body){
+    return P.apiFetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body||{})}).then(parse);
+  }
+
+  P.authApi = {
+    register:function(d){
+      return postJson('/auth/register/', d).then(function(res){
+        if(res.ok) setAuth({token:res.data.token, company:res.data.company});
+        return res;
+      });
+    },
+    login:function(email,password){
+      return postJson('/auth/login/', {email:email, password:password}).then(function(res){
+        if(res.ok) setAuth({token:res.data.token, company:res.data.company});
+        return res;
+      });
+    },
+    logout:function(){ setAuth(null); },
+    // перечитать профиль (например, оператор подтвердил статус резидента)
+    refresh:function(){
+      if(!P.isLogged()) return Promise.resolve({ok:false});
+      return P.apiFetch('/auth/me/').then(parse).then(function(res){
+        if(res.ok) setAuth({token:P.auth.token, company:res.data});
+        else if(res.status===401) setAuth(null);   // токен отозван
+        return res;
+      });
+    },
+    save:function(d){
+      return P.apiFetch('/auth/me/', {method:'PATCH', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(d)}).then(parse).then(function(res){
+        if(res.ok) setAuth({token:P.auth.token, company:res.data});
+        return res;
+      });
+    }
+  };
+
+  /* ---------- заявки компании ---------- */
+  P.ordersApi = {
+    list:function(){ return P.apiFetch('/orders/').then(parse); },
+    cancel:function(id){ return postJson('/orders/'+id+'/cancel/', {}); },
+    requestChange:function(id,message){ return postJson('/orders/'+id+'/request-change/', {message:message}); }
+  };
+
+  /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */
+  P.kpiApi = {
+    get:function(year){ return P.apiFetch('/kpi/'+(year?'?year='+year:'')).then(parse); },
+    addEntry:function(key,d,year){
+      return postJson('/kpi/'+key+'/entries/'+(year?'?year='+year:''), d);
+    },
+    deleteEntry:function(key,id){
+      return P.apiFetch('/kpi/'+key+'/entries/'+id+'/', {method:'DELETE'}).then(parse);
+    },
+    // загрузка документа: система сама заводит позицию по файлу
+    upload:function(key,file,year){
+      var fd=new FormData(); fd.append('document', file);
+      return P.apiFetch('/kpi/'+key+'/extract/'+(year?'?year='+year:''), {method:'POST', body:fd}).then(parse);
+    }
+  };
 
   /* ---------- даты ---------- */
   function pad(n){ return (n<10?'0':'')+n; }

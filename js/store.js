@@ -166,12 +166,18 @@
   };
 
   /* ---- смета ---- */
+  // Скидку 25% даёт только компания, которую оператор подтвердил как резидента
+  // ИНТЦ (P.isResident). Галочка в корзине — лишь заявление о статусе: она уходит
+  // оператору на проверку и сама по себе цену не снижает. Так итог в корзине
+  // всегда совпадает с суммой заявки, которую посчитает сервер.
   Cart.totals = function(){
     var lines=read();
     var subtotal=lines.reduce(function(s,l){ return s+l.linePrice; },0);
-    var resident=Cart.isResident();
-    var discount= resident ? Math.round(subtotal*RESIDENT_DISCOUNT) : 0;
-    return { subtotal:subtotal, resident:resident, discount:discount, total:subtotal-discount, count:lines.length };
+    var claim=Cart.isResident();
+    var confirmed=!!(P.isResident && P.isResident());
+    var discount= confirmed ? Math.round(subtotal*RESIDENT_DISCOUNT) : 0;
+    return { subtotal:subtotal, resident:confirmed, claim:claim, confirmed:confirmed,
+             discount:discount, total:subtotal-discount, count:lines.length };
   };
 
   /* ---- разворот брони в строки-по-дню под модель бэкенда ---- */
@@ -252,13 +258,21 @@
     var apiLines=[];
     var byId={}; lines.forEach(function(l){ byId[l.lineId]=l; });
     lines.forEach(function(l){ apiLines=apiLines.concat(expandLine(l, l.linkedTo?byId[l.linkedTo]:null)); });
-    var payload={ contact:contact, resident:t.resident, lines:apiLines };
+    // resident — заявление о статусе: подтверждённый резидент или галочка в корзине.
+    // Итоговое решение о скидке принимает сервер по профилю компании.
+    var payload={ contact:contact, resident:!!(t.claim || t.confirmed), lines:apiLines };
     return P.apiFetch('/orders/', {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
     }).then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
       .then(function(res){
         if(res.status>=200 && res.status<300 && res.body && res.body.ok){
-          summary.id=res.body.id; P.lastOrder=summary; Cart.clear();
+          summary.id=res.body.id;
+          // суммы берём из ответа сервера: скидку резидента считает он
+          if(typeof res.body.subtotal==='number') summary.subtotal=res.body.subtotal;
+          if(typeof res.body.discount==='number') summary.discount=res.body.discount;
+          if(typeof res.body.total==='number')    summary.total=res.body.total;
+          summary.residentClaimed = !!t.claim && !res.body.resident;
+          P.lastOrder=summary; Cart.clear();
           return {ok:true, order:summary};
         }
         var msg=(res.body && (res.body.detail || res.body.lines)) || 'Не удалось оформить заявку. Попробуйте ещё раз.';

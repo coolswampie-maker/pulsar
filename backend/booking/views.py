@@ -84,7 +84,12 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.Gene
         ser = OrderCreateSerializer(data=request.data, context={'request': request})
         ser.is_valid(raise_exception=True)
         order = ser.save()
-        return Response({'ok': True, 'id': order.number}, status=201)
+        # Отдаём итоговые суммы: скидку резидента считает сервер, поэтому экран
+        # подтверждения должен показывать её цифры, а не расчёт корзины.
+        return Response({'ok': True, 'id': order.number,
+                         'subtotal': order.subtotal, 'discount': order.discount,
+                         'total': order.total, 'resident': order.resident,
+                         'status': order.status}, status=201)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

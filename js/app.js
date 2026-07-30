@@ -601,43 +601,69 @@
   }
   function drawSummary(){
     var t=P.cart.totals(), s=el('summary'); if(!s) return;
+    // Скидку 25% даёт только подтверждённый оператором резидент (считается в store).
+    // Гость и непроверенная компания видят её как заявление, а не как готовый минус —
+    // иначе итог в корзине расходился бы с суммой заявки в CRM.
     s.innerHTML='<h3>Смета</h3>'+
       '<div class="sum-line"><span>Позиций</span><span>'+t.count+'</span></div>'+
       '<div class="sum-line"><span>Стоимость</span><span>'+fmt(t.subtotal)+'</span></div>'+
-      '<label class="resident-toggle"><input type="checkbox" id="resident" '+(t.resident?'checked':'')+'>'+
-        '<span><strong>Резидент ИНТЦ МГУ</strong> — скидка 25% на всё бронирование</span></label>'+
-      (t.discount?'<div class="sum-line"><span>Скидка резидента</span><span>−'+fmt(t.discount)+'</span></div>':'')+
+      (t.confirmed
+        ? '<div class="sum-line"><span>Скидка резидента ИНТЦ</span><span>−'+fmt(t.discount)+'</span></div>'
+        : '<label class="resident-toggle"><input type="checkbox" id="resident" '+(t.claim?'checked':'')+'>'+
+            '<span><strong>Мы резидент ИНТЦ МГУ</strong> — оператор проверит статус и применит скидку 25% к заявке</span></label>')+
+      (!t.confirmed&&t.claim ? '<div class="sum-line muted"><span>Скидка резидента</span><span>после проверки</span></div>' : '')+
       '<div class="sum-total"><span>Итого</span><span class="val">'+fmt(t.total)+'</span></div>'+
       '<button class="btn btn-brass btn-block" id="tocheckout" style="margin-top:18px">Оформить заявку</button>'+
       '<button class="btn btn-ghost btn-block btn-sm" id="clearcart" style="margin-top:8px">Очистить</button>';
-    el('resident').onchange=function(){ P.cart.setResident(this.checked); drawSummary(); };
+    if(el('resident')) el('resident').onchange=function(){ P.cart.setResident(this.checked); drawSummary(); };
     el('clearcart').onclick=function(){ P.cart.clear(); viewCart(); };
     el('tocheckout').onclick=function(){ drawCheckout(); el('checkoutbox').scrollIntoView({behavior:'smooth'}); };
   }
   function drawCheckout(){
-    var box=el('checkoutbox');
-    box.innerHTML='<div class="checkout-form"><h3>Контактные данные</h3>'+
-      '<p class="sub">Гостевая заявка — регистрация не требуется. Мы свяжемся с вами для подтверждения.</p>'+
-      '<div class="form-grid">'+
-        '<div class="field"><label>Организация *</label><input id="c_org" placeholder="ООО «Название»"></div>'+
-        '<div class="field"><label>Контактное лицо *</label><input id="c_name" placeholder="Иванов Иван Иванович"></div>'+
-        '<div class="field"><label>Email *</label><input id="c_email" type="email" placeholder="ivan@company.ru"></div>'+
-        '<div class="field"><label>Телефон *</label><input id="c_phone" placeholder="+7 (___) ___-__-__"></div>'+
-        '<div class="field full"><label>Комментарий</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
-      '</div>'+
-      '<div id="c_msg"></div>'+
-      '<button class="btn btn-brass" id="submitorder" style="margin-top:8px">Отправить заявку</button>'+
-    '</div>';
+    var box=el('checkoutbox'), c=P.company();
+    if(P.isLogged() && c){
+      // компания вошла в кабинет — контакты берём из профиля, повторно не спрашиваем
+      box.innerHTML='<div class="checkout-form"><h3>Оформление заявки</h3>'+
+        '<p class="sub">Заявка от <strong>'+esc(c.name)+'</strong> ('+esc(c.email)+'). '+
+          'Данные берутся из профиля кабинета — изменить их можно в <a href="#/cabinet">профиле</a>.</p>'+
+        '<div class="form-grid">'+
+          '<div class="field full"><label>Комментарий к заявке</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
+        '</div>'+
+        '<div id="c_msg"></div>'+
+        '<button class="btn btn-brass" id="submitorder" style="margin-top:8px">Отправить заявку</button>'+
+      '</div>';
+    } else {
+      box.innerHTML='<div class="checkout-form"><h3>Контактные данные</h3>'+
+        '<p class="sub">Гостевая заявка — регистрация не требуется. Мы свяжемся с вами для подтверждения. '+
+          'С <a href="#/login">кабинетом компании</a> заявки хранятся в истории, а статус резидента подтверждается один раз.</p>'+
+        '<div class="form-grid">'+
+          '<div class="field"><label>Организация *</label><input id="c_org" placeholder="ООО «Название»"></div>'+
+          '<div class="field"><label>Контактное лицо *</label><input id="c_name" placeholder="Иванов Иван Иванович"></div>'+
+          '<div class="field"><label>Email *</label><input id="c_email" type="email" placeholder="ivan@company.ru"></div>'+
+          '<div class="field"><label>Телефон *</label><input id="c_phone" placeholder="+7 (___) ___-__-__"></div>'+
+          '<div class="field full"><label>Комментарий</label><input id="c_note" placeholder="Опишите задачу или пожелания"></div>'+
+        '</div>'+
+        '<div id="c_msg"></div>'+
+        '<button class="btn btn-brass" id="submitorder" style="margin-top:8px">Отправить заявку</button>'+
+      '</div>';
+    }
     el('submitorder').onclick=submitOrder;
   }
   function submitOrder(){
-    var org=el('c_org').value.trim(), name=el('c_name').value.trim(),
-        email=el('c_email').value.trim(), phone=el('c_phone').value.trim();
-    var msg=el('c_msg');
-    if(!org||!name||!email||!phone){ msg.innerHTML='<div class="form-msg err">Заполните обязательные поля (*).</div>'; return; }
-    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.innerHTML='<div class="form-msg err">Проверьте email.</div>'; return; }
+    var msg=el('c_msg'), note=el('c_note').value.trim();
+    var contact;
+    if(P.isLogged()){
+      // организация/контакты подставит бэкенд из профиля компании
+      contact={note:note};
+    } else {
+      var org=el('c_org').value.trim(), name=el('c_name').value.trim(),
+          email=el('c_email').value.trim(), phone=el('c_phone').value.trim();
+      if(!org||!name||!email||!phone){ msg.innerHTML='<div class="form-msg err">Заполните обязательные поля (*).</div>'; return; }
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.innerHTML='<div class="form-msg err">Проверьте email.</div>'; return; }
+      contact={org:org,name:name,email:email,phone:phone,note:note};
+    }
     var btn=el('submitorder'); if(btn){ btn.disabled=true; btn.textContent='Отправка…'; }
-    P.cart.checkout({org:org,name:name,email:email,phone:phone,note:el('c_note').value.trim()}).then(function(res){
+    P.cart.checkout(contact).then(function(res){
       if(btn){ btn.disabled=false; btn.textContent='Отправить заявку'; }
       if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
       location.hash='#/order/'+res.order.id;
@@ -654,6 +680,7 @@
         o.lines.map(function(l){ return '<div class="cl"><span>'+esc(l.title)+(l.isOperator?' <em style="color:var(--brass)">(оператор)</em>':'')+'</span><span>'+fmt(l.linePrice)+'</span></div>'; }).join('')+
         (o.discount?'<div class="cl"><span>Скидка резидента ИНТЦ</span><span>−'+fmt(o.discount)+'</span></div>':'')+
         '<div class="cl" style="font-weight:700;color:var(--navy)"><span>Итого</span><span>'+fmt(o.total)+'</span></div>'+
+        (o.residentClaimed?'<div class="cl"><span class="cline-meta">Заявлен статус резидента ИНТЦ — оператор проверит его и пересчитает скидку 25% в заявке.</span></div>':'')+
       '</div>' : '';
     render('<section class="confirm"><div class="wrap">'+
       '<div class="check-ic">'+icon('check',34)+'</div>'+
@@ -748,6 +775,373 @@
   }
 
   /* ==========================================================
+     ЛИЧНЫЙ КАБИНЕТ КОМПАНИИ
+     Вход/регистрация, профиль, свои заявки и показатели ИНТЦ.
+     Данные — только с бэкенда, по токену компании.
+     ========================================================== */
+  var CATS = P.categories || {};
+
+  function needAuth(){
+    if(P.isLogged()) return false;
+    location.hash='#/login';
+    return true;
+  }
+  function cabTabs(active){
+    var t=[['#/cabinet','Профиль'],['#/cabinet/orders','Мои заявки'],['#/cabinet/kpi','Показатели']];
+    return '<div class="cab-tabs">'+t.map(function(x){
+      return '<a href="'+x[0]+'" class="cab-tab'+(x[0]===active?' on':'')+'">'+x[1]+'</a>';
+    }).join('')+'</div>';
+  }
+  // плашка статуса: пока оператор не подтвердил компанию, скидки нет
+  function statusNote(c){
+    if(!c) return '';
+    if(c.resident && c.confirmed)
+      return '<div class="cab-note ok">'+icon('check',18)+'<span>Компания подтверждена как <strong>резидент ИНТЦ МГУ</strong> — скидка 25% применяется к бронированию автоматически.</span></div>';
+    if(c.confirmed)
+      return '<div class="cab-note ok">'+icon('check',18)+'<span>Компания подтверждена оператором. Статус резидента ИНТЦ не присвоен — бронирование по базовым тарифам.</span></div>';
+    return '<div class="cab-note wait">'+icon('clock',18)+'<span>Профиль на проверке у оператора. Бронировать можно сразу; статус резидента и скидку оператор подтвердит отдельно.</span></div>';
+  }
+
+  /* ---------- вход и регистрация ---------- */
+  var loginTab='login';
+  function viewLogin(){
+    if(P.isLogged()){ location.hash='#/cabinet'; return; }
+    render(pageHead('Личный кабинет','Вход для компаний','Кабинет резидента кластера «Ломоносов»: заявки, бронирования и отчётность по показателям ИНТЦ.')+
+    '<section class="section"><div class="wrap"><div class="auth-box">'+
+      '<div class="cab-tabs">'+
+        '<a href="#/login" class="cab-tab'+(loginTab==='login'?' on':'')+'" data-ltab="login">Вход</a>'+
+        '<a href="#/login" class="cab-tab'+(loginTab==='reg'?' on':'')+'" data-ltab="reg">Регистрация</a>'+
+      '</div>'+
+      '<div id="authbody"></div>'+
+    '</div></div></section>', function(){
+      qsAll('[data-ltab]').forEach(function(a){
+        a.onclick=function(e){ e.preventDefault(); loginTab=a.getAttribute('data-ltab'); viewLogin(); };
+      });
+      drawAuth();
+    });
+  }
+  function drawAuth(){
+    var b=el('authbody'); if(!b) return;
+    if(loginTab==='login'){
+      b.innerHTML='<div class="form-grid">'+
+        '<div class="field full"><label>E-mail *</label><input id="l_email" type="email" placeholder="company@mail.ru"></div>'+
+        '<div class="field full"><label>Пароль *</label><input id="l_pass" type="password" placeholder="••••••••"></div>'+
+      '</div><div id="l_msg"></div>'+
+      '<button class="btn btn-brass" id="dologin">Войти</button>'+
+      '<p class="sub" style="margin-top:12px">Нет кабинета? Откройте вкладку «Регистрация».</p>';
+      el('dologin').onclick=doLogin;
+      el('l_pass').onkeydown=function(e){ if(e.key==='Enter') doLogin(); };
+    } else {
+      b.innerHTML='<div class="form-grid">'+
+        '<div class="field"><label>Организация *</label><input id="r_name" placeholder="ООО «Название»"></div>'+
+        '<div class="field"><label>Телефон</label><input id="r_phone" placeholder="+7 (___) ___-__-__"></div>'+
+        '<div class="field"><label>E-mail *</label><input id="r_email" type="email" placeholder="company@mail.ru"></div>'+
+        '<div class="field"><label>Пароль *</label><input id="r_pass" type="password" placeholder="не менее 8 символов"></div>'+
+      '</div><div id="r_msg"></div>'+
+      '<button class="btn btn-brass" id="doreg">Зарегистрировать компанию</button>'+
+      '<p class="sub" style="margin-top:12px">Статус резидента ИНТЦ и скидку подтверждает оператор после проверки документов.</p>';
+      el('doreg').onclick=doRegister;
+    }
+  }
+  function doLogin(){
+    var email=el('l_email').value.trim(), pass=el('l_pass').value, msg=el('l_msg');
+    if(!email||!pass){ msg.innerHTML='<div class="form-msg err">Укажите e-mail и пароль.</div>'; return; }
+    var b=el('dologin'); b.disabled=true; b.textContent='Вход…';
+    P.authApi.login(email,pass).then(function(res){
+      b.disabled=false; b.textContent='Войти';
+      if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+      syncNav(); toast('Вы вошли в кабинет'); location.hash='#/cabinet';
+    });
+  }
+  function doRegister(){
+    var d={ name:el('r_name').value.trim(), phone:el('r_phone').value.trim(),
+            email:el('r_email').value.trim(), password:el('r_pass').value };
+    var msg=el('r_msg');
+    if(!d.name||!d.email||!d.password){ msg.innerHTML='<div class="form-msg err">Заполните обязательные поля (*).</div>'; return; }
+    var b=el('doreg'); b.disabled=true; b.textContent='Отправка…';
+    P.authApi.register(d).then(function(res){
+      b.disabled=false; b.textContent='Зарегистрировать компанию';
+      if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+      syncNav(); toast('Кабинет создан'); location.hash='#/cabinet';
+    });
+  }
+
+  /* ---------- профиль компании ---------- */
+  function viewCabinet(){
+    if(needAuth()) return;
+    var c=P.company()||{};
+    render(pageHead('Личный кабинет', esc(c.name||'Компания'), 'Профиль организации и статус в кластере «Ломоносов».')+
+    '<section class="section"><div class="wrap">'+cabTabs('#/cabinet')+
+      '<div id="cabbody"><div class="muted">Загрузка…</div></div>'+
+    '</div></section>', function(){
+      // перечитываем профиль: оператор мог подтвердить статус
+      P.authApi.refresh().then(function(){ syncNav(); drawProfile(); });
+    });
+  }
+  function drawProfile(){
+    var box=el('cabbody'); if(!box) return;
+    var c=P.company();
+    if(!c){ location.hash='#/login'; return; }
+    var opts=Object.keys(CATS).map(function(k){
+      return '<option value="'+k+'"'+(c.category===k?' selected':'')+'>'+esc(CATS[k])+'</option>';
+    }).join('');
+    box.innerHTML=statusNote(c)+
+      '<div class="checkout-form"><h3>Данные организации</h3>'+
+      '<div class="form-grid">'+
+        '<div class="field"><label>Организация *</label><input id="p_name" value="'+esc(c.name)+'"></div>'+
+        '<div class="field"><label>ИНН</label><input id="p_inn" value="'+esc(c.inn)+'" placeholder="10 или 12 цифр"></div>'+
+        '<div class="field"><label>Контактное лицо</label><input id="p_contact" value="'+esc(c.contact_name)+'"></div>'+
+        '<div class="field"><label>Телефон</label><input id="p_phone" value="'+esc(c.phone)+'"></div>'+
+        '<div class="field"><label>Направление</label><select id="p_cat"><option value="">— не выбрано —</option>'+opts+'</select></div>'+
+        '<div class="field"><label>E-mail (логин)</label><input value="'+esc(c.email)+'" disabled></div>'+
+      '</div>'+
+      '<div id="p_msg"></div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">'+
+        '<button class="btn btn-brass" id="psave">Сохранить</button>'+
+        '<button class="btn btn-ghost" id="plogout">Выйти из кабинета</button>'+
+      '</div></div>';
+    el('psave').onclick=function(){
+      var msg=el('p_msg');
+      var d={ name:el('p_name').value.trim(), inn:el('p_inn').value.trim(),
+              contact_name:el('p_contact').value.trim(), phone:el('p_phone').value.trim(),
+              category:el('p_cat').value };
+      if(!d.name){ msg.innerHTML='<div class="form-msg err">Укажите название организации.</div>'; return; }
+      var b=el('psave'); b.disabled=true; b.textContent='Сохранение…';
+      P.authApi.save(d).then(function(res){
+        b.disabled=false; b.textContent='Сохранить';
+        if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+        msg.innerHTML='<div class="form-msg ok">Сохранено.</div>'; syncNav(); toast('Профиль обновлён');
+      });
+    };
+    el('plogout').onclick=function(){ P.authApi.logout(); syncNav(); toast('Вы вышли из кабинета'); location.hash='#/'; };
+  }
+
+  /* ---------- мои заявки ---------- */
+  function viewCabOrders(){
+    if(needAuth()) return;
+    render(pageHead('Личный кабинет','Мои заявки','История бронирований, статусы и запросы на перенос.')+
+    '<section class="section"><div class="wrap">'+cabTabs('#/cabinet/orders')+
+      '<div id="cabbody"><div class="muted">Загрузка…</div></div>'+
+    '</div></section>', function(){ loadCabOrders(); });
+  }
+  function loadCabOrders(){
+    var box=el('cabbody'); if(!box) return;
+    P.ordersApi.list().then(function(res){
+      if(!res.ok){
+        if(res.status===401){ P.authApi.logout(); syncNav(); location.hash='#/login'; return; }
+        box.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return;
+      }
+      var list=Array.isArray(res.data)?res.data:(res.data&&res.data.results)||[];
+      if(!list.length){
+        box.innerHTML='<div class="empty"><h3>Заявок пока нет</h3>'+
+          '<p>Выберите оборудование, лабораторию или специалиста в каталоге и оформите бронирование.</p>'+
+          '<a class="btn btn-primary" href="#/catalog">Открыть каталог</a></div>';
+        return;
+      }
+      box.innerHTML=list.map(orderCard).join('');
+      bindCabOrders();
+    });
+  }
+  var ST={new:'new', confirmed:'ok', rejected:'rej'};
+  function orderCard(o){
+    var d=o.created_at?P.dates.human(String(o.created_at).slice(0,10)):'';
+    return '<div class="ord-card">'+
+      '<div class="ord-head">'+
+        '<div><div class="ord-num">'+esc(o.number)+'</div><div class="cline-meta">'+esc(d)+'</div></div>'+
+        '<div style="text-align:right">'+
+          '<span class="badge '+(ST[o.status]||'new')+'">'+esc(o.statusLabel)+'</span>'+
+          '<div class="ord-total">'+fmt(o.total)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="ord-lines">'+(o.lines||[]).map(function(l){
+        var when=l.date?P.dates.human(l.date):'без даты';
+        if(l.slotStart&&l.slotEnd) when+=', '+l.slotStart+'–'+l.slotEnd;
+        return '<div class="cl"><span>'+esc(l.title)+(l.isOperator?' <em style="color:var(--brass)">(оператор)</em>':'')+
+          '<br><span class="cline-meta">'+esc(when)+'</span></span><span>'+fmt(l.linePrice)+'</span></div>';
+      }).join('')+
+      (o.discount?'<div class="cl"><span>Скидка резидента ИНТЦ</span><span>−'+fmt(o.discount)+'</span></div>':'')+
+      '</div>'+
+      (o.note?'<div class="ord-note"><strong>Комментарий:</strong> '+esc(o.note)+'</div>':'')+
+      (o.changeRequest?'<div class="ord-note"><strong>Запрос на изменение:</strong> '+esc(o.changeRequest)+'</div>':'')+
+      '<div class="ord-actions">'+
+        (o.status==='new'
+          ? '<button class="btn btn-ghost btn-sm" data-chg="'+o.id+'">Попросить перенос</button>'+
+            '<button class="btn btn-ghost btn-sm" data-cancel="'+o.id+'">Отменить заявку</button>'
+          : '<span class="cline-meta">Заявку в этом статусе меняет оператор — напишите на info@pulsar-mgu.ru</span>')+
+      '</div>'+
+      '<div id="ordmsg-'+o.id+'"></div>'+
+    '</div>';
+  }
+  function bindCabOrders(){
+    qsAll('[data-cancel]').forEach(function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-cancel');
+        if(!confirm('Отменить заявку? Действие необратимо.')) return;
+        b.disabled=true;
+        P.ordersApi.cancel(id).then(function(res){
+          if(!res.ok){ el('ordmsg-'+id).innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; b.disabled=false; return; }
+          toast('Заявка отменена'); loadCabOrders();
+        });
+      };
+    });
+    qsAll('[data-chg]').forEach(function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-chg');
+        var msg=prompt('Что нужно изменить? Например: перенести на 5 августа, 14:00.');
+        if(!msg||!msg.trim()) return;
+        b.disabled=true;
+        P.ordersApi.requestChange(id, msg.trim()).then(function(res){
+          b.disabled=false;
+          if(!res.ok){ el('ordmsg-'+id).innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+          toast('Запрос отправлен оператору'); loadCabOrders();
+        });
+      };
+    });
+  }
+
+  /* ---------- показатели ИНТЦ ---------- */
+  var kpiYear=null;
+  function viewCabKpi(){
+    if(needAuth()) return;
+    render(pageHead('Личный кабинет','Показатели деятельности','Ключевые показатели по Методологии оценки участников ИНТЦ: план ставит оператор, факт складывается из ваших позиций.')+
+    '<section class="section"><div class="wrap">'+cabTabs('#/cabinet/kpi')+
+      '<div id="cabbody"><div class="muted">Загрузка…</div></div>'+
+    '</div></section>', function(){ loadKpi(); });
+  }
+  function loadKpi(){
+    var box=el('cabbody'); if(!box) return Promise.resolve();
+    return P.kpiApi.get(kpiYear).then(function(res){
+      if(!res.ok){
+        if(res.status===401){ P.authApi.logout(); syncNav(); location.hash='#/login'; return; }
+        box.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return;
+      }
+      kpiYear=res.data.year;
+      var items=res.data.items||[];
+      box.innerHTML='<div class="kpi-bar">'+
+          '<button class="btn btn-ghost btn-sm" id="kyprev">‹ '+(kpiYear-1)+'</button>'+
+          '<strong>'+kpiYear+' год</strong>'+
+          '<button class="btn btn-ghost btn-sm" id="kynext">'+(kpiYear+1)+' ›</button>'+
+        '</div>'+
+        '<div class="kpi-grid">'+items.map(kpiCard).join('')+'</div>';
+      el('kyprev').onclick=function(){ kpiYear--; loadKpi(); };
+      el('kynext').onclick=function(){ kpiYear++; loadKpi(); };
+      bindKpi();
+    });
+  }
+  var KST={ok:'ok', warn:'new', bad:'rej', none:''};
+  // Числа показателей могут быть дробными (12,5 %), поэтому запятую-разделитель
+  // трогать нельзя: разделяем только разряды тысяч.
+  function kpiNum(v,unit){
+    if(v==null || v==='') return '—';
+    var n=Number(v);
+    if(isNaN(n)) return '—';
+    var neg=n<0; n=Math.abs(n);
+    var r=Math.round(n*100)/100;
+    var ip=Math.floor(r), fp=Math.round((r-ip)*100);
+    var s=String(ip).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+    if(fp) s+=','+(fp<10?'0'+fp:String(fp)).replace(/0$/,'');
+    return (neg?'−':'')+s+(unit?' '+unit:'');
+  }
+  function kpiCard(k){
+    var val=k.value, plan=k.plan;
+    var badge=k.status==='ok'?'достигнут':k.status==='warn'?'ниже плана':k.status==='bad'?'существенное отставание':'нет плана';
+    return '<div class="kpi-card">'+
+      '<div class="kpi-top">'+
+        '<div><div class="kpi-label">'+esc(k.label)+'</div>'+
+          (k.hint?'<div class="cline-meta">'+esc(k.hint)+'</div>':'')+'</div>'+
+        '<span class="badge '+(KST[k.status]||'')+'">'+badge+'</span>'+
+      '</div>'+
+      '<div class="kpi-nums">'+
+        '<div><span class="cline-meta">Факт</span><strong>'+kpiNum(val, k.percent?'%':k.unit)+'</strong></div>'+
+        '<div><span class="cline-meta">План</span><strong>'+kpiNum(plan, k.percent?'%':k.unit)+'</strong></div>'+
+      '</div>'+
+      (k.percent?'<div class="cline-meta">Считается как доля от выручки — заполните выручку за тот же год.</div>':'')+
+      '<div class="kpi-entries">'+((k.entries||[]).length
+        ? k.entries.map(function(e){
+            return '<div class="cl"><span>'+esc(e.title)+
+              (e.date?' <span class="cline-meta">'+esc(P.dates.human(e.date))+'</span>':'')+
+              (e.document?' <a href="'+esc(e.document)+'" target="_blank" class="kpi-doc">документ</a>':'')+
+              (e.source==='auto'?' <em class="cline-meta">(из документа)</em>':'')+
+              '</span><span>'+kpiNum(e.amount,'')+' <button class="cline-remove" data-kdel="'+k.key+':'+e.id+'">×</button></span></div>';
+          }).join('')
+        : '<div class="cline-meta">Позиций пока нет.</div>')+'</div>'+
+      '<details class="kpi-add"><summary>Добавить позицию</summary>'+
+        '<div class="form-grid">'+
+          '<div class="field full"><label>Что сделано / на что потрачено</label><input id="ke_t_'+k.key+'" placeholder="Договор, патент, сотрудник…"></div>'+
+          '<div class="field"><label>Сумма / количество ('+esc(k.unit)+')</label><input id="ke_a_'+k.key+'" type="number" step="0.01" placeholder="0"></div>'+
+          '<div class="field"><label>Дата</label><input id="ke_d_'+k.key+'" type="date"></div>'+
+        '</div>'+
+        '<button class="btn btn-brass btn-sm" data-kadd="'+k.key+'">Добавить</button>'+
+        '<div class="kpi-up">'+
+          '<label class="cline-meta">…или прикрепите документ — система заведёт позицию сама'+
+            (k.docs?'<br><span class="kpi-docs">Нужны: '+esc(k.docs)+'</span>':'')+'</label>'+
+          '<input type="file" accept=".pdf" data-kfile="'+k.key+'">'+
+        '</div>'+
+        '<div id="kmsg-'+k.key+'"></div>'+
+      '</details>'+
+    '</div>';
+  }
+  function bindKpi(){
+    qsAll('[data-kadd]').forEach(function(b){
+      b.onclick=function(){
+        var key=b.getAttribute('data-kadd'), msg=el('kmsg-'+key);
+        var title=el('ke_t_'+key).value.trim(), amount=el('ke_a_'+key).value, date=el('ke_d_'+key).value;
+        if(!title){ msg.innerHTML='<div class="form-msg err">Укажите наименование.</div>'; return; }
+        b.disabled=true;
+        var d={title:title}; if(amount!=='') d.amount=amount; if(date) d.date=date;
+        P.kpiApi.addEntry(key, d, kpiYear).then(function(res){
+          b.disabled=false;
+          if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+          toast('Позиция добавлена'); loadKpi();
+        });
+      };
+    });
+    qsAll('[data-kdel]').forEach(function(b){
+      b.onclick=function(){
+        var p=b.getAttribute('data-kdel').split(':');
+        P.kpiApi.deleteEntry(p[0], p[1]).then(function(res){
+          if(!res.ok){ toast('Не удалось удалить'); return; }
+          toast('Позиция удалена'); loadKpi();
+        });
+      };
+    });
+    qsAll('[data-kfile]').forEach(function(inp){
+      inp.onchange=function(){
+        var key=inp.getAttribute('data-kfile'), f=inp.files&&inp.files[0], msg=el('kmsg-'+key);
+        if(!f) return;
+        msg.innerHTML='<div class="cline-meta">Загрузка документа…</div>';
+        P.kpiApi.upload(key, f, kpiYear).then(function(res){
+          if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
+          // Сумму из документа распознаёт эвристика — она срабатывает не всегда.
+          // Если не вышло, честно просим указать вручную: иначе позиция висит
+          // без суммы и в факт показателя не попадает.
+          var noAmount = !res.data || res.data.amount==null || res.data.amount==='';
+          toast(noAmount ? 'Документ загружен, сумму нужно указать' : 'Документ загружен');
+          Promise.resolve(loadKpi()).then(function(){
+            if(!noAmount) return;
+            var d=document.querySelector('.kpi-card [data-kadd="'+key+'"]');
+            var det=d && d.closest('details');
+            if(det) det.open=true;                       // раскрываем блок добавления
+            var m=el('kmsg-'+key);
+            if(m) m.innerHTML='<div class="form-msg err">Документ прикреплён, но сумму распознать не удалось. '+
+              'Укажите её вручную — иначе позиция не войдёт в факт показателя.</div>';
+          });
+        });
+      };
+    });
+  }
+
+  /* ---------- навигация: показываем состояние входа ---------- */
+  function syncNav(){
+    var a=el('cablink'); if(!a) return;
+    var c=P.company();
+    a.setAttribute('href', P.isLogged()?'#/cabinet':'#/login');
+    a.textContent = P.isLogged() ? (c&&c.name ? shortName(c.name) : 'Кабинет') : 'Войти';
+    a.classList.toggle('on', P.isLogged());
+  }
+  function shortName(n){ n=String(n); return n.length>22 ? n.slice(0,21)+'…' : n; }
+
+  /* ==========================================================
      РОУТЕР
      ========================================================== */
   function parseQuery(qs){ var o={}; (qs||'').split('&').forEach(function(p){ if(!p) return; var kv=p.split('='); o[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||''); }); return o; }
@@ -761,6 +1155,11 @@
       case 'resource': return viewResource(seg[1]);
       case 'cart': return viewCart();
       case 'order': return viewOrder(seg[1]);
+      case 'login': return viewLogin();
+      case 'cabinet':
+        if(seg[1]==='orders') return viewCabOrders();
+        if(seg[1]==='kpi') return viewCabKpi();
+        return viewCabinet();
       case 'admin': return viewAdmin();
       case 'about': return viewAbout();
       case 'how': return viewHow();
@@ -781,8 +1180,11 @@
   // Оба запроса идут параллельно; если бэкенд недоступен, каталог берётся из
   // data/resources.js, а бронь работает без блокировок занятых слотов.
   syncCart();
+  syncNav();
   var pending=2;
   function ready(){ if(--pending===0){ syncCart(); route(); } }
   P.loadCatalog(ready);
   P.loadBusy(ready);
+  // если компания уже входила — обновляем профиль (статус мог измениться)
+  if(P.isLogged()) P.authApi.refresh().then(syncNav);
 })();

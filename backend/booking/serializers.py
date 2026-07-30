@@ -53,13 +53,24 @@ class RegisterSerializer(serializers.Serializer):
     """Регистрация компании. Минимум полей; остальное и статус резидента
     заполняет оператор при подтверждении."""
     email = serializers.EmailField()
-    password = serializers.CharField(min_length=6, write_only=True)
+    password = serializers.CharField(write_only=True)
     name = serializers.CharField(max_length=200)
     phone = serializers.CharField(max_length=40, required=False, allow_blank=True)
 
     def validate_email(self, v):
         if User.objects.filter(username=v).exists():
             raise serializers.ValidationError('Компания с таким e-mail уже зарегистрирована.')
+        return v
+
+    def validate_password(self, v):
+        # прогоняем через AUTH_PASSWORD_VALIDATORS: длина, словарь утечек,
+        # «только цифры», похожесть на e-mail. create_user их сам не проверяет.
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            validate_password(v)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
         return v
 
     def create(self, validated):
@@ -144,9 +155,18 @@ class OrderCreateSerializer(serializers.Serializer):
         # компания из ЛК, если запрос авторизован
         request = self.context.get('request')
         company = getattr(getattr(request, 'user', None), 'company', None) if request else None
-        # скидка резидента — только для подтверждённых оператором компаний
-        resident = (company.resident and company.confirmed) if company else validated['resident']
+        # Скидка резидента — только компаниям, которых оператор подтвердил как
+        # резидентов ИНТЦ. Галочка в корзине — лишь заявление о статусе: гость не
+        # может выдать себе 25% сам. Непроверенное заявление уходит оператору
+        # пометкой в комментарии — он сверит статус и при необходимости
+        # проставит скидку в заявке вручную.
+        resident = bool(company and company.resident and company.confirmed)
+        claimed = bool(validated['resident'])
         discount = round(subtotal * 0.25) if resident else 0
+        note = c.get('note', '')
+        if claimed and not resident:
+            mark = 'Заявлен статус резидента ИНТЦ — требуется проверка оператором.'
+            note = (note + '\n' + mark).strip() if note else mark
         with transaction.atomic():
             number = Order.next_number()
             order = Order.objects.create(
@@ -155,7 +175,7 @@ class OrderCreateSerializer(serializers.Serializer):
                 contact_name=(company.contact_name if company else c.get('name', '')),
                 email=(company.user.email if company else c.get('email', '')),
                 phone=(company.phone if company else c.get('phone', '')),
-                note=c.get('note', ''),
+                note=note,
                 resident=resident, subtotal=subtotal, discount=discount,
                 total=subtotal - discount)
             for l in lines:
