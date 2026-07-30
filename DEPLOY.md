@@ -1,69 +1,120 @@
-# Публикация ПУЛЬСАР на pulsar.zimermans.* (GitHub Pages + Reg.ru)
+# Публикация ПУЛЬСАР на pulsar.jaglion.ru (VPS + Django + Nginx)
 
-Сайт статический (HTML/CSS/JS, без бэкенда). Публикуем содержимое папки `site/`
-на GitHub Pages и привязываем поддомен `pulsar.<ВАШ-ДОМЕН>` через DNS Reg.ru.
+Эта версия — с бэкендом: фронт (сайт) + REST API + кабинет оператора (`/admin`) на
+одном домене `pulsar.jaglion.ru`. Основной сайт `jaglion.ru` (Tilda) при этом не
+трогаем — он продолжает работать через отдельную A-запись.
 
-Дальше:
-- `<ВАШ-ДОМЕН>` — например `zimermans.ru` (полный домен с Reg.ru)
-- `coolswampie-maker` — ваш логин на GitHub
-- поддомен будет: `pulsar.<ВАШ-ДОМЕН>`
+Готовые файлы конфигурации — в папке [`deploy/`](deploy/):
+`nginx-pulsar.conf`, `gunicorn.service`. Переменные окружения — `backend/.env.example`.
+
+Ниже `<ПУТЬ>` = `/srv/pulsar` (куда клонируем репозиторий на сервере).
 
 ---
 
-## Шаг 1. Репозиторий на GitHub
+## Этап 1. Подготовка (до смены DNS)
 
-**Вариант А — через сайт (без командной строки, проще):**
-1. Создайте на github.com новый **публичный** репозиторий, напр. `pulsar`.
-2. На странице репозитория → **Add file → Upload files**.
-3. Перетащите ВСЁ содержимое папки `site/` (именно内容 папки, не саму папку):
-   `index.html`, папки `css/`, `js/`, `data/`, `assets/`, а также `.nojekyll` и `CNAME`.
-   > `.nojekyll` и `CNAME` — скрытые/служебные, но их тоже нужно загрузить.
-4. **Commit changes**.
+В Tilda в настройках домена `jaglion.ru` выпишите:
+- **IP-адрес**, на который сейчас указывает `jaglion.ru` — понадобится, чтобы
+  основной сайт не пропал после смены NS;
+- все **TXT/MX** записи (почта, подтверждения владения), если они есть.
 
-**Вариант Б — через git (если удобнее):**
+Ничего в коде для этого не нужно.
+
+## Этап 2. Сервер (VPS)
+
+После аренды VPS с Ubuntu и получения его IP:
+
 ```bash
-cd site
-git init && git add -A && git commit -m "ПУЛЬСАР — статический сайт"
-git branch -M main
-git remote add origin https://github.com/coolswampie-maker/pulsar.git
-git push -u origin main
+# пакеты
+sudo apt update && sudo apt install -y python3-venv python3-pip postgresql nginx git certbot python3-certbot-nginx
+
+# база
+sudo -u postgres psql -c "CREATE USER pulsar WITH PASSWORD 'СИЛЬНЫЙ_ПАРОЛЬ';"
+sudo -u postgres psql -c "CREATE DATABASE pulsar OWNER pulsar;"
+
+# код
+sudo git clone https://github.com/coolswampie-maker/pulsar.git /srv/pulsar
+cd /srv/pulsar && sudo git checkout backend
+
+# окружение Django
+cd /srv/pulsar/backend
+sudo python3 -m venv .venv
+sudo .venv/bin/pip install -r requirements.txt
+
+# настройки: заполнить .env (см. backend/.env.example)
+sudo cp .env.example .env && sudo nano .env
+#   SECRET_KEY=...   DEBUG=0
+#   ALLOWED_HOSTS=pulsar.jaglion.ru
+#   DATABASE_URL=postgres://pulsar:СИЛЬНЫЙ_ПАРОЛЬ@127.0.0.1:5432/pulsar
+
+# миграции, каталог, оператор, статика
+sudo .venv/bin/python manage.py migrate
+sudo .venv/bin/python manage.py import_catalog      # 35 позиций из booking/data/catalog.json
+sudo .venv/bin/python manage.py createsuperuser     # логин в кабинет оператора
+sudo .venv/bin/python manage.py collectstatic --noinput
+
+# права на папки, которые отдаёт/пишет сервис
+sudo chown -R www-data:www-data /srv/pulsar/backend/staticfiles /srv/pulsar/backend/media
 ```
 
-## Шаг 2. Включить Pages и указать домен
-1. Репозиторий → **Settings → Pages**.
-2. **Source**: `Deploy from a branch` → branch `main` → папка `/ (root)` → **Save**.
-3. **Custom domain**: впишите `pulsar.<ВАШ-ДОМЕН>` → **Save**.
-   (файл `CNAME` в репозитории уже содержит этот адрес — GitHub подхватит его)
-4. Через несколько минут поставьте галочку **Enforce HTTPS**
-   (появится, когда GitHub выпустит сертификат — обычно 5–30 мин после настройки DNS).
+**Gunicorn как сервис:**
+```bash
+sudo cp /srv/pulsar/deploy/gunicorn.service /etc/systemd/system/pulsar.service
+sudo systemctl daemon-reload && sudo systemctl enable --now pulsar
+sudo systemctl status pulsar        # active (running)
+```
 
-## Шаг 3. DNS на Reg.ru (привязка поддомена)
-1. Reg.ru → ваш домен → **Управление DNS / DNS-серверы и зоны**.
-2. Добавьте запись типа **CNAME**:
-   | Тип  | Имя (поддомен) | Значение              |
-   |------|----------------|-----------------------|
-   | CNAME| `pulsar`       | `coolswampie-maker.github.io.` |
-   > Именно `pulsar` (не полный домен). Точка в конце значения — по требованию Reg.ru,
-   > обычно можно и без неё. TTL — по умолчанию.
-3. Сохраните. Обновление DNS — от 15 минут до нескольких часов.
+**Nginx:**
+```bash
+sudo cp /srv/pulsar/deploy/nginx-pulsar.conf /etc/nginx/sites-available/pulsar
+sudo ln -s /etc/nginx/sites-available/pulsar /etc/nginx/sites-enabled/pulsar
+sudo nginx -t && sudo systemctl reload nginx
+```
 
-## Шаг 4. Проверка
-- Откройте `https://pulsar.<ВАШ-ДОМЕН>` — должен открыться сайт по HTTPS.
-- Если «сайт не защищён»/нет HTTPS — подождите выпуск сертификата и включите
-  **Enforce HTTPS** в Settings → Pages.
+## Этап 3. DNS (Reg.ru) — только когда сервер готов
+
+В reg.ru у домена `jaglion.ru` смените NS-серверы с `ns1/ns2.tildadns.com`
+на `ns1/ns2.hosting.reg.ru`. После появления управления зоной добавьте:
+
+| Тип | Имя | Значение |
+|-----|-----|----------|
+| A | `@` | IP из Tilda (Этап 1) — сохраняет основной сайт |
+| A | `www` | тот же IP из Tilda (если нужно) |
+| A | `pulsar` | **IP вашего VPS** |
+| TXT/MX | … | восстановить, если были в Tilda |
+
+Распространение NS — до суток.
+
+## Этап 4. HTTPS
+
+Только после того как `pulsar.jaglion.ru` резолвится на IP VPS (проверьте
+`dig pulsar.jaglion.ru`):
+```bash
+sudo certbot --nginx -d pulsar.jaglion.ru
+```
+Certbot допишет 443-блок, редирект с 80 и автопродление.
+
+Путь отступления: если что-то с основным сайтом пойдёт не так — верните NS обратно
+на `ns1/ns2.tildadns.com`, и через время всё восстановится.
 
 ---
 
-## Про доступность без VPN
-- **Шрифты** — уже локальные, Google не нужен. ✓
-- **Фото (Unsplash)** и **Яндекс.Карта** — грузятся с внешних CDN; в РФ обычно
-  доступны без VPN. Если Unsplash где-то не откроется — карточка покажет аккуратную
-  брендовую плашку (есть фолбэк). Карта — Яндекс, РФ-дружелюбна.
-- **GitHub Pages** (`*.github.io`) в РФ, как правило, открывается без VPN. Если в
-  какой-то сети будет недоступен — перед Pages можно бесплатно поставить **Cloudflare**
-  (проксирование), но обычно не требуется.
-
 ## Обновление сайта в будущем
-- Вариант А: снова **Upload files** и коммит (перезапишет изменённые файлы).
-- Вариант Б: `git add -A && git commit -m "update" && git push`.
-- Изменения появятся на сайте через 1–2 минуты.
+```bash
+cd /srv/pulsar && sudo git pull
+cd backend
+sudo .venv/bin/pip install -r requirements.txt          # если менялись зависимости
+sudo .venv/bin/python manage.py migrate                  # если менялись модели
+sudo .venv/bin/python manage.py collectstatic --noinput  # если менялась статика Django
+sudo systemctl restart pulsar
+```
+Изменения фронта (js/css/data в корне) подхватываются сразу — Nginx отдаёт файлы напрямую.
+
+## Частые вопросы
+- **Фронт и API на одном домене** → в `index.html` ничего не меняем: `PULSAR_API_BASE='/api'`
+  и `/admin/` работают через Nginx как есть.
+- **Не открывается кабинет оператора по HTTPS (ошибка CSRF)** → проверьте, что в `.env`
+  указан `ALLOWED_HOSTS=pulsar.jaglion.ru`: домен автоматически попадает в
+  `CSRF_TRUSTED_ORIGINS`.
+- **Каталог пуст** → не выполнен `import_catalog`.
+- **Заявки не сохраняются** → смотрите `journalctl -u pulsar -f` и `sudo nginx -t`.

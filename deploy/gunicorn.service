@@ -1,0 +1,29 @@
+# ПУЛЬСАР — systemd-юнит для Gunicorn (Django-бэкенд).
+# Положите в /etc/systemd/system/pulsar.service, поправьте пути/пользователя, затем:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pulsar
+#   sudo systemctl status pulsar        # проверить, что работает
+# Логи: journalctl -u pulsar -f
+#
+# Предполагается: репозиторий в /srv/pulsar, venv в /srv/pulsar/backend/.venv,
+# запускается из папки backend/ (там manage.py и config/wsgi.py).
+
+[Unit]
+Description=PULSAR Gunicorn (Django)
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/pulsar/backend
+EnvironmentFile=/srv/pulsar/backend/.env
+ExecStart=/srv/pulsar/backend/.venv/bin/gunicorn \
+    --workers 3 \
+    --bind 127.0.0.1:8000 \
+    config.wsgi:application
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

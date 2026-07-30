@@ -92,4 +92,13 @@ CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv(
     'http://localhost:5500,http://127.0.0.1:5500,https://pulsar.zimermans.ru').split(',') if o.strip()]
 # В разработке удобно разрешить любой источник (данные защищены токеном, не cookie).
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CSRF_TRUSTED_ORIGINS = [o for o in CORS_ALLOWED_ORIGINS if o.startswith('http')]
+# Доверенные источники для CSRF (нужно для входа в /admin по HTTPS).
+# Берём и из CORS-списка, и — на всякий — из ALLOWED_HOSTS как https://<host>,
+# чтобы при фронте на том же домене (CORS может быть пустым) логин оператора
+# в кабинет не упирался в проверку CSRF.
+CSRF_TRUSTED_ORIGINS = list({
+    o for o in CORS_ALLOWED_ORIGINS if o.startswith('http')
+} | {
+    'https://' + h for h in ALLOWED_HOSTS
+    if h not in ('localhost', '127.0.0.1', '*') and not h.startswith('.')
+})
