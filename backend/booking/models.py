@@ -25,6 +25,8 @@ CATEGORIES = [
     ('materials', 'Новые материалы'), ('food', 'Функциональное питание'), ('analytics', 'Аналитика'),
 ]
 ORDER_STATUS = [('new', 'Новая'), ('confirmed', 'Подтверждена'), ('rejected', 'Отклонена')]
+CUSTOM_STATUS = [('new', 'Новая'), ('in_work', 'В работе'),
+                 ('done', 'Обработана'), ('rejected', 'Отклонена')]
 
 
 class Company(models.Model):
@@ -219,6 +221,55 @@ class BookingLine(models.Model):
 
     def __str__(self):
         return f'{self.resource_id} · {self.date or "—"}'
+
+
+class CustomRequest(models.Model):
+    """Индивидуальная заявка на подбор.
+
+    Появляется, когда клиент не нашёл нужного в каталоге: вместо того чтобы
+    уйти, он описывает своими словами, что требуется. Для оператора это
+    одновременно и лид, и сигнал, чего в каталоге не хватает.
+    """
+    number = models.CharField('Номер', max_length=20, unique=True)
+    created_at = models.DateTimeField('Создана', auto_now_add=True)
+    status = models.CharField('Статус', max_length=12, choices=CUSTOM_STATUS, default='new')
+
+    company = models.ForeignKey('Company', null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name='custom_requests', verbose_name='Компания')
+    org = models.CharField('Организация', max_length=200, blank=True)
+    contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)
+    email = models.EmailField('Email', blank=True)
+    phone = models.CharField('Телефон', max_length=40, blank=True)
+
+    need = models.TextField('Что требуется')
+    period = models.CharField('Желаемые сроки', max_length=200, blank=True,
+                              help_text='Заполняется по желанию клиента.')
+    # с каким запросом человек ничего не нашёл — подсказывает, чего не хватает в каталоге
+    search_query = models.CharField('Что искали', max_length=300, blank=True)
+    operator_note = models.TextField('Комментарий оператора', blank=True)
+
+    class Meta:
+        verbose_name = 'Индивидуальная заявка'
+        verbose_name_plural = 'Индивидуальные заявки'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.number} — {self.org or self.contact_name or "без организации"}'
+
+    @staticmethod
+    def next_number():
+        import re
+        mx = 1000
+        for n in CustomRequest.objects.values_list('number', flat=True):
+            m = re.match(r'IND-(\d+)$', n or '')
+            if m:
+                mx = max(mx, int(m.group(1)))
+        return f'IND-{mx + 1}'
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            self.number = self.next_number()
+        super().save(*args, **kwargs)
 
 
 # 6 ключевых показателей по Методологии оценки деятельности участников ИНТЦ.

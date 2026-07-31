@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import KPI_META, BookingLine, Company, Kpi, KpiEntry, Order, Resource
+from .models import (KPI_META, BookingLine, Company, CustomRequest, Kpi, KpiEntry,
+                     Order, Resource)
 
 User = get_user_model()
 
@@ -131,6 +132,29 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = ('id', 'number', 'status', 'statusLabel', 'created_at', 'org', 'note',
                   'changeRequest', 'subtotal', 'discount', 'total', 'resident', 'lines')
+
+
+class CustomRequestSerializer(serializers.ModelSerializer):
+    """Приём индивидуальной заявки на подбор.
+
+    Контакты для гостя обязательны — иначе оператору некуда отвечать.
+    Для вошедшей компании они подставляются из профиля во view.
+    """
+    class Meta:
+        model = CustomRequest
+        fields = ('need', 'period', 'search_query', 'org', 'contact_name', 'email', 'phone')
+        extra_kwargs = {
+            'need': {'required': True, 'allow_blank': False},
+            'period': {'required': False, 'allow_blank': True},
+            'search_query': {'required': False, 'allow_blank': True},
+        }
+
+    def validate_need(self, v):
+        v = (v or '').strip()
+        if len(v) < 10:
+            raise serializers.ValidationError(
+                'Опишите подробнее, что требуется — так оператор сможет помочь.')
+        return v[:4000]
 
 
 class ResourceSerializer(serializers.ModelSerializer):

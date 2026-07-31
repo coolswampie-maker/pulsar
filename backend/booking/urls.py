@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import (AllBusyView, AssistView, KpiEntriesView, KpiEntryView, KpiExtractView, KpiView,
+from .views import (AllBusyView, AssistView, CustomRequestView, KpiEntriesView, KpiEntryView, KpiExtractView, KpiView,
                     LoginView, MeView, OrderViewSet, RegisterView, ResourceViewSet)
 
 router = DefaultRouter()
@@ -11,6 +11,7 @@ router.register('orders', OrderViewSet, basename='order')
 urlpatterns = [
     path('busy/', AllBusyView.as_view(), name='busy-all'),
     path('assist/', AssistView.as_view(), name='assist'),
+    path('custom-request/', CustomRequestView.as_view(), name='custom-request'),
     path('auth/register/', RegisterView.as_view(), name='auth-register'),
     path('auth/login/', LoginView.as_view(), name='auth-login'),
     path('auth/me/', MeView.as_view(), name='auth-me'),

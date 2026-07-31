@@ -10,8 +10,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .assist import assist
-from .models import KPI_KEYS, BusySlot, Kpi, KpiEntry, Order, Resource
-from .serializers import (CompanySerializer, KpiEntrySerializer, KpiSerializer,
+from .models import KPI_KEYS, BusySlot, CustomRequest, Kpi, KpiEntry, Order, Resource
+from .serializers import (CompanySerializer, CustomRequestSerializer,
+                          KpiEntrySerializer, KpiSerializer,
                           OrderCreateSerializer, OrderListSerializer, RegisterSerializer,
                           ResourceSerializer)
 
@@ -158,6 +159,44 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.Gene
         order.change_request = msg
         order.save(update_fields=['change_request'])
         return Response({'ok': True, 'changeRequest': msg})
+
+
+class CustomRequestView(APIView):
+    """POST /api/custom-request/ — индивидуальная заявка на подбор.
+
+    Клиент ничего не нашёл в каталоге и описывает потребность словами.
+    Гость указывает контакты сам; у вошедшей компании они берутся из профиля.
+    Ограничение частоты — то же, что у подбора: форма публичная.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [AssistThrottle]
+
+    def post(self, request):
+        ser = CustomRequestSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        company = getattr(getattr(request, 'user', None), 'company', None)
+        if company:
+            org = company.name
+            contact = company.contact_name
+            email = company.user.email
+            phone = company.phone
+        else:
+            org = (d.get('org') or '').strip()
+            contact = (d.get('contact_name') or '').strip()
+            email = (d.get('email') or '').strip()
+            phone = (d.get('phone') or '').strip()
+            if not contact or not (email or phone):
+                return Response(
+                    {'detail': 'Укажите контактное лицо и e-mail или телефон — '
+                               'иначе мы не сможем ответить.'}, status=400)
+
+        req = CustomRequest.objects.create(
+            company=company, org=org, contact_name=contact, email=email, phone=phone,
+            need=d['need'], period=(d.get('period') or '').strip()[:200],
+            search_query=(d.get('search_query') or '').strip()[:300])
+        return Response({'ok': True, 'id': req.number}, status=201)
 
 
 # ---------- авторизация компании ----------

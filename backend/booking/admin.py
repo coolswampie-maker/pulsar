@@ -9,7 +9,8 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
-from .models import BookingLine, BusySlot, Company, Kpi, KpiEntry, Order, Resource
+from .models import (BookingLine, BusySlot, Company, CustomRequest, Kpi, KpiEntry,
+                     Order, Resource)
 
 # Управление доступом (пока за всё отвечает один администратор) — прячем
 # стандартный блок «Пользователи и группы», чтобы не путал в CRM.
@@ -388,6 +389,44 @@ def _times_overlap(a_start, a_end, b_start, b_end):
     if a_start is None or b_start is None:
         return True
     return a_start < b_end and b_start < a_end
+
+
+@admin.register(CustomRequest)
+class CustomRequestAdmin(RuTitlesMixin, admin.ModelAdmin):
+    """Индивидуальные заявки: клиент не нашёл нужного и описал потребность.
+
+    Помимо лида это ещё и обратная связь по каталогу — поле «Что искали»
+    показывает, каких позиций людям не хватает.
+    """
+    ru_plural = 'Индивидуальные заявки'
+    ru_add = 'Добавление индивидуальной заявки'
+    ru_change = 'Обработка индивидуальной заявки'
+    list_display = ('number', 'short_need', 'org', 'contact_name', 'period', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('number', 'need', 'org', 'contact_name', 'email', 'phone', 'search_query')
+    readonly_fields = ('number', 'created_at', 'search_query')
+    list_editable = ('status',)
+    actions = ['mark_in_work', 'mark_done']
+    fieldsets = (
+        ('Заявка', {'fields': ('number', 'created_at', 'status', 'need', 'period', 'search_query')}),
+        ('Контакты', {'fields': ('company', 'org', 'contact_name', 'email', 'phone')}),
+        ('Работа оператора', {'fields': ('operator_note',)}),
+    )
+
+    @admin.display(description='Что требуется')
+    def short_need(self, obj):
+        t = (obj.need or '').replace('\n', ' ')
+        return t[:70] + ('…' if len(t) > 70 else '')
+
+    @admin.action(description='Взять в работу')
+    def mark_in_work(self, request, queryset):
+        n = queryset.update(status='in_work')
+        self.message_user(request, f'В работе: {n}')
+
+    @admin.action(description='Отметить обработанными')
+    def mark_done(self, request, queryset):
+        n = queryset.update(status='done')
+        self.message_user(request, f'Обработано: {n}')
 
 
 @admin.register(BusySlot)

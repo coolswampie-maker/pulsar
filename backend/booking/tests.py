@@ -13,7 +13,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from booking.models import BookingLine, BusySlot, Company, Kpi, Order, Resource
+from booking.models import (BookingLine, BusySlot, Company, CustomRequest, Kpi,
+                            Order, Resource)
 
 # Даты тестов считаем от сегодняшнего дня, а не фиксируем в календаре: модели и
 # планировщик отклоняют бронь в прошлом, поэтому зашитые даты со временем
@@ -836,3 +837,75 @@ class AssistTests(TestCase):
         # лишние пробелы при копировании из консоли
         with override_settings(YANDEX_FOLDER_ID='b1gtest', YANDEX_MODEL='  yandexgpt-lite/latest  '):
             self.assertEqual(model_uri(), full)
+
+
+class CustomRequestTests(TestCase):
+    """Индивидуальная заявка на подбор: клиент не нашёл нужного в каталоге."""
+
+    def setUp(self):
+        self.c = Client()
+
+    def _post(self, **kw):
+        data = {'need': 'Нужен источник синхротронного излучения для белковой кристаллографии'}
+        data.update(kw)
+        r = self.c.post('/api/custom-request/', data=json.dumps(data),
+                        content_type='application/json')
+        return r, (json.loads(r.content) if r.content else {})
+
+    def test_guest_request_saved(self):
+        r, d = self._post(contact_name='Иванов Иван', email='i@i.ru',
+                          org='ООО Тест', period='до октября',
+                          search_query='синхротрон')
+        self.assertEqual(r.status_code, 201)
+        self.assertTrue(d['id'].startswith('IND-'))
+        req = CustomRequest.objects.get(number=d['id'])
+        self.assertEqual(req.org, 'ООО Тест')
+        self.assertEqual(req.period, 'до октября')
+        # контекст поиска сохраняется: показывает, чего не хватает каталогу
+        self.assertEqual(req.search_query, 'синхротрон')
+        self.assertEqual(req.status, 'new')
+        self.assertIsNone(req.company)
+
+    def test_short_need_rejected(self):
+        r, _ = self._post(need='мало', contact_name='И', email='i@i.ru')
+        self.assertEqual(r.status_code, 400)
+
+    def test_guest_without_contacts_rejected(self):
+        """Без способа связи заявка бесполезна."""
+        r, _ = self._post()
+        self.assertEqual(r.status_code, 400)
+        r, _ = self._post(contact_name='Иванов')      # имя есть, связи нет
+        self.assertEqual(r.status_code, 400)
+
+    def test_company_contacts_taken_from_profile(self):
+        u = User.objects.create_user(username='co@x.ru', email='co@x.ru', password='Nauka2026lab')
+        company = Company.objects.create(user=u, name='ООО «Из кабинета»',
+                                         contact_name='Петров', phone='+79990001122')
+        token = self.c.post('/api/auth/login/',
+                            data=json.dumps({'email': 'co@x.ru', 'password': 'Nauka2026lab'}),
+                            content_type='application/json')
+        tok = json.loads(token.content)['token']
+        r = self.c.post('/api/custom-request/',
+                        data=json.dumps({'need': 'Нужна установка для криоэлектронной микроскопии'}),
+                        content_type='application/json',
+                        HTTP_AUTHORIZATION='Token ' + tok)
+        self.assertEqual(r.status_code, 201)
+        req = CustomRequest.objects.get(number=json.loads(r.content)['id'])
+        self.assertEqual(req.company, company)
+        self.assertEqual(req.org, 'ООО «Из кабинета»')
+        self.assertEqual(req.email, 'co@x.ru')
+
+    def test_numbers_increment(self):
+        a, _ = self._post(contact_name='А', email='a@a.ru')
+        b, _ = self._post(contact_name='Б', email='b@b.ru')
+        na = json.loads(a.content)['id']
+        nb = json.loads(b.content)['id']
+        self.assertEqual(int(nb.split('-')[1]), int(na.split('-')[1]) + 1)
+
+    def test_operator_sees_section(self):
+        self._post(contact_name='И', email='i@i.ru')
+        User.objects.create_superuser('op2', 'op2@t.t', 'pw')
+        self.c.login(username='op2', password='pw')
+        r = self.c.get('/admin/booking/customrequest/')
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'IND-')

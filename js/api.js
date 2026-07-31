@@ -106,6 +106,11 @@
     }
   };
 
+  /* ---------- индивидуальная заявка на подбор ---------- */
+  P.customRequestApi = {
+    send:function(d){ return postJson('/custom-request/', d); }
+  };
+
   /* ---------- заявки компании ---------- */
   P.ordersApi = {
     list:function(){ return P.apiFetch('/orders/').then(parse); },

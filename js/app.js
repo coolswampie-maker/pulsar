@@ -314,8 +314,8 @@
         }
         var items=(res.data&&res.data.items)||[];
         if(!items.length){
-          out.innerHTML='<div class="cline-meta">По такому описанию ничего не нашлось. '+
-            'Попробуйте иначе — или напишите нам, подберём вручную.</div>';
+          out.innerHTML=noMatchHtml('По такому описанию ничего не нашлось.');
+          bindPick(q);
           return;
         }
         out.innerHTML='<div class="assist-hits">'+items.map(function(i){
@@ -324,11 +324,87 @@
             (i.why?'<div class="assist-hit-w">'+esc(i.why)+'</div>':'')+
             '<div class="assist-hit-p">'+fmt(i.priceValue)+' / '+esc(i.priceUnit)+'</div>'+
           '</a>';
-        }).join('')+'</div>';
+        }).join('')+
+        // даже когда что-то нашлось, оставляем выход на индивидуальную заявку:
+        // подобранное может не подойти, и человек не должен уходить ни с чем
+        '<div class="pick-more">Не то, что нужно? '+
+          '<button class="pick-link" id="pickopen">Оставить заявку на подбор</button></div>'+
+        '<div id="pickbox"></div>';
+        bindPick(q);
       });
     }
     btn.onclick=run;
     inp.onkeydown=function(e){ if(e.key==='Enter') run(); };
+  }
+
+  /* ---- индивидуальная заявка на подбор ----
+     Если в каталоге нужного нет, человек не должен упираться в тупик:
+     предлагаем описать потребность словами. Для оператора это и заявка,
+     и подсказка, каких позиций каталогу не хватает. */
+  function noMatchHtml(lead){
+    return '<div class="pick-none">'+
+      '<div class="pick-none-t">'+esc(lead)+'</div>'+
+      '<p class="pick-none-p">Оставьте индивидуальную заявку — оператор ПУЛЬСАР '+
+        'подберёт оборудование под вашу задачу, в том числе у партнёров МГУ.</p>'+
+      '<button class="btn btn-brass" id="pickopen">Оставить заявку на подбор</button>'+
+      '<div id="pickbox"></div>'+
+    '</div>';
+  }
+  // query — то, что человек уже написал: переносим в форму, чтобы не набирать заново
+  function bindPick(query){
+    var open=el('pickopen'); if(!open) return;
+    open.onclick=function(){ drawPickForm(query); };
+  }
+  function drawPickForm(query){
+    var box=el('pickbox'); if(!box) return;
+    var c=P.company && P.company();
+    var known=P.isLogged && P.isLogged() && c;
+    box.innerHTML='<div class="pick-form">'+
+      '<div class="form-grid">'+
+        '<div class="field full"><label for="pk_need">Что требуется *</label>'+
+          '<textarea id="pk_need" rows="3" placeholder="Опишите оборудование, метод или задачу — чем подробнее, тем точнее подберём">'+esc(query||'')+'</textarea></div>'+
+        '<div class="field full"><label for="pk_period">Желаемые сроки</label>'+
+          '<input id="pk_period" placeholder="Например: до конца сентября, или 2–3 недели в октябре"></div>'+
+        (known ? '' :
+        '<div class="field"><label for="pk_org">Организация</label><input id="pk_org" placeholder="ООО «Название»"></div>'+
+        '<div class="field"><label for="pk_name">Контактное лицо *</label><input id="pk_name" placeholder="Иванов Иван"></div>'+
+        '<div class="field"><label for="pk_email">Email *</label><input id="pk_email" type="email" placeholder="ivan@company.ru"></div>'+
+        '<div class="field"><label for="pk_phone">Телефон</label><input id="pk_phone" placeholder="+7 (___) ___-__-__"></div>')+
+      '</div>'+
+      (known ? '<p class="sub">Заявка от <strong>'+esc(c.name)+'</strong> ('+esc(c.email)+') — '+
+               'контакты возьмём из профиля.</p>' : '')+
+      '<div id="pk_msg"></div>'+
+      '<button class="btn btn-brass" id="pk_send">Отправить заявку</button>'+
+    '</div>';
+    el('pk_need').focus();
+    el('pk_send').onclick=function(){ sendPick(query, known); };
+  }
+  function sendPick(query, known){
+    var msg=el('pk_msg'), btn=el('pk_send');
+    var need=el('pk_need').value.trim();
+    if(need.length<10){ msg.innerHTML='<div class="form-msg err">Опишите подробнее, что требуется.</div>'; return; }
+    var d={ need:need, period:el('pk_period').value.trim(), search_query:query||'' };
+    if(!known){
+      d.org=el('pk_org').value.trim();
+      d.contact_name=el('pk_name').value.trim();
+      d.email=el('pk_email').value.trim();
+      d.phone=el('pk_phone').value.trim();
+      if(!d.contact_name || !d.email){
+        msg.innerHTML='<div class="form-msg err">Укажите контактное лицо и e-mail — иначе мы не сможем ответить.</div>'; return;
+      }
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)){
+        msg.innerHTML='<div class="form-msg err">Проверьте e-mail.</div>'; return;
+      }
+    }
+    btn.disabled=true; btn.textContent='Отправка…';
+    P.customRequestApi.send(d).then(function(res){
+      btn.disabled=false; btn.textContent='Отправить заявку';
+      if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg||'Не удалось отправить. Попробуйте ещё раз.')+'</div>'; return; }
+      el('pickbox').innerHTML='<div class="pick-done">'+icon('check',20)+
+        '<div><strong>Заявка № '+esc(res.data.id)+' принята.</strong><br>'+
+        'Оператор ПУЛЬСАР свяжется с вами и предложит варианты.</div></div>';
+      toast('Заявка на подбор отправлена');
+    });
   }
 
   /* ---- поиск по каталогу ----
@@ -412,7 +488,10 @@
       (q ? ' <span class="cline-meta">· по всему каталогу</span>' : '');
     grid.innerHTML = list.length ? list.map(resCard).join('')
       : '<div class="empty" style="grid-column:1/-1"><h3>Ничего не найдено</h3>'+
-        '<p>Попробуйте другой запрос — или опишите задачу своими словами в поле выше, подберём подходящее.</p></div>';
+        '<p>Попробуйте другой запрос или опишите задачу своими словами в поле выше.</p>'+
+        noMatchHtml('Нужного нет в каталоге?')+'</div>';
+    // кнопка заявки живёт и в пустом результате обычного поиска
+    if(!list.length) bindPick(q);
   }
 
   /* ==========================================================

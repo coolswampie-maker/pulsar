@@ -771,3 +771,22 @@ a.val:hover{color:var(--brass);}
   .assist-row .btn{width:100%;}
   .assist-hits{grid-template-columns:1fr;}
 }
+
+/* ============================================================ ЗАЯВКА НА ПОДБОР */
+.pick-none{background:#fff;border:1px dashed var(--brass-soft);border-radius:var(--r);
+  padding:18px 20px;margin-top:14px;text-align:left;}
+.pick-none-t{font-weight:700;color:var(--navy);margin-bottom:6px;}
+.pick-none-p{font-size:14px;color:var(--ink-soft);line-height:1.5;margin-bottom:14px;max-width:56ch;}
+.pick-more{margin-top:14px;font-size:14px;color:var(--ink-soft);}
+.pick-link{background:none;border:none;padding:0;font:inherit;color:var(--brass);
+  font-weight:600;cursor:pointer;text-decoration:underline;}
+.pick-link:hover{color:var(--navy);}
+.pick-form{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
+.pick-form textarea{width:100%;border:1px solid var(--line);border-radius:var(--r);
+  padding:11px 14px;font:inherit;font-size:15px;background:#fff;resize:vertical;min-height:76px;}
+.pick-form textarea:focus{outline:none;border-color:var(--brass);}
+.pick-form textarea:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+.pick-done{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:16px 18px;
+  background:var(--ok-bg);color:var(--ok);border-radius:var(--r);font-size:14px;line-height:1.5;}
+.pick-done svg{flex:0 0 auto;margin-top:2px;}
+@media(max-width:640px){ .pick-none{padding:14px 16px;} }
