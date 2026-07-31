@@ -18,6 +18,15 @@ from .models import (BookingLine, BusySlot, Company, CustomRequest, Kpi, KpiEntr
 admin.site.unregister(Group)
 admin.site.unregister(User)
 
+# Токены — ключи сессий компаний, они выдаются при входе автоматически.
+# Оператору там делать нечего, а кнопка «Добавить токен» вредна: вручную
+# созданный токен это выданный доступ к API от имени пользователя.
+try:
+    from rest_framework.authtoken.models import TokenProxy
+    admin.site.unregister(TokenProxy)
+except (ImportError, admin.sites.NotRegistered):   # на случай смены версии DRF
+    pass
+
 
 class RuTitlesMixin:
     """Человеческие заголовки страниц: Django по умолчанию ставит именительный
