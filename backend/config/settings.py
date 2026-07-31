@@ -97,6 +97,11 @@ YANDEX_LLM_URL = os.getenv(
 # а локальный подбор ответит мгновенно.
 ASSIST_TIMEOUT = float(os.getenv('ASSIST_TIMEOUT', '8'))
 
+# Журнал запросов к подбору — обычный текстовый файл, не база и не CRM.
+# Пустое значение выключает запись целиком.
+# Файл лежит внутри backend/, который Nginx не отдаёт наружу.
+ASSIST_LOG_FILE = os.getenv('ASSIST_LOG_FILE', str(BASE_DIR / 'logs' / 'assist.log'))
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     'DEFAULT_AUTHENTICATION_CLASSES': [

@@ -12,3 +12,5 @@ db.sqlite3
 !.env.example
 staticfiles/
 media/
+# журнал запросов к подбору — данные сервера, а не код
+logs/

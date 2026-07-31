@@ -9,6 +9,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from . import querylog
 from .assist import assist
 from .models import KPI_KEYS, BusySlot, CustomRequest, Kpi, KpiEntry, Order, Resource
 from .serializers import (CompanySerializer, CustomRequestSerializer,
@@ -96,6 +97,8 @@ class AssistView(APIView):
 
         resources = list(Resource.objects.filter(is_active=True))
         picked, mode, reply = assist(query, resources)
+        # запись в журнал не должна влиять на ответ — внутри всё погашено
+        querylog.record(query, mode, len(picked))
         return Response({
             'mode': mode,
             'reply': reply,

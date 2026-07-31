@@ -4,6 +4,7 @@
 рендер страниц админки. Демо-данные не трогаются — тесты идут в отдельной БД.
 """
 import json
+import os
 from datetime import time, timedelta
 
 from django.contrib.auth.models import User
@@ -1066,6 +1067,108 @@ class AssistTests(TestCase):
         for must in ('ПУЛЬСАР', 'языковой модели', 'Не выдавай себя за человека',
                      'ТОЛЬКО из идентификаторов', 'лицензий'):
             self.assertIn(must, SYSTEM_PROMPT)
+
+
+class AssistLogTests(TestCase):
+    """Журнал запросов к подбору — обычный файл на сервере."""
+
+    def setUp(self):
+        import tempfile
+        self.c = Client()
+        cache.clear()
+        call_command('import_catalog')
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, 'logs', 'assist.log')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _ask(self, q):
+        return self.c.post('/api/assist/', data=json.dumps({'query': q}),
+                           content_type='application/json')
+
+    def test_query_written(self):
+        from django.test import override_settings
+        with override_settings(ASSIST_LOG_FILE=self.path):
+            self._ask('нужен ЯМР')
+        with open(self.path, encoding='utf-8') as f:
+            line = f.read().strip()
+        when, mode, found, query = line.split('\t')
+        self.assertEqual(query, 'нужен ЯМР')
+        self.assertEqual(mode, 'local')          # модель в тестах не настроена
+        self.assertTrue(int(found) > 0)
+        self.assertRegex(when, r'^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$')
+
+    def test_licensed_query_written_too(self):
+        """Запрос, отсечённый по лицензиям, тоже должен быть виден оператору."""
+        from django.test import override_settings
+        with override_settings(ASSIST_LOG_FILE=self.path):
+            self._ask('нужен синтез взрывчатых веществ')
+        rows = self._read()
+        self.assertEqual(rows[0]['mode'], 'licensed')
+        self.assertEqual(rows[0]['found'], 0)
+
+    def _read(self):
+        from django.test import override_settings
+
+        from booking import querylog
+        with override_settings(ASSIST_LOG_FILE=self.path):
+            return querylog.read(limit=50)
+
+    def test_tabs_and_newlines_do_not_break_format(self):
+        """Табуляция в запросе разорвала бы строку на лишние колонки."""
+        from django.test import override_settings
+        with override_settings(ASSIST_LOG_FILE=self.path):
+            self._ask('нужен\tЯМР\nи микроскоп')
+        rows = self._read()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['query'], 'нужен ЯМР и микроскоп')
+
+    def test_unwritable_path_does_not_break_response(self):
+        """Нет прав на запись — подбор обязан работать как ни в чём не бывало.
+
+        Это главное свойство журнала: он вспомогательный, и уронить из-за
+        него ответ пользователю недопустимо.
+        """
+        from django.test import override_settings
+        with override_settings(ASSIST_LOG_FILE='/proc/nowhere/assist.log'):
+            r = self._ask('нужен ЯМР')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(json.loads(r.content)['items'])
+
+    def test_logging_can_be_disabled(self):
+        from django.test import override_settings
+        with override_settings(ASSIST_LOG_FILE=''):
+            r = self._ask('нужен ЯМР')
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_filters_and_stats(self):
+        from django.test import override_settings
+
+        from booking import querylog
+        with override_settings(ASSIST_LOG_FILE=self.path):
+            self._ask('нужен ЯМР')                       # что-то найдётся
+            self._ask('нужна печь для обжига керамики')  # ничего
+            empty = querylog.read(only_empty=True)
+            s = querylog.stats()
+        self.assertEqual(len(empty), 1)
+        self.assertIn('печь', empty[0]['query'])
+        self.assertEqual(s['total'], 2)
+        self.assertEqual(s['empty'], 1)
+
+    def test_command_runs(self):
+        from io import StringIO
+
+        from django.test import override_settings
+        with override_settings(ASSIST_LOG_FILE=self.path):
+            self._ask('нужен ЯМР')
+            out = StringIO()
+            call_command('assist_log', '--stats', stdout=out)
+            call_command('assist_log', '-n', '5', stdout=out)
+        self.assertIn('Всего запросов', out.getvalue())
+        self.assertIn('ЯМР', out.getvalue())
 
 
 class CustomRequestTests(TestCase):
