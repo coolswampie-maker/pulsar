@@ -79,6 +79,32 @@ def _expand(word):
     return out
 
 
+# Границы слова для коротких аббревиатур. Буквы обоих алфавитов и цифры —
+# всё остальное (дефис, пробел, скобка) считается границей.
+_ALNUM = '0-9a-zа-яё'
+
+
+def _match(text, word):
+    """Есть ли слово запроса или его синоним в тексте.
+
+    Основу самого слова ищем подстрокой: «сушк» должно находить «сушка».
+    А короткие словарные аббревиатуры — только по границам слова, иначе «ms»
+    из группы масс-спектрометрии совпадает с «AMS» в описании 3D-принтера, а
+    «исп» — с «испытательным», и в подбор лезет совершенно постороннее.
+    """
+    if _stem(word) in text:
+        return True
+    for syn in _expand(word):
+        if syn == word:
+            continue
+        if len(syn) <= 4:
+            if re.search(f'(?<![{_ALNUM}]){re.escape(syn)}(?![{_ALNUM}])', text):
+                return True
+        elif _stem(syn) in text:
+            return True
+    return False
+
+
 def _resource_text(r):
     specs = ' '.join(r.specs or []) if isinstance(r.specs, list) else ''
     return f'{r.title} {r.lab} {specs} {r.description} {r.clean_class}'.lower()
@@ -116,12 +142,10 @@ def rank_local(query, resources):
         title = r.title.lower()
         hits, bonus = 0, 0
         for w in words:
-            # ищем по основам: и слово запроса, и его синонимы
-            variants = {_stem(v) for v in _expand(w)}
-            if any(v in text for v in variants):
+            if _match(text, w):
                 hits += 1
                 # совпадение в названии весомее, чем в длинном описании
-                if any(v in title for v in variants):
+                if _match(title, w):
                     bonus += 1
         if hits:
             scored.append((hits * 10 + bonus, hits, r))

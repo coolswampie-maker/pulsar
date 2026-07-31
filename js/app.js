@@ -107,6 +107,82 @@
   }
 
   /* ==========================================================
+     ИИ-ПОИСК — общий движок для главной и каталога
+     ==========================================================
+     Одно поле на оба сценария: и «масс-спектрометр» (поиск по каталогу),
+     и «нужно определить примеси в субстанции» (подбор под задачу). Различать
+     их пользователь не обязан — разбирается сервер.
+
+     Если бэкенд недоступен (статическая сборка, сеть), поле не должно
+     умирать: молча переходим на поиск по каталогу прямо в браузере. Но
+     подписываем результат честно — выдавать его за работу ИИ нельзя. */
+  function aiBadge(cls){
+    return '<span class="ai-badge'+(cls?' '+cls:'')+'" aria-label="Работает на искусственном интеллекте">'+
+      '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">'+
+        '<path d="M12 2.6l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1-5.1-1.9 5.1-1.9z"/>'+
+        '<path d="M18.6 14.4l.85 2.25 2.25.85-2.25.85-.85 2.25-.85-2.25-2.25-.85 2.25-.85z"/>'+
+      '</svg>AI</span>';
+  }
+  function aiHitsHtml(items){
+    return '<div class="assist-hits">'+items.map(function(i){
+      return '<a class="assist-hit" href="#/resource/'+esc(i.id)+'">'+
+        '<div class="assist-hit-t">'+esc(i.title)+'</div>'+
+        (i.why?'<div class="assist-hit-w">'+esc(i.why)+'</div>':'')+
+        '<div class="assist-hit-p">'+fmt(i.priceValue)+' / '+esc(i.priceUnit)+'</div>'+
+      '</a>';
+    }).join('')+'</div>';
+  }
+  // запасной поиск в браузере — тем же алгоритмом, что и в каталоге
+  function localSearch(q){
+    return P.getResources().map(function(r){ return { r:r, s:scoreQuery(r, q.toLowerCase()) }; })
+      .filter(function(x){ return x.s>0; })
+      .sort(function(a,b){ return b.s-a.s; })
+      .slice(0,4)
+      .map(function(x){ return { id:x.r.id, title:x.r.title, why:'',
+                                 priceValue:x.r.priceValue, priceUnit:x.r.priceUnit }; });
+  }
+  // out — куда рисовать; catalogLink — показывать ли «показать всё в каталоге»;
+  // done — вызывается после отрисовки (вернуть кнопку в рабочее состояние)
+  function runAssist(q, out, catalogLink, done){
+    done=done||function(){};
+    if(!out) return done();
+    q=(q||'').trim();
+    if(!q){ out.innerHTML=''; return done(); }
+    out.innerHTML='<div class="ai-wait">'+aiBadge()+'Подбираем…</div>';
+    P.assistApi.ask(q).then(function(res){
+      var d=(res && res.ok) ? (res.data||{}) : null;
+      var items = d ? (d.items||[]) : localSearch(q);
+      var reply = d ? (d.reply||'') : '';
+      var mode  = d ? (d.mode||'') : 'offline';
+      // честная подпись: ИИ ставим только там, где отвечала модель
+      var src = mode==='ai' ? 'Подобрал ИИ-ассистент'
+              : mode==='licensed' ? ''
+              : 'Подобрано поиском по каталогу';
+      var html = (reply ? '<p class="assist-reply">'+esc(reply)+'</p>' : '');
+      if(items.length){
+        html += aiHitsHtml(items);
+        if(src) html += '<div class="ai-src">'+(mode==='ai'?aiBadge('mini'):'')+esc(src)+'</div>';
+        if(catalogLink) html += '<div class="pick-more">'+
+          '<button class="pick-link" id="aiall">Показать все совпадения в каталоге →</button></div>';
+        html += '<div class="pick-more">Не то, что нужно? '+
+          '<button class="pick-link" id="pickopen">Оставить заявку на подбор</button></div>'+
+          '<div id="pickbox"></div>';
+        out.innerHTML=html;
+      } else {
+        // реплика уже всё объяснила — второй раз то же не повторяем
+        out.innerHTML=html+noMatchHtml(reply?'':'По такому описанию ничего не нашлось.');
+      }
+      bindPick(q);
+      var all=el('aiall');
+      if(all) all.onclick=function(){
+        catState.q=q; catState.cat=''; catState.onlyFree=false; catState.sort='default';
+        location.hash='#/catalog';
+      };
+      done();
+    });
+  }
+
+  /* ==========================================================
      ГЛАВНАЯ
      ========================================================== */
   function viewHome(){
@@ -136,16 +212,17 @@
         '<div class="eyebrow">Платформа лабораторной инфраструктуры</div>'+
         '<h1>Найдите и забронируйте <em>научную инфраструктуру</em> МГУ</h1>'+
         '<p class="lead">Приборы, чистые комнаты, специалисты и аналитические услуги ИНТЦ МГУ «Воробьёвы горы» — в аренду по заявке.</p>'+
-        '<form class="searchbar" id="hsearch" onsubmit="return false">'+
-          '<select id="hsel" aria-label="Раздел">'+
-            '<option value="equipment">Оборудование</option>'+
-            '<option value="room">Лаборатории</option>'+
-            '<option value="specialist">Специалисты</option>'+
-            '<option value="service">Услуги</option>'+
-          '</select>'+
-          '<input id="hq" aria-label="Поиск по каталогу" placeholder="Масс-спектрометр, чистая комната, ICP-MS…">'+
+        '<div class="hs-cap">'+aiBadge()+
+          '<span>Найдите прибор по названию — или просто опишите задачу</span></div>'+
+        '<form class="searchbar ai-bar" id="hsearch" onsubmit="return false">'+
+          '<input id="hq" aria-label="Поиск по каталогу или описание задачи" '+
+            'placeholder="Масс-спектрометр — или: нужно определить примеси в субстанции">'+
           '<button id="hgo" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Найти</button>'+
         '</form>'+
+        '<div class="hs-ex">'+['чистая комната под GMP','посмотреть поверхность материала','высушить опытную партию']
+          .map(function(x){ return '<button class="hs-chip" type="button" data-q="'+esc(x)+'">'+esc(x)+'</button>'; }).join('')+
+        '</div>'+
+        '<div id="hres" class="hs-res"></div>'+
         '<div class="chips">'+
           typeChip('room','Лаборатории')+typeChip('equipment','Оборудование')+
           typeChip('specialist','Специалисты')+typeChip('service','Услуги под ключ')+
@@ -209,13 +286,21 @@
     , mountHome);
   }
   function mountHome(){
+    var inp=el('hq'), out=el('hres'), btn=el('hgo');
+    if(!inp||!out) return;
+    // Раньше здесь был выбор раздела и переход в каталог. Теперь ответ даётся
+    // сразу на главной: человек не обязан знать, прибор ему нужен или услуга.
     var go=function(){
-      var t=el('hsel').value, q=el('hq').value.trim();
-      catState.type=t; catState.q=q; catState.cat=''; catState.onlyFree=false; catState.sort='default';
-      location.hash='#/catalog';
+      var q=inp.value.trim();
+      if(!q){ out.innerHTML=''; return; }
+      if(btn) btn.disabled=true;
+      runAssist(q, out, true, function(){ if(btn) btn.disabled=false; });
     };
-    if(el('hgo')) el('hgo').onclick=go;
-    if(el('hq')) el('hq').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); go(); } });
+    if(btn) btn.onclick=go;
+    inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); go(); } });
+    qsAll('.hs-chip').forEach(function(b){
+      b.onclick=function(){ inp.value=b.getAttribute('data-q'); go(); };
+    });
   }
 
   /* ==========================================================
@@ -278,18 +363,17 @@
     el('fclear').onclick=function(){ catState.q='';catState.cat='';catState.onlyFree=false;catState.sort='default'; renderCatalog(); };
     drawList();
   }
-  /* ---- подбор по описанию задачи ----
-     Обычный поиск ищет по словам, а тут человек описывает задачу своими
-     словами («нужно определить примеси в субстанции»). Запрос уходит на
-     бэкенд, тот спрашивает модель и возвращает существующие позиции. Если
-     бэкенда нет (статическая сборка) или он не ответил — блок молча
-     скрывается, обычный поиск при этом работает как обычно. */
+  /* ---- ИИ-подбор в каталоге ----
+     Тот же движок, что на главной (runAssist): и по названию прибора, и по
+     описанию задачи. Фильтры слева остаются обычными — они про сужение
+     списка, а не про поиск. */
   function assistBoxHtml(){
     return '<div class="assist" id="assistbox">'+
       '<div class="assist-in">'+
-        '<label class="assist-cap" for="aq">Не знаете, что выбрать? Опишите задачу своими словами</label>'+
+        '<label class="assist-cap" for="aq">'+aiBadge()+
+          'Найдите прибор по названию — или опишите задачу своими словами</label>'+
         '<div class="assist-row">'+
-          '<input id="aq" placeholder="Например: нужно определить примеси в субстанции">'+
+          '<input id="aq" placeholder="Масс-спектрометр — или: нужно определить примеси в субстанции">'+
           '<button class="btn btn-brass" id="aqgo">Подобрать</button>'+
         '</div>'+
         '<div id="aqres"></div>'+
@@ -300,47 +384,13 @@
     var inp=el('aq'), btn=el('aqgo'), out=el('aqres');
     if(!inp||!btn) return;
     function run(){
-      var q=inp.value.trim();
-      if(!q){ out.innerHTML=''; return; }
       btn.disabled=true; btn.textContent='Подбираем…';
-      out.innerHTML='<div class="cline-meta">Ищем подходящее…</div>';
-      P.assistApi.ask(q).then(function(res){
+      runAssist(inp.value, out, false, function(){
         btn.disabled=false; btn.textContent='Подобрать';
-        if(!res.ok){
-          // бэкенд недоступен — не пугаем, предлагаем обычный поиск
-          out.innerHTML='<div class="cline-meta">Подбор сейчас недоступен. '+
-            'Воспользуйтесь поиском слева.</div>';
-          return;
-        }
-        var items=(res.data&&res.data.items)||[];
-        // reply — ответ ассистента словами: он есть всегда, в том числе когда
-        // позиций нет (спросили «кто ты», тема требует разрешений, посторонний
-        // вопрос). Без него человек видел бы пустоту и не понимал, что произошло.
-        var reply=(res.data&&res.data.reply)||'';
-        var replyHtml=reply?'<p class="assist-reply">'+esc(reply)+'</p>':'';
-        if(!items.length){
-          out.innerHTML=replyHtml+
-            noMatchHtml(reply?'':'По такому описанию ничего не нашлось.');
-          bindPick(q);
-          return;
-        }
-        out.innerHTML=replyHtml+'<div class="assist-hits">'+items.map(function(i){
-          return '<a class="assist-hit" href="#/resource/'+esc(i.id)+'">'+
-            '<div class="assist-hit-t">'+esc(i.title)+'</div>'+
-            (i.why?'<div class="assist-hit-w">'+esc(i.why)+'</div>':'')+
-            '<div class="assist-hit-p">'+fmt(i.priceValue)+' / '+esc(i.priceUnit)+'</div>'+
-          '</a>';
-        }).join('')+
-        // даже когда что-то нашлось, оставляем выход на индивидуальную заявку:
-        // подобранное может не подойти, и человек не должен уходить ни с чем
-        '<div class="pick-more">Не то, что нужно? '+
-          '<button class="pick-link" id="pickopen">Оставить заявку на подбор</button></div>'+
-        '<div id="pickbox"></div>';
-        bindPick(q);
       });
     }
     btn.onclick=run;
-    inp.onkeydown=function(e){ if(e.key==='Enter') run(); };
+    inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); run(); } };
   }
 
   /* ---- индивидуальная заявка на подбор ----
@@ -448,6 +498,15 @@
     }
     return out;
   }
+  // Короткие аббревиатуры ищем по границам слова. Подстрокой «ms» совпадает с
+  // «AMS» в описании 3D-принтера, а «исп» — с «испытательным», и в результаты
+  // лезет постороннее. Для длинных основ подстрока остаётся: «сушк» → «сушка».
+  var ALNUM='0-9a-zа-яё';
+  function hasTerm(text, term){
+    if(term.length<=4) return new RegExp('(?<!['+ALNUM+'])'+
+      term.replace(/[.*+?^${}()|[\]\\-]/g,'\\$&')+'(?!['+ALNUM+'])').test(text);
+    return text.indexOf(term)>=0;
+  }
   // Оценка соответствия: 0 — не подходит. Совпадение в названии весомее, чем
   // в описании, поэтому нужное всплывает наверх списка.
   function scoreQuery(r, q){
@@ -457,15 +516,16 @@
     else if(text.indexOf(q)>=0) score+=40;
     // фразу тоже прогоняем через словарь: «ядерный магнитный резонанс» → «ямр»
     expandTerm(q).forEach(function(v){
-      if(v!==q && title.indexOf(v)>=0) score+=60;
-      else if(v!==q && text.indexOf(v)>=0) score+=20;
+      if(v!==q && hasTerm(title,v)) score+=60;
+      else if(v!==q && hasTerm(text,v)) score+=20;
     });
     var words=q.split(/[\s,;]+/).filter(function(w){ return w.length>1; });
     var matched=0;
     words.forEach(function(w){
-      var vars=expandTerm(w).map(stem);
-      var inTitle=vars.some(function(v){ return title.indexOf(v)>=0; });
-      var inText=vars.some(function(v){ return text.indexOf(v)>=0; });
+      // основу слова — подстрокой, словарные аббревиатуры — по границам
+      var vars=expandTerm(w).map(function(v){ return v===w?stem(v):v; });
+      var inTitle=vars.some(function(v){ return v===stem(w)?title.indexOf(v)>=0:hasTerm(title,v); });
+      var inText =vars.some(function(v){ return v===stem(w)?text.indexOf(v)>=0 :hasTerm(text,v); });
       if(inTitle){ score+=12; matched++; }
       else if(inText){ score+=4; matched++; }
     });

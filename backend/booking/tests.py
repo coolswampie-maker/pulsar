@@ -961,6 +961,35 @@ class AssistTests(TestCase):
         titles = ' '.join(r.title for r in items).lower()
         self.assertNotIn('принтер', titles)
 
+    def test_short_abbreviation_needs_word_boundary(self):
+        """«ms» не должно совпадать с «AMS» внутри чужого описания.
+
+        Из-за подстроки в подбор масс-спектрометров попадал 3D-принтер:
+        у него в описании «мультиматериальная подача AMS».
+        """
+        from booking.assist import rank_local
+
+        from booking.models import Resource
+        res = list(Resource.objects.filter(is_active=True))
+        items, _ = rank_local('масс-спектрометр', res)
+        titles = ' '.join(r.title for r in items).lower()
+        self.assertIn('масс-спектрометр', titles)     # нужное на месте
+        self.assertNotIn('принтер', titles)           # постороннее ушло
+
+    def test_abbreviation_still_found(self):
+        """Границы слов не должны сломать сам поиск по аббревиатурам."""
+        from booking.assist import _match, rank_local
+
+        from booking.models import Resource
+        res = list(Resource.objects.filter(is_active=True))
+        for q in ('ЯМР', 'СЭМ', 'ВЭЖХ'):
+            items, _ = rank_local(q, res)
+            self.assertTrue(items, f'ничего не нашлось по «{q}»')
+        # аббревиатура через дефис — дефис это граница, а не буква
+        self.assertTrue(_match('ямр-спектрометр bruker', 'ямр'))
+        # а основу длинного слова по-прежнему ищем подстрокой
+        self.assertTrue(_match('лиофильная сушка christ', 'сушка'))
+
     def test_stopwords_ignored(self):
         """«нужно», «для», «пожалуйста» не должны ничего подбирать сами по себе."""
         r, d = self._post('нужно для нашей работы, подскажите пожалуйста')

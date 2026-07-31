@@ -481,6 +481,7 @@ a.val:hover{color:var(--brass);}
 .searchbar input{flex:1;border:none;background:transparent;padding:0 16px;font-size:15.5px;outline:none;min-width:0;}
 .searchbar button{background:var(--navy);color:#fff;font-weight:700;font-size:15px;padding:13px 26px;border-radius:8px;display:inline-flex;align-items:center;gap:8px;transition:.15s;}
 .searchbar button:hover{background:var(--navy-deep);}
+.searchbar button:disabled{opacity:.62;cursor:default;}
 .chips{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:20px;}
 .chip-link{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:22px;padding:7px 15px;font-size:13.5px;font-weight:600;color:var(--navy);transition:.15s;}
 .chip-link:hover{border-color:var(--navy);}
@@ -608,8 +609,21 @@ a.val:hover{color:var(--brass);}
 .hero2 h1{font-size:clamp(34px,4.3vw,54px);font-weight:800;letter-spacing:-.035em;line-height:1.05;margin-bottom:16px;color:var(--navy);}
 .hero2 h1 em{font-style:normal;color:var(--brass);}
 .hero2 .lead{font-size:17.5px;color:var(--ink-soft);max-width:48ch;margin-bottom:24px;}
-.hero2 .searchbar{margin:0 0 18px;max-width:560px;}
+.hero2 .searchbar{margin:0 0 12px;max-width:600px;}
 .hero2 .chips{justify-content:flex-start;margin-top:0;}
+/* ---- ИИ-поиск в hero ---- */
+.hs-cap{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;
+  font-size:13.5px;font-weight:600;color:var(--ink-soft);}
+/* поле с ИИ — тонкая цветная рамка, чтобы читалось как «умное», но не пёстрое */
+.ai-bar{border-color:#cfd9ee;}
+.ai-bar:focus-within{border-color:#7C5CE0;box-shadow:0 0 0 3px rgba(124,92,224,.13),var(--shadow-md);}
+.hs-ex{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;max-width:600px;}
+.hs-chip{background:#fff;border:1px solid var(--line);border-radius:999px;
+  padding:6px 13px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;transition:.15s;}
+.hs-chip:hover{border-color:var(--brass-soft);color:var(--navy);}
+.hs-res:not(:empty){margin:0 0 20px;max-width:600px;}
+.hs-res .assist-hits{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));}
+@media(max-width:1024px){ .hs-ex,.hs-res:not(:empty),.hero2 .searchbar{max-width:none;} }
 .hero2-media{position:relative;}
 .hero2-media img{position:relative;z-index:1;width:100%;aspect-ratio:4/4.5;object-fit:cover;border-radius:14px;box-shadow:var(--shadow-lg);}
 .hero2-frame{position:absolute;inset:18px -16px -16px 18px;border:1px solid var(--brass);border-radius:14px;z-index:0;}
@@ -751,13 +765,35 @@ a.val:hover{color:var(--brass);}
 /* ============================================================ ПОДБОР ПО ЗАДАЧЕ */
 .assist{background:var(--paper-2);border:1px solid var(--line);border-radius:12px;
   padding:20px 22px;margin-bottom:22px;}
-.assist-cap{display:block;font-weight:600;font-size:14px;color:var(--navy);margin-bottom:10px;}
+.assist-cap{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  font-weight:600;font-size:14px;color:var(--navy);margin-bottom:10px;}
 .assist-row{display:flex;gap:10px;flex-wrap:wrap;}
 .assist-row input{flex:1;min-width:220px;border:1px solid var(--line);border-radius:var(--r);
   padding:11px 14px;font-size:15px;background:#fff;}
 .assist-row input:focus{outline:none;border-color:var(--brass);}
 .assist-row input:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
 .assist-row .btn{white-space:nowrap;}
+/* ============================================================ ПЛАШКА AI */
+/* Маленькая, как значок в мессенджере: должна читаться как пометка «здесь
+   работает ИИ», а не как кнопка. Поэтому без тени и без hover. */
+.ai-badge{display:inline-flex;align-items:center;gap:4px;vertical-align:middle;
+  background:linear-gradient(120deg,#7C5CE0,#3E7BD6 55%,#2AA6A0);color:#fff;
+  font-size:10.5px;font-weight:800;letter-spacing:.09em;line-height:1;
+  padding:4px 8px 4px 6px;border-radius:999px;text-transform:uppercase;
+  box-shadow:0 1px 4px rgba(62,123,214,.28);}
+.ai-badge svg{width:11px;height:11px;flex:none;}
+.ai-badge.mini{font-size:9px;padding:3px 6px 3px 5px;}
+.ai-badge.mini svg{width:9px;height:9px;}
+/* мягкое «дыхание» искры — только если человек не просил убрать анимации */
+@media(prefers-reduced-motion:no-preference){
+  .ai-badge svg{animation:ai-spark 3.4s ease-in-out infinite;}
+  @keyframes ai-spark{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.9)}}
+}
+.ai-wait{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--ink-soft);
+  padding:4px 0;}
+.ai-src{display:flex;align-items:center;gap:7px;margin-top:12px;
+  font-size:12.5px;color:var(--ink-soft);}
+
 #aqres{margin-top:14px;}
 /* ответ ассистента словами — над карточками; читается как реплика, а не как
    заголовок раздела, поэтому левая линейка, а не жирный шрифт */
