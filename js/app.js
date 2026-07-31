@@ -248,6 +248,7 @@
       '<p>Лаборатории, оборудование, специалисты и услуги «под ключ». Приборы с пометкой «с оператором» бронируются вместе со специалистом автоматически.</p>'+
     '</div></section>'+
     '<section class="section-sm"><div class="wrap">'+
+      assistBoxHtml()+
       '<div class="tabs" id="tabs">'+tabs+'</div>'+
       '<div class="catalog-layout">'+
         '<aside class="filters">'+
@@ -269,6 +270,7 @@
     , bindCatalog);
   }
   function bindCatalog(){
+    bindAssist();
     qsAll('#tabs .tab').forEach(function(b){ b.onclick=function(){ catState.type=b.getAttribute('data-tab'); catState.cat=''; catState.q=''; renderCatalog(); }; });
     el('fsearch').oninput=function(){ catState.q=this.value; drawList(); };
     el('fcat').onchange=function(){ catState.cat=this.value; drawList(); };
@@ -276,17 +278,141 @@
     el('fclear').onclick=function(){ catState.q='';catState.cat='';catState.onlyFree=false;catState.sort='default'; renderCatalog(); };
     drawList();
   }
+  /* ---- подбор по описанию задачи ----
+     Обычный поиск ищет по словам, а тут человек описывает задачу своими
+     словами («нужно определить примеси в субстанции»). Запрос уходит на
+     бэкенд, тот спрашивает модель и возвращает существующие позиции. Если
+     бэкенда нет (статическая сборка) или он не ответил — блок молча
+     скрывается, обычный поиск при этом работает как обычно. */
+  function assistBoxHtml(){
+    return '<div class="assist" id="assistbox">'+
+      '<div class="assist-in">'+
+        '<label class="assist-cap" for="aq">Не знаете, что выбрать? Опишите задачу своими словами</label>'+
+        '<div class="assist-row">'+
+          '<input id="aq" placeholder="Например: нужно определить примеси в субстанции">'+
+          '<button class="btn btn-brass" id="aqgo">Подобрать</button>'+
+        '</div>'+
+        '<div id="aqres"></div>'+
+      '</div>'+
+    '</div>';
+  }
+  function bindAssist(){
+    var inp=el('aq'), btn=el('aqgo'), out=el('aqres');
+    if(!inp||!btn) return;
+    function run(){
+      var q=inp.value.trim();
+      if(!q){ out.innerHTML=''; return; }
+      btn.disabled=true; btn.textContent='Подбираем…';
+      out.innerHTML='<div class="cline-meta">Ищем подходящее…</div>';
+      P.assistApi.ask(q).then(function(res){
+        btn.disabled=false; btn.textContent='Подобрать';
+        if(!res.ok){
+          // бэкенд недоступен — не пугаем, предлагаем обычный поиск
+          out.innerHTML='<div class="cline-meta">Подбор сейчас недоступен. '+
+            'Воспользуйтесь поиском слева.</div>';
+          return;
+        }
+        var items=(res.data&&res.data.items)||[];
+        if(!items.length){
+          out.innerHTML='<div class="cline-meta">По такому описанию ничего не нашлось. '+
+            'Попробуйте иначе — или напишите нам, подберём вручную.</div>';
+          return;
+        }
+        out.innerHTML='<div class="assist-hits">'+items.map(function(i){
+          return '<a class="assist-hit" href="#/resource/'+esc(i.id)+'">'+
+            '<div class="assist-hit-t">'+esc(i.title)+'</div>'+
+            (i.why?'<div class="assist-hit-w">'+esc(i.why)+'</div>':'')+
+            '<div class="assist-hit-p">'+fmt(i.priceValue)+' / '+esc(i.priceUnit)+'</div>'+
+          '</a>';
+        }).join('')+'</div>';
+      });
+    }
+    btn.onclick=run;
+    inp.onkeydown=function(e){ if(e.key==='Enter') run(); };
+  }
+
+  /* ---- поиск по каталогу ----
+     Раньше искали подстроку и только внутри выбранной вкладки: запрос «ЯМР»
+     на вкладке «Лаборатории» не находил ЯМР-спектрометр, потому что тот лежит
+     в «Оборудовании». Теперь при непустом запросе ищем по всему каталогу, а
+     каждое слово расширяем словарём синонимов (data/synonyms.js), чтобы
+     «NMR» и «ядерный магнитный резонанс» находили то же, что «ЯМР». */
+  function searchText(r){
+    return (r.title+' '+r.lab+' '+(r.specs||[]).join(' ')+' '+r.description+' '+(r.cleanClass||'')).toLowerCase();
+  }
+  // Русские окончания: без их отсечения «микроскопом» не найдёт «микроскоп».
+  var ENDINGS=['иями','ами','ями','ого','ему','ому','ыми','ими','ей','ой','ый','ий',
+               'ая','яя','ое','ее','ые','ие','ом','ем','ах','ях','ов','ев','ью',
+               'и','ы','у','ю','а','я','е','о','ь'];
+  function stem(w){
+    for(var i=0;i<ENDINGS.length;i++){
+      var e=ENDINGS[i];
+      if(w.length-e.length>=4 && w.slice(-e.length)===e) return w.slice(0,-e.length);
+    }
+    return w;
+  }
+  // Все синонимы термина. Термин сверяем со всей записью словаря, а не только с
+  // её началом: иначе «магнитный» не нашёл бы «ядерный магнитный резонанс».
+  function expandTerm(term){
+    var out=[term], st=stem(term), groups=P.synonyms||[];
+    for(var i=0;i<groups.length;i++){
+      var g=groups[i], hit=false;
+      for(var j=0;j<g.length && !hit;j++){
+        if(g[j].indexOf(term)>=0 || term.indexOf(g[j])>=0) hit=true;
+        else if(st.length>3 && g[j].indexOf(st)>=0) hit=true;
+      }
+      if(hit) out=out.concat(g);
+    }
+    return out;
+  }
+  // Оценка соответствия: 0 — не подходит. Совпадение в названии весомее, чем
+  // в описании, поэтому нужное всплывает наверх списка.
+  function scoreQuery(r, q){
+    var text=searchText(r), title=(r.title||'').toLowerCase(), score=0;
+    // фраза целиком — самый сильный сигнал
+    if(title.indexOf(q)>=0) score+=100;
+    else if(text.indexOf(q)>=0) score+=40;
+    // фразу тоже прогоняем через словарь: «ядерный магнитный резонанс» → «ямр»
+    expandTerm(q).forEach(function(v){
+      if(v!==q && title.indexOf(v)>=0) score+=60;
+      else if(v!==q && text.indexOf(v)>=0) score+=20;
+    });
+    var words=q.split(/[\s,;]+/).filter(function(w){ return w.length>1; });
+    var matched=0;
+    words.forEach(function(w){
+      var vars=expandTerm(w).map(stem);
+      var inTitle=vars.some(function(v){ return title.indexOf(v)>=0; });
+      var inText=vars.some(function(v){ return text.indexOf(v)>=0; });
+      if(inTitle){ score+=12; matched++; }
+      else if(inText){ score+=4; matched++; }
+    });
+    // из нескольких слов должно совпасть хотя бы большинство, иначе это шум
+    if(words.length>1 && matched<Math.ceil(words.length/2)) return score>=40?score:0;
+    if(!matched && score===0) return 0;
+    return score;
+  }
   function drawList(){
-    var list=P.getByType(catState.type);
-    if(catState.q){ var q=catState.q.toLowerCase();
-      list=list.filter(function(r){ return (r.title+' '+r.lab+' '+r.specs.join(' ')+' '+r.description).toLowerCase().indexOf(q)>=0; }); }
+    var q=(catState.q||'').toLowerCase().trim();
+    var list;
+    if(q){
+      // при поиске игнорируем вкладку — иначе нужное в другом разделе не найти,
+      // и сортируем по релевантности, а не по порядку в каталоге
+      list=P.getResources().map(function(r){ return {r:r, s:scoreQuery(r,q)}; })
+            .filter(function(x){ return x.s>0; })
+            .sort(function(a,b){ return b.s-a.s; })
+            .map(function(x){ return x.r; });
+    } else {
+      list=P.getByType(catState.type);
+    }
     if(catState.cat) list=list.filter(function(r){ return r.category===catState.cat; });
     if(catState.sort==='price-asc') list.sort(function(a,b){ return a.priceValue-b.priceValue; });
     if(catState.sort==='price-desc') list.sort(function(a,b){ return b.priceValue-a.priceValue; });
     var grid=el('rgrid'), bar=el('rbar'); if(!grid) return;
-    bar.innerHTML='Найдено: <strong style="color:var(--navy)">'+list.length+'</strong>';
+    bar.innerHTML='Найдено: <strong style="color:var(--navy)">'+list.length+'</strong>'+
+      (q ? ' <span class="cline-meta">· по всему каталогу</span>' : '');
     grid.innerHTML = list.length ? list.map(resCard).join('')
-      : '<div class="empty" style="grid-column:1/-1"><h3>Ничего не найдено</h3><p>Измените параметры фильтра.</p></div>';
+      : '<div class="empty" style="grid-column:1/-1"><h3>Ничего не найдено</h3>'+
+        '<p>Попробуйте другой запрос — или опишите задачу своими словами в поле выше, подберём подходящее.</p></div>';
   }
 
   /* ==========================================================

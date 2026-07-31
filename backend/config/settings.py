@@ -81,6 +81,18 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'   # подтверждающие документы по показателям
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ---------- ИИ-подбор позиций по описанию задачи ----------
+# YandexGPT. Ключ и каталог берём из окружения; если их нет, подбор работает
+# на локальном алгоритме — сайт не ломается от отсутствия внешнего сервиса.
+YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '').strip()
+YANDEX_FOLDER_ID = os.getenv('YANDEX_FOLDER_ID', '').strip()
+YANDEX_MODEL = os.getenv('YANDEX_MODEL', 'yandexgpt-lite/latest')
+YANDEX_LLM_URL = os.getenv(
+    'YANDEX_LLM_URL', 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion')
+# Ждать модель дольше нескольких секунд бессмысленно: пользователь уйдёт,
+# а локальный подбор ответит мгновенно.
+ASSIST_TIMEOUT = float(os.getenv('ASSIST_TIMEOUT', '8'))
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -88,6 +100,9 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    # ИИ-подбор доступен без входа, а каждый запрос к модели платный —
+    # ограничиваем частоту, чтобы счёт не зависел от случайного бота.
+    'DEFAULT_THROTTLE_RATES': {'assist': os.getenv('ASSIST_RATE', '20/min')},
 }
 
 # CORS: фронт (личный кабинет) обращается к API. Токен-авторизация не зависит от cookie.

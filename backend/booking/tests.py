@@ -718,3 +718,106 @@ class ActionTests(Base):
         o.refresh_from_db()
         self.assertEqual(o.status, 'confirmed')
         self.assertEqual(BusySlot.objects.filter(note=f'Заявка {o.number}').count(), 1)
+
+
+class AssistTests(TestCase):
+    """ИИ-подбор позиций по описанию задачи.
+
+    Настоящий YandexGPT в тестах не дёргаем — подменяем ask_yandex и проверяем
+    то, что зависит от нас: разбор ответа, отсев выдуманных позиций и откат на
+    локальный подбор при любой неудаче.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        call_command('import_catalog')
+
+    def _post(self, query):
+        r = self.c.post('/api/assist/', data=json.dumps({'query': query}),
+                        content_type='application/json')
+        return r, (json.loads(r.content) if r.content else {})
+
+    def test_empty_query_rejected(self):
+        r, _ = self._post('   ')
+        self.assertEqual(r.status_code, 400)
+
+    def test_local_fallback_without_model(self):
+        """Модель не настроена — подбор всё равно работает."""
+        r, d = self._post('нужен ЯМР')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(d['mode'], 'local')
+        self.assertTrue(any('ЯМР' in i['title'] for i in d['items']))
+
+    def test_ai_answer_used(self):
+        from booking import assist as A
+        real = A.ask_yandex
+        A.ask_yandex = lambda q, res: [{'id': 'eq-massspec', 'why': 'подходит для примесей'}]
+        try:
+            r, d = self._post('определить примеси')
+        finally:
+            A.ask_yandex = real
+        self.assertEqual(d['mode'], 'ai')
+        self.assertEqual(d['items'][0]['id'], 'eq-massspec')
+        self.assertEqual(d['items'][0]['why'], 'подходит для примесей')
+
+    def test_invented_resource_dropped(self):
+        """Модель придумала прибор, которого нет — позиция не должна уйти клиенту."""
+        from booking import assist as A
+        real = A.ask_yandex
+        A.ask_yandex = lambda q, res: [
+            {'id': 'eq-kvantovyj-teleport', 'why': 'выдумка'},
+            {'id': 'eq-massspec', 'why': 'реальная позиция'},
+        ]
+        try:
+            r, d = self._post('что-нибудь')
+        finally:
+            A.ask_yandex = real
+        ids = [i['id'] for i in d['items']]
+        self.assertNotIn('eq-kvantovyj-teleport', ids)
+        self.assertIn('eq-massspec', ids)
+
+    def test_all_invented_falls_back_to_local(self):
+        """Если реальных позиций у модели не оказалось — работает локальный подбор."""
+        from booking import assist as A
+        real = A.ask_yandex
+        A.ask_yandex = lambda q, res: [{'id': 'nesushchestvuet', 'why': 'x'}]
+        try:
+            r, d = self._post('нужен ЯМР')
+        finally:
+            A.ask_yandex = real
+        self.assertEqual(d['mode'], 'local')
+        self.assertTrue(d['items'])
+
+    def test_model_failure_falls_back(self):
+        """Сеть отвалилась — пользователь всё равно получает ответ."""
+        from booking import assist as A
+        real = A.ask_yandex
+
+        def boom(q, res):
+            raise OSError('нет связи')
+
+        A.ask_yandex = boom
+        try:
+            with self.assertRaises(OSError):
+                A.ask_yandex('x', [])
+        finally:
+            A.ask_yandex = real
+        # сам ask_yandex глушит ошибки внутри и возвращает None
+        from django.test import override_settings
+        with override_settings(YANDEX_API_KEY='k', YANDEX_FOLDER_ID='f',
+                               YANDEX_LLM_URL='http://127.0.0.1:9/nope', ASSIST_TIMEOUT=1):
+            r, d = self._post('нужен ЯМР')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(d['mode'], 'local')
+
+    def test_markdown_wrapped_json_parsed(self):
+        """Модели часто заворачивают JSON в ```json — разбор должен это переживать."""
+        from booking.assist import _parse_model_json
+        raw = '```json\n{"items":[{"id":"eq-nmr","why":"тест"}]}\n```'
+        self.assertEqual(_parse_model_json(raw), [{'id': 'eq-nmr', 'why': 'тест'}])
+        self.assertEqual(_parse_model_json('совсем не json'), [])
+        self.assertEqual(_parse_model_json(''), [])
+
+    def test_long_query_truncated(self):
+        r, d = self._post('ЯМР ' + 'ы' * 5000)
+        self.assertEqual(r.status_code, 200)

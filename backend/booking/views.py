@@ -5,9 +5,11 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .assist import assist
 from .models import KPI_KEYS, BusySlot, Kpi, KpiEntry, Order, Resource
 from .serializers import (CompanySerializer, KpiEntrySerializer, KpiSerializer,
                           OrderCreateSerializer, OrderListSerializer, RegisterSerializer,
@@ -57,6 +59,44 @@ class AllBusyView(APIView):
                 'slotEnd': s['slot_end'].strftime('%H:%M') if s['slot_end'] else None,
             })
         return Response(out)
+
+
+class AssistThrottle(AnonRateThrottle):
+    scope = 'assist'
+
+
+class AssistView(APIView):
+    """POST /api/assist/ — подбор позиций по задаче, описанной словами.
+
+    Принимает {"query": "нужно определить примеси в субстанции"} и возвращает
+    до четырёх позиций каталога с коротким обоснованием. Поле "mode" говорит,
+    чем подобрано: "ai" — моделью, "local" — встроенным алгоритмом (модель не
+    настроена или недоступна). Позиции всегда реальные: идентификаторы от
+    модели сверяются с каталогом, несуществующие отбрасываются.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [AssistThrottle]
+
+    def post(self, request):
+        query = request.data.get('query') if isinstance(request.data, dict) else None
+        query = (query or '').strip()
+        if not query:
+            return Response({'detail': 'Опишите задачу.'}, status=400)
+
+        resources = list(Resource.objects.filter(is_active=True))
+        picked, mode = assist(query, resources)
+        return Response({
+            'mode': mode,
+            'items': [{
+                'id': r.slug,
+                'type': r.type,
+                'title': r.title,
+                'lab': r.lab,
+                'priceValue': r.price_value,
+                'priceUnit': r.price_unit,
+                'why': why,
+            } for r, why in picked],
+        })
 
 
 # ---------- заявки ----------

@@ -97,6 +97,15 @@
     }
   };
 
+  /* ---------- подбор позиций по описанию задачи (ИИ на бэкенде) ---------- */
+  P.assistApi = {
+    ask:function(query){
+      return postJson('/assist/', {query:query}).catch(function(){
+        return {ok:false, msg:'Подбор недоступен'};
+      });
+    }
+  };
+
   /* ---------- заявки компании ---------- */
   P.ordersApi = {
     list:function(){ return P.apiFetch('/orders/').then(parse); },

@@ -747,3 +747,27 @@ a.val:hover{color:var(--brass);}
 /* Цели нажатия в топбаре и «хлебных крошках» — до 24px (WCAG 2.5.8). */
 .topbar-right a{display:inline-flex;align-items:center;min-height:24px;}
 .crumbs a{display:inline-flex;align-items:center;min-height:24px;}
+
+/* ============================================================ ПОДБОР ПО ЗАДАЧЕ */
+.assist{background:var(--paper-2);border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;margin-bottom:22px;}
+.assist-cap{display:block;font-weight:600;font-size:14px;color:var(--navy);margin-bottom:10px;}
+.assist-row{display:flex;gap:10px;flex-wrap:wrap;}
+.assist-row input{flex:1;min-width:220px;border:1px solid var(--line);border-radius:var(--r);
+  padding:11px 14px;font-size:15px;background:#fff;}
+.assist-row input:focus{outline:none;border-color:var(--brass);}
+.assist-row input:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+.assist-row .btn{white-space:nowrap;}
+#aqres{margin-top:14px;}
+.assist-hits{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
+.assist-hit{display:block;background:#fff;border:1px solid var(--line);border-radius:var(--r);
+  padding:14px 16px;transition:.16s;}
+.assist-hit:hover{border-color:var(--brass-soft);transform:translateY(-1px);}
+.assist-hit-t{font-weight:700;color:var(--navy);font-size:14.5px;line-height:1.3;}
+.assist-hit-w{font-size:13px;color:var(--ink-soft);line-height:1.45;margin-top:6px;}
+.assist-hit-p{font-family:var(--mono);font-size:13px;color:var(--brass);margin-top:8px;}
+@media(max-width:640px){
+  .assist{padding:16px;}
+  .assist-row .btn{width:100%;}
+  .assist-hits{grid-template-columns:1fr;}
+}
