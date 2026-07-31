@@ -330,22 +330,24 @@ sudo chown www-data:www-data /srv/pulsar/backend/logs
 
 ## Заголовки безопасности
 
-Готовый набор — [`deploy/security-headers.conf`](deploy/security-headers.conf).
-Ставится один раз:
+Ставятся один раз, одной командой:
 
 ```bash
-sudo cp /srv/pulsar/deploy/security-headers.conf /etc/nginx/snippets/pulsar-security.conf
-sudo nano /etc/nginx/sites-available/pulsar
+sudo python3 /srv/pulsar/deploy/add-security-headers.py
 ```
 
-Строку `include /etc/nginx/snippets/pulsar-security.conf;` нужно вписать
-**в двух местах** блока `listen 443`: в сам блок и внутрь `location /`.
-Причина в устройстве Nginx: `add_header` не складывается по уровням, и
-`add_header Cache-Control` внутри `location /` отбрасывает всё, что
-унаследовано выше. Подробности — в шапке самого файла.
+Скрипт сам находит блок `listen 443`, вписывает `include` в двух нужных
+местах, делает резервную копию конфига, проверяет его и перезагружает Nginx.
+Если проверка не прошла — возвращает файл как был и ничего не перезагружает.
+Повторный запуск безопасен: если всё уже подключено, он так и скажет.
 
+Правку в двух местах требует само устройство Nginx: `add_header` не
+складывается по уровням, и `add_header Cache-Control` внутри `location /`
+отбрасывает всё, что унаследовано от `server`. Набор заголовков и пояснение
+к каждому — в [`deploy/security-headers.conf`](deploy/security-headers.conf).
+
+Проверить:
 ```bash
-sudo nginx -t && sudo systemctl reload nginx
 curl -sI https://pulsar.jaglionrus.ru | grep -i -E 'strict|frame|content-type-opt|referrer'
 ```
 
