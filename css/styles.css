@@ -759,6 +759,10 @@ a.val:hover{color:var(--brass);}
 .assist-row input:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
 .assist-row .btn{white-space:nowrap;}
 #aqres{margin-top:14px;}
+/* ответ ассистента словами — над карточками; читается как реплика, а не как
+   заголовок раздела, поэтому левая линейка, а не жирный шрифт */
+.assist-reply{font-size:14.5px;line-height:1.55;color:var(--ink);margin:0 0 14px;
+  padding-left:12px;border-left:3px solid var(--brass-soft);max-width:70ch;}
 .assist-hits{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
 .assist-hit{display:block;background:#fff;border:1px solid var(--line);border-radius:var(--r);
   padding:14px 16px;transition:.16s;}

@@ -66,6 +66,16 @@ class AssistThrottle(AnonRateThrottle):
     scope = 'assist'
 
 
+class CustomRequestThrottle(AnonRateThrottle):
+    """Отдельный лимит для индивидуальных заявок.
+
+    Раньше форма делила лимит с подбором — и человек, перебравший несколько
+    формулировок в подборе, упирался в отказ ровно на той форме, к которой
+    подбор его и отправлял. Заявка — редкое действие, ей нужен свой запас.
+    """
+    scope = 'custom_request'
+
+
 class AssistView(APIView):
     """POST /api/assist/ — подбор позиций по задаче, описанной словами.
 
@@ -85,9 +95,10 @@ class AssistView(APIView):
             return Response({'detail': 'Опишите задачу.'}, status=400)
 
         resources = list(Resource.objects.filter(is_active=True))
-        picked, mode = assist(query, resources)
+        picked, mode, reply = assist(query, resources)
         return Response({
             'mode': mode,
+            'reply': reply,
             'items': [{
                 'id': r.slug,
                 'type': r.type,
@@ -166,10 +177,10 @@ class CustomRequestView(APIView):
 
     Клиент ничего не нашёл в каталоге и описывает потребность словами.
     Гость указывает контакты сам; у вошедшей компании они берутся из профиля.
-    Ограничение частоты — то же, что у подбора: форма публичная.
+    Форма публичная, поэтому частота ограничена — но своим счётчиком.
     """
     permission_classes = [AllowAny]
-    throttle_classes = [AssistThrottle]
+    throttle_classes = [CustomRequestThrottle]
 
     def post(self, request):
         ser = CustomRequestSerializer(data=request.data)

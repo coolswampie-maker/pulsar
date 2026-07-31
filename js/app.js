@@ -313,12 +313,18 @@
           return;
         }
         var items=(res.data&&res.data.items)||[];
+        // reply — ответ ассистента словами: он есть всегда, в том числе когда
+        // позиций нет (спросили «кто ты», тема требует разрешений, посторонний
+        // вопрос). Без него человек видел бы пустоту и не понимал, что произошло.
+        var reply=(res.data&&res.data.reply)||'';
+        var replyHtml=reply?'<p class="assist-reply">'+esc(reply)+'</p>':'';
         if(!items.length){
-          out.innerHTML=noMatchHtml('По такому описанию ничего не нашлось.');
+          out.innerHTML=replyHtml+
+            noMatchHtml(reply?'':'По такому описанию ничего не нашлось.');
           bindPick(q);
           return;
         }
-        out.innerHTML='<div class="assist-hits">'+items.map(function(i){
+        out.innerHTML=replyHtml+'<div class="assist-hits">'+items.map(function(i){
           return '<a class="assist-hit" href="#/resource/'+esc(i.id)+'">'+
             '<div class="assist-hit-t">'+esc(i.title)+'</div>'+
             (i.why?'<div class="assist-hit-w">'+esc(i.why)+'</div>':'')+
@@ -343,7 +349,8 @@
      и подсказка, каких позиций каталогу не хватает. */
   function noMatchHtml(lead){
     return '<div class="pick-none">'+
-      '<div class="pick-none-t">'+esc(lead)+'</div>'+
+      // ассистент уже ответил своими словами — второй раз то же не повторяем
+      (lead?'<div class="pick-none-t">'+esc(lead)+'</div>':'')+
       '<p class="pick-none-p">Оставьте индивидуальную заявку — оператор ПУЛЬСАР '+
         'подберёт оборудование под вашу задачу, в том числе у партнёров МГУ.</p>'+
       '<button class="btn btn-brass" id="pickopen">Оставить заявку на подбор</button>'+

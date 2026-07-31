@@ -46,9 +46,14 @@ class Command(BaseCommand):
 
         query = opts['query']
         self.stdout.write(f'\nЗапрос: «{query}»')
-        picked, mode = assist(query, resources)
+        picked, mode, reply = assist(query, resources)
 
-        if mode == 'ai':
+        self.stdout.write(f'Ответ ассистента: {reply or "—"}')
+
+        if mode == 'licensed':
+            self.stdout.write(warn(
+                '\nЗапрос отнесён к требующим разрешений — к модели не обращались.'))
+        elif mode == 'ai':
             self.stdout.write(ok('\nМодель отвечает. Подбор работает через ИИ.'))
         else:
             self.stdout.write(err(

@@ -102,7 +102,13 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     # ИИ-подбор доступен без входа, а каждый запрос к модели платный —
     # ограничиваем частоту, чтобы счёт не зависел от случайного бота.
-    'DEFAULT_THROTTLE_RATES': {'assist': os.getenv('ASSIST_RATE', '20/min')},
+    'DEFAULT_THROTTLE_RATES': {
+        'assist': os.getenv('ASSIST_RATE', '20/min'),
+        # Заявка на подбор — редкое действие живого человека, но форма
+        # публичная. Свой счётчик: перебор формулировок в подборе не должен
+        # закрывать возможность оставить заявку.
+        'custom_request': os.getenv('CUSTOM_REQUEST_RATE', '10/hour'),
+    },
 }
 
 # CORS: фронт (личный кабинет) обращается к API. Токен-авторизация не зависит от cookie.
