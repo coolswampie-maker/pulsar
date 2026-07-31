@@ -147,6 +147,21 @@ def _parse_model_json(text):
     return items if isinstance(items, list) else []
 
 
+def model_uri():
+    """Адрес модели для API.
+
+    YANDEX_MODEL можно задавать двумя способами, оба рабочие:
+      · слаг            — yandexgpt-lite/latest (папка подставится сама);
+      · полный адрес    — gpt://<folder>/yandexgpt-lite/latest.
+    В документации Яндекса и в карточках моделей встречаются оба варианта,
+    поэтому не заставляем помнить, какой именно нужен.
+    """
+    model = (getattr(settings, 'YANDEX_MODEL', '') or '').strip()
+    if model.startswith('gpt://') or model.startswith('ds://'):
+        return model
+    return f'gpt://{getattr(settings, "YANDEX_FOLDER_ID", "")}/{model}'
+
+
 def ask_yandex(query, resources):
     """Запрос к YandexGPT. Возвращает список {id, why} либо None при любой
     неудаче — вызывающий код в этом случае откатывается на локальный подбор."""
@@ -159,7 +174,7 @@ def ask_yandex(query, resources):
     import urllib.request
 
     body = {
-        'modelUri': f'gpt://{folder}/{settings.YANDEX_MODEL}',
+        'modelUri': model_uri(),
         'completionOptions': {
             'stream': False,
             'temperature': 0.1,      # подбор, а не сочинение: нужна стабильность

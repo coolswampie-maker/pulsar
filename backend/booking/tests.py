@@ -821,3 +821,18 @@ class AssistTests(TestCase):
     def test_long_query_truncated(self):
         r, d = self._post('ЯМР ' + 'ы' * 5000)
         self.assertEqual(r.status_code, 200)
+
+    def test_model_uri_accepts_both_forms(self):
+        """YANDEX_MODEL можно задать слагом или полным адресом — результат один."""
+        from django.test import override_settings
+
+        from booking.assist import model_uri
+        full = 'gpt://b1gtest/yandexgpt-lite/latest'
+        with override_settings(YANDEX_FOLDER_ID='b1gtest', YANDEX_MODEL='yandexgpt-lite/latest'):
+            self.assertEqual(model_uri(), full)
+        # полный адрес не должен склеиваться с папкой второй раз
+        with override_settings(YANDEX_FOLDER_ID='b1gtest', YANDEX_MODEL=full):
+            self.assertEqual(model_uri(), full)
+        # лишние пробелы при копировании из консоли
+        with override_settings(YANDEX_FOLDER_ID='b1gtest', YANDEX_MODEL='  yandexgpt-lite/latest  '):
+            self.assertEqual(model_uri(), full)
