@@ -617,10 +617,6 @@ a.val:hover{color:var(--brass);}
 /* поле с ИИ — тонкая цветная рамка, чтобы читалось как «умное», но не пёстрое */
 .ai-bar{border-color:#cfd9ee;}
 .ai-bar:focus-within{border-color:#7C5CE0;box-shadow:0 0 0 3px rgba(124,92,224,.13),var(--shadow-md);}
-.hs-ex{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;max-width:600px;}
-.hs-chip{background:#fff;border:1px solid var(--line);border-radius:999px;
-  padding:6px 13px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;transition:.15s;}
-.hs-chip:hover{border-color:var(--brass-soft);color:var(--navy);}
 /* Ответ — отдельная ячейка во всю ширину сетки hero, под обеими колонками. */
 .hs-res{grid-column:1/-1;}
 /* пустой блок остаётся ячейкой сетки и добавляет лишний gap под hero */
@@ -629,7 +625,7 @@ a.val:hover{color:var(--brass);}
    фото рядом с ответом только мешает читать. Возвращается по крестику. */
 .hero2-grid.answering{grid-template-columns:1fr;}
 .hero2-grid.answering .hero2-media{display:none;}
-@media(max-width:1024px){ .hs-ex,.hero2 .searchbar{max-width:none;} }
+@media(max-width:1024px){ .hero2 .searchbar{max-width:none;} }
 .hero2-media{position:relative;}
 .hero2-media img{position:relative;z-index:1;width:100%;aspect-ratio:4/4.5;object-fit:cover;border-radius:14px;box-shadow:var(--shadow-lg);}
 .hero2-frame{position:absolute;inset:18px -16px -16px 18px;border:1px solid var(--brass);border-radius:14px;z-index:0;}

@@ -254,9 +254,6 @@
             'placeholder="Напишите запрос или опишите задачу">'+
           '<button id="hgo" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Найти</button>'+
         '</form>'+
-        '<div class="hs-ex">'+['чистая комната под GMP','посмотреть поверхность материала','высушить опытную партию']
-          .map(function(x){ return '<button class="hs-chip" type="button" data-q="'+esc(x)+'">'+esc(x)+'</button>'; }).join('')+
-        '</div>'+
         '<div class="chips">'+
           typeChip('room','Лаборатории')+typeChip('equipment','Оборудование')+
           typeChip('specialist','Специалисты')+typeChip('service','Услуги под ключ')+
@@ -343,9 +340,6 @@
     };
     if(btn) btn.onclick=go;
     inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); go(); } });
-    qsAll('.hs-chip').forEach(function(b){
-      b.onclick=function(){ inp.value=b.getAttribute('data-q'); go(); };
-    });
   }
 
   /* ==========================================================
