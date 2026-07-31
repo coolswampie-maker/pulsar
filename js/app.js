@@ -183,7 +183,19 @@
     var out=o.out, done=o.done||function(){};
     if(!out) return done();
     q=(q||'').trim();
-    if(!q){ out.innerHTML=''; return done(); }
+    if(!q){ out.innerHTML=''; out.dataset.q=''; return done(); }
+    // Тот же запрос при уже открытом ответе не переспрашиваем: ответ на
+    // экране, а вызов модели платный. Поймать это легко — «Уточнить запрос»
+    // ставит курсор в поле и выделяет текст, так что Enter нажимается
+    // рефлекторно, ничего не изменив.
+    if(q===out.dataset.q && out.querySelector('.ai-dialog')){
+      // не молчим: показываем, что ответ уже есть, иначе Enter выглядит
+      // как будто ничего не сработало
+      out.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      if(o.input) o.input.focus();
+      return done();
+    }
+    out.dataset.q=q;
     out.innerHTML='<div class="ai-dialog"><div class="ai-msg you"><div class="ai-bubble">'+
       esc(q)+'</div></div><div class="ai-wait">'+aiBadge()+'Подбираем…</div></div>';
     if(o.onOpen) o.onOpen();
@@ -201,6 +213,7 @@
       var close=el('aiclose');
       if(close) close.onclick=function(){
         out.innerHTML='';
+        out.dataset.q='';       // окно закрыли — тот же запрос снова уместен
         if(o.onClose) o.onClose();
         if(o.input) o.input.focus();
       };
