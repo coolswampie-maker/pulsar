@@ -251,7 +251,7 @@
           '<span>Найдите прибор по названию — или просто опишите задачу</span></div>'+
         '<form class="searchbar ai-bar" id="hsearch" onsubmit="return false">'+
           '<input id="hq" aria-label="Поиск по каталогу или описание задачи" '+
-            'placeholder="Масс-спектрометр — или: нужно определить примеси в субстанции">'+
+            'placeholder="Напишите запрос или опишите задачу">'+
           '<button id="hgo" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Найти</button>'+
         '</form>'+
         '<div class="hs-ex">'+['чистая комната под GMP','посмотреть поверхность материала','высушить опытную партию']
@@ -418,7 +418,7 @@
         '<label class="assist-cap" for="aq">'+aiBadge()+
           'Найдите прибор по названию — или опишите задачу своими словами</label>'+
         '<div class="assist-row">'+
-          '<input id="aq" placeholder="Масс-спектрометр — или: нужно определить примеси в субстанции">'+
+          '<input id="aq" placeholder="Напишите запрос или опишите задачу">'+
           '<button class="btn btn-brass" id="aqgo">Подобрать</button>'+
         '</div>'+
         '<div id="aqres"></div>'+
