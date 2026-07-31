@@ -106,6 +106,9 @@
     '</a>';
   }
 
+  // должно совпадать с MAX_SAMPLE_QTY в backend/booking/serializers.py
+  var MAX_SAMPLES=100;
+
   /* ==========================================================
      ИИ-ПОИСК — общий движок для главной и каталога
      ==========================================================
@@ -749,7 +752,9 @@
 
     if(r.type==='service'){
       html+='<div class="field"><label for="bqty">Количество образцов</label>'+
-        '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" value="'+book.qty+'"></div>'+
+        '<input type="number" id="bqty" min="'+(r.minUnits||1)+'" max="'+MAX_SAMPLES+'" value="'+book.qty+'">'+
+        '<span class="sub">Не больше '+MAX_SAMPLES+' за одну заявку. Партия крупнее — '+
+        '<a href="#/catalog">индивидуальной заявкой</a>.</span></div>'+
         '<div class="op-note">'+icon('clock',16)+'<div>Услуга «под ключ»: время прибора и работа специалиста включены. Срок — по регламенту услуги.</div></div>';
     } else if(r.bookMode==='shift'){
       html+=rangeCalendarHtml()+
@@ -815,7 +820,15 @@
     // выбор типа смены (лаборатории)
     qsAll('#bshiftType .seg-b').forEach(function(bt){ bt.onclick=function(){ book.shiftType=bt.getAttribute('data-s'); renderBooking(); }; });
     if(el('bshift')) el('bshift').onchange=function(){ book.shift=this.value; };
-    if(el('bqty')) el('bqty').oninput=function(){ book.qty=Math.max(parseInt(this.value||1,10),(r.minUnits||1)); updateEstimate(); };
+    if(el('bqty')) el('bqty').oninput=function(){
+      // потолок тот же, что на сервере: без него молча принималось 9999
+      // образцов и получалась заявка на десятки миллионов
+      var v=parseInt(this.value||1,10);
+      if(isNaN(v)) v=r.minUnits||1;
+      v=Math.min(Math.max(v,(r.minUnits||1)),MAX_SAMPLES);
+      if(String(v)!==this.value) this.value=v;
+      book.qty=v; updateEstimate();
+    };
     if(el('bhours')) el('bhours').onchange=function(){ book.hours=parseInt(this.value,10); renderBooking(); };
     qsAll('#bslots .slot').forEach(function(s){ if(s.disabled) return;
       s.onclick=function(){ book.start=s.getAttribute('data-t'); qsAll('#bslots .slot').forEach(function(x){x.classList.remove('sel');}); s.classList.add('sel');

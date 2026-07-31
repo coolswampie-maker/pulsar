@@ -104,9 +104,16 @@ ASSIST_LOG_FILE = os.getenv('ASSIST_LOG_FILE', str(BASE_DIR / 'logs' / 'assist.l
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    # Только токен. SessionAuthentication здесь была вредна: она включает
+    # проверку CSRF для любого запроса с сессионной cookie, а кабинет
+    # оператора живёт на том же домене. Стоило оператору войти в /admin/ —
+    # и его же cookie начинала уходить на обычные запросы сайта, DRF считал
+    # их сессионными и отвергал: переставали работать бронь, регистрация,
+    # вход, заявка и подбор. Фронт сессию не использует вовсе, он ходит с
+    # токеном, так что убирать безопасно. На сам /admin/ это не влияет — там
+    # своя авторизация Django со своей защитой от CSRF.
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     # ИИ-подбор доступен без входа, а каждый запрос к модели платный —

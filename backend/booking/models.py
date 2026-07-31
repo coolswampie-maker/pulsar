@@ -24,6 +24,36 @@ CATEGORIES = [
     ('vacuum', 'Вакуум и испытания'), ('genetics', 'Молекулярная генетика'),
     ('materials', 'Новые материалы'), ('food', 'Функциональное питание'), ('analytics', 'Аналитика'),
 ]
+# --- проверка загружаемых документов ---
+# Живёт в модели, а не в сериализаторе: проверка в API не защищает кабинет
+# оператора, где файл кладут через админку в обход сериализатора. Правило
+# должно быть одно на все пути записи.
+#
+# Зачем вообще: без разбора расширений на сайт можно положить .html, и он
+# отдаётся с нашего домена как обычная страница — это готовый XSS. Nginx
+# отдаёт /media/ вложением и с nosniff, но полагаться на одну преграду там,
+# где файл загружает посторонний, не стоит.
+DOC_EXTS = ('pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic',
+            'doc', 'docx', 'xls', 'xlsx', 'odt', 'ods', 'rtf', 'txt', 'zip', 'rar', '7z')
+DOC_MAX_MB = 25
+
+
+def validate_doc_file(f):
+    """Расширение из белого списка и размер не больше DOC_MAX_MB."""
+    import os
+
+    from django.core.exceptions import ValidationError
+    name = getattr(f, 'name', '') or ''
+    ext = os.path.splitext(name)[1].lower().lstrip('.')
+    if ext not in DOC_EXTS:
+        raise ValidationError(
+            'Недопустимый формат файла «.%(ext)s». Разрешены: %(ok)s.',
+            params={'ext': ext or '?', 'ok': ', '.join(DOC_EXTS)})
+    size = getattr(f, 'size', 0) or 0
+    if size > DOC_MAX_MB * 1024 * 1024:
+        raise ValidationError('Файл больше %(mb)s МБ.', params={'mb': DOC_MAX_MB})
+
+
 ORDER_STATUS = [('new', 'Новая'), ('confirmed', 'Подтверждена'), ('rejected', 'Отклонена')]
 CUSTOM_STATUS = [('new', 'Новая'), ('in_work', 'В работе'),
                  ('done', 'Обработана'), ('rejected', 'Отклонена')]
@@ -299,7 +329,8 @@ class Kpi(models.Model):
     key = models.CharField('Показатель', max_length=12, choices=[(d[0], d[1]) for d in KPI_DEFS])
     plan = models.DecimalField('План', max_digits=16, decimal_places=2, null=True, blank=True)
     fact = models.DecimalField('Факт', max_digits=16, decimal_places=2, null=True, blank=True)
-    document = models.FileField('Подтверждающий документ', upload_to='kpi_docs/', null=True, blank=True)
+    document = models.FileField('Подтверждающий документ', upload_to='kpi_docs/',
+                                null=True, blank=True, validators=[validate_doc_file])
     updated_at = models.DateTimeField('Обновлён', auto_now=True)
 
     class Meta:
@@ -355,7 +386,8 @@ class KpiEntry(models.Model):
     title = models.CharField('Наименование', max_length=300)
     amount = models.DecimalField('Сумма / количество', max_digits=16, decimal_places=2, null=True, blank=True)
     date = models.DateField('Дата', null=True, blank=True)
-    document = models.FileField('Документ', upload_to='kpi_docs/', null=True, blank=True)
+    document = models.FileField('Документ', upload_to='kpi_docs/',
+                                null=True, blank=True, validators=[validate_doc_file])
     source = models.CharField('Источник', max_length=8, choices=SOURCES, default='manual')
     created_at = models.DateTimeField('Добавлена', auto_now_add=True)
 

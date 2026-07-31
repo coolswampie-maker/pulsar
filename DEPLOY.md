@@ -328,6 +328,31 @@ sudo chown www-data:www-data /srv/pulsar/backend/logs
 бюджет с оповещением в разделе Billing — чтобы после гранта расход не стал
 неожиданностью.
 
+## Заголовки безопасности
+
+Готовый набор — [`deploy/security-headers.conf`](deploy/security-headers.conf).
+Ставится один раз:
+
+```bash
+sudo cp /srv/pulsar/deploy/security-headers.conf /etc/nginx/snippets/pulsar-security.conf
+sudo nano /etc/nginx/sites-available/pulsar
+```
+
+Строку `include /etc/nginx/snippets/pulsar-security.conf;` нужно вписать
+**в двух местах** блока `listen 443`: в сам блок и внутрь `location /`.
+Причина в устройстве Nginx: `add_header` не складывается по уровням, и
+`add_header Cache-Control` внутри `location /` отбрасывает всё, что
+унаследовано выше. Подробности — в шапке самого файла.
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI https://pulsar.jaglionrus.ru | grep -i -E 'strict|frame|content-type-opt|referrer'
+```
+
+После включения откройте сайт и загляните в консоль (F12): единственный
+заголовок, способный что-то сломать, — `Content-Security-Policy`. Если
+что-то заблокировано, там будет строка «Refused to load…».
+
 ## Частые вопросы
 - **Фронт и API на одном домене** → в `index.html` ничего не меняем: `PULSAR_API_BASE='/api'`
   и `/admin/` работают через Nginx как есть.

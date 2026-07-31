@@ -47,10 +47,30 @@
     });
   }
   // DRF отдаёт ошибки как {поле:[текст]} или {detail:текст} — сводим к строке
+  /* Внутренние формулировки DRF по-английски и человеку ничего не говорят:
+     «CSRF Failed: CSRF token missing.» на форме заявки выглядит как поломка
+     сайта, а не как то, что можно исправить. Подменяем понятным текстом;
+     всё остальное, что сервер шлёт по-русски (проверки полей), пропускаем
+     как есть — оно писалось для людей. */
+  var TECH_ERRORS = [
+    [/csrf/i, 'Не удалось отправить: сессия устарела. Обновите страницу (Ctrl+F5) и попробуйте ещё раз.'],
+    [/authentication credentials were not provided/i, 'Требуется вход.'],
+    [/invalid token/i, 'Сессия истекла — войдите заново.'],
+    [/throttled/i, 'Слишком много запросов подряд. Подождите минуту и попробуйте снова.'],
+    [/server error|internal/i, 'На сервере произошла ошибка. Попробуйте позже или напишите оператору.']
+  ];
+  function humanize(t){
+    for(var i=0;i<TECH_ERRORS.length;i++)
+      if(TECH_ERRORS[i][0].test(t)) return TECH_ERRORS[i][1];
+    // латиница без кириллицы — почти наверняка внутреннее сообщение фреймворка
+    if(t && !/[а-яё]/i.test(t) && /[a-z]{4}/i.test(t))
+      return 'Не удалось выполнить запрос. Попробуйте ещё раз или напишите оператору.';
+    return t;
+  }
   function errText(j){
     if(!j) return '';
-    if(typeof j==='string') return j;
-    if(j.detail) return j.detail;
+    if(typeof j==='string') return humanize(j);
+    if(j.detail) return humanize(String(j.detail));
     var out=[];
     for(var k in j){
       var v=j[k];

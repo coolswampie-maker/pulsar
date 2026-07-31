@@ -1069,6 +1069,213 @@ class AssistTests(TestCase):
             self.assertIn(must, SYSTEM_PROMPT)
 
 
+class OrderScopingTests(TestCase):
+    """GET /api/orders/ обязан отдавать только свои заявки.
+
+    При аудите проверить не удалось — в базе не было ни одной заявки, и
+    пустой список ничего не доказывал. Утечка чужих заявок означала бы
+    раскрытие контактов и сумм других компаний, поэтому проверяем явно.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        cache.clear()
+        call_command('import_catalog')
+
+    def _company(self, email, name):
+        u = User.objects.create_user(username=email, email=email, password='Nauka2026lab')
+        co = Company.objects.create(user=u, name=name, contact_name='Кто-то')
+        r = self.c.post('/api/auth/login/',
+                        data=json.dumps({'email': email, 'password': 'Nauka2026lab'}),
+                        content_type='application/json')
+        return co, json.loads(r.content)['token']
+
+    def test_company_sees_only_its_own_orders(self):
+        a, tok_a = self._company('a@x.ru', 'ООО А')
+        b, _ = self._company('b@x.ru', 'ООО Б')
+        Order.objects.create(number='ORD-A', company=a, org='ООО А', subtotal=1, total=1)
+        Order.objects.create(number='ORD-B', company=b, org='ООО Б', subtotal=2, total=2)
+
+        r = self.c.get('/api/orders/', HTTP_AUTHORIZATION='Token ' + tok_a)
+        self.assertEqual(r.status_code, 200)
+        numbers = [o['number'] for o in json.loads(r.content)]
+        self.assertEqual(numbers, ['ORD-A'], 'компания увидела чужие заявки')
+
+    def test_anonymous_gets_401_not_a_list(self):
+        """Без входа — отказ, а не пустой список: пустой список маскирует дыру."""
+        Order.objects.create(number='ORD-X', org='ООО Х', subtotal=1, total=1)
+        r = self.c.get('/api/orders/')
+        self.assertEqual(r.status_code, 401)
+
+    def test_operator_session_is_not_a_company(self):
+        """Вход в CRM не должен давать доступ к API заявок как компании."""
+        User.objects.create_superuser('op_scope', 'op@x.ru', 'Nauka2026lab')
+        self.c.login(username='op_scope', password='Nauka2026lab')
+        Order.objects.create(number='ORD-Y', org='ООО Y', subtotal=1, total=1)
+        r = self.c.get('/api/orders/')
+        self.assertEqual(r.status_code, 401)
+
+
+class DocumentValidationTests(TestCase):
+    """Проверка типа файла должна работать и в CRM, а не только в API.
+
+    Раньше она жила только в сериализаторе, поэтому оператор, загружающий
+    документ через админку, её обходил: .html лёг бы в /media/ и отдавался
+    бы с нашего домена — готовый XSS.
+    """
+
+    def test_model_validator_rejects_html(self):
+        from django.core.exceptions import ValidationError
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from booking.models import validate_doc_file
+        evil = SimpleUploadedFile('evil.html', b'<script>alert(1)</script>')
+        with self.assertRaises(ValidationError):
+            validate_doc_file(evil)
+
+    def test_model_validator_rejects_exe(self):
+        from django.core.exceptions import ValidationError
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from booking.models import validate_doc_file
+        with self.assertRaises(ValidationError):
+            validate_doc_file(SimpleUploadedFile('setup.exe', b'MZ'))
+
+    def test_model_validator_accepts_pdf(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from booking.models import validate_doc_file
+        validate_doc_file(SimpleUploadedFile('akt.pdf', b'%PDF-1.4'))   # не должно бросить
+
+    def test_admin_form_rejects_html(self):
+        """Тот же файл через форму админки — форма должна быть невалидной."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.forms.models import modelform_factory
+
+        from booking.models import KpiEntry
+        Form = modelform_factory(KpiEntry, fields=['document'])
+        f = Form(data={}, files={'document': SimpleUploadedFile('evil.html', b'<h1>x')})
+        self.assertFalse(f.is_valid())
+        self.assertIn('document', f.errors)
+
+    def test_field_has_validator_attached(self):
+        from booking.models import Kpi, KpiEntry, validate_doc_file
+        for model in (Kpi, KpiEntry):
+            self.assertIn(validate_doc_file,
+                          model._meta.get_field('document').validators,
+                          f'{model.__name__}.document без проверки типа файла')
+
+
+class SampleQtyTests(TestCase):
+    """Количество образцов у услуг «под ключ» ограничено сверху.
+
+    Проверка наличия для них не годится (образцы — это не одновременно
+    занятые единицы), и потолка не было вовсе: аудит показал, что 9999
+    образцов принимались молча и давали заявку на 34 миллиона.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        cache.clear()
+        call_command('import_catalog')
+
+    def _order(self, qty):
+        from booking.models import Resource
+        res = Resource.objects.filter(book_mode='sample', is_active=True).first()
+        self.assertIsNotNone(res, 'в каталоге нет услуги с оплатой по образцам')
+        return self.c.post('/api/orders/', data=json.dumps({
+            'contact': {'orgName': 'ООО Тест', 'contactName': 'Иванов',
+                        'email': 'i@example.com'},
+            'resident': False,
+            'lines': [{'resourceId': res.slug, 'date': S(), 'qty': qty,
+                       'unitPrice': res.price_value,
+                       'linePrice': res.price_value * qty, 'isOperator': False}]}),
+            content_type='application/json')
+
+    def test_absurd_qty_rejected(self):
+        r = self._order(9999)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('образц', r.content.decode().lower())
+
+    def test_reasonable_qty_accepted(self):
+        """Партия из нескольких образцов — обычное дело, ломать нельзя."""
+        self.assertEqual(self._order(3).status_code, 201)
+
+    def test_limit_boundary(self):
+        from booking.serializers import MAX_SAMPLE_QTY
+        self.assertEqual(self._order(MAX_SAMPLE_QTY).status_code, 201)
+        self.assertEqual(self._order(MAX_SAMPLE_QTY + 1).status_code, 400)
+
+    def test_frontend_limit_matches_backend(self):
+        """Потолок продублирован в браузере — значения не должны разъехаться."""
+        import re
+        from pathlib import Path
+
+        from booking.serializers import MAX_SAMPLE_QTY
+        app = (Path(settings.BASE_DIR).parent / 'js' / 'app.js').read_text(encoding='utf-8')
+        m = re.search(r'var MAX_SAMPLES\s*=\s*(\d+)', app)
+        self.assertIsNotNone(m, 'MAX_SAMPLES не найден в js/app.js')
+        self.assertEqual(int(m.group(1)), MAX_SAMPLE_QTY)
+
+
+class CsrfRegressionTests(TestCase):
+    """Оператор, вошедший в CRM, не должен ломать себе сайт.
+
+    SessionAuthentication в DRF включает проверку CSRF для любого запроса с
+    сессионной cookie. Кабинет оператора живёт на том же домене, поэтому
+    после входа в /admin/ его cookie уходит и на обычные запросы сайта: DRF
+    считает их сессионными и отвергает без заголовка X-CSRFToken. Снаружи
+    это выглядит как «сайт не принимает ни одной записи», хотя у посетителя
+    без входа в CRM всё работает.
+
+    Так и было обнаружено при приёмочном аудите: аудитор открыл CRM в том же
+    браузере, и дальше падали бронь, регистрация, вход, заявка и подбор.
+    """
+
+    def setUp(self):
+        self.c = Client(enforce_csrf_checks=True)
+        cache.clear()
+        call_command('import_catalog')
+        User.objects.create_superuser('op_csrf', 'op@x.ru', 'Nauka2026lab')
+        self.c.login(username='op_csrf', password='Nauka2026lab')
+
+    def _post(self, url, payload):
+        return self.c.post(url, data=json.dumps(payload), content_type='application/json')
+
+    def test_assist_works_for_logged_in_operator(self):
+        r = self._post('/api/assist/', {'query': 'нужен ЯМР'})
+        self.assertEqual(r.status_code, 200, 'подбор отказал вошедшему оператору')
+
+    def test_custom_request_works_for_logged_in_operator(self):
+        r = self._post('/api/custom-request/', {
+            'need': 'Нужна печь для обжига керамики, температура до 1600 градусов',
+            'contact_name': 'Иванов', 'email': 'i@example.com'})
+        self.assertEqual(r.status_code, 201, 'заявка отказала вошедшему оператору')
+
+    def test_register_works_for_logged_in_operator(self):
+        r = self._post('/api/auth/register/', {
+            'email': 'newco@example.com', 'password': 'Nauka2026lab',
+            'name': 'ООО «Новая»'})
+        self.assertEqual(r.status_code, 201, 'регистрация отказала вошедшему оператору')
+
+    def test_order_works_for_logged_in_operator(self):
+        r = self._post('/api/orders/', {
+            'contact': {'orgName': 'ООО Тест', 'contactName': 'Иванов',
+                        'email': 'i@example.com'},
+            'resident': False,
+            'lines': [{'resourceId': 'eq-nmr', 'date': S(2), 'slotStart': '10:00',
+                       'slotEnd': '12:00', 'hours': 2, 'qty': 1,
+                       'unitPrice': 5500, 'linePrice': 11000, 'isOperator': False}]})
+        self.assertEqual(r.status_code, 201, 'бронь отказала вошедшему оператору')
+
+    def test_anonymous_visitor_unaffected(self):
+        """Обычный посетитель без сессии страдать не должен был и раньше."""
+        anon = Client(enforce_csrf_checks=True)
+        r = anon.post('/api/assist/', data=json.dumps({'query': 'нужен ЯМР'}),
+                      content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+
+
 class AssistLogTests(TestCase):
     """Журнал запросов к подбору — обычный файл на сервере."""
 

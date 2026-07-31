@@ -131,7 +131,23 @@ class CompanyAdmin(admin.ModelAdmin):
         self.message_user(request, f'Подтверждено компаний: {n}')
 
 
-class KpiEntryInline(admin.TabularInline):
+# Подсказка браузеру, что предлагать в диалоге выбора файла. Не защита —
+# accept обходится сменой фильтра, — но лишний .exe так просто не выберешь.
+# Настоящая проверка в модели: validate_doc_file.
+def _doc_accept():
+    from .models import DOC_EXTS
+    return ','.join('.' + e for e in DOC_EXTS)
+
+
+class DocAcceptMixin:
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == 'document' and field is not None:
+            field.widget.attrs['accept'] = _doc_accept()
+        return field
+
+
+class KpiEntryInline(DocAcceptMixin, admin.TabularInline):
     model = KpiEntry
     extra = 0
     fields = ('title', 'amount', 'date', 'document', 'source', 'created_at')
@@ -139,7 +155,7 @@ class KpiEntryInline(admin.TabularInline):
 
 
 @admin.register(Kpi)
-class KpiAdmin(admin.ModelAdmin):
+class KpiAdmin(DocAcceptMixin, admin.ModelAdmin):
     list_display = ('company', 'year', 'key', 'plan', 'fact', 'status_col', 'updated_at')
     list_editable = ('plan',)          # оператор задаёт план (из календарного плана)
     list_filter = ('year', 'key', 'company')
