@@ -87,8 +87,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '').strip()
 YANDEX_FOLDER_ID = os.getenv('YANDEX_FOLDER_ID', '').strip()
 YANDEX_MODEL = os.getenv('YANDEX_MODEL', 'yandexgpt-lite/latest')
+# OpenAI-совместимый эндпойнт — тот, на котором подбор реально заработал.
+# Прежний «родной» foundationModels оставлен в .env.example как запасной:
+# у них разный формат запроса, поэтому менять адрес без правки ask_yandex
+# нельзя — код собирает тело именно под chat/completions.
 YANDEX_LLM_URL = os.getenv(
-    'YANDEX_LLM_URL', 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion')
+    'YANDEX_LLM_URL', 'https://ai.api.cloud.yandex.net/v1/chat/completions')
 # Ждать модель дольше нескольких секунд бессмысленно: пользователь уйдёт,
 # а локальный подбор ответит мгновенно.
 ASSIST_TIMEOUT = float(os.getenv('ASSIST_TIMEOUT', '8'))

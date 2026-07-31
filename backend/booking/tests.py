@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.conf import settings
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -851,6 +852,69 @@ class AssistTests(TestCase):
         # лишние пробелы при копировании из консоли
         with override_settings(YANDEX_FOLDER_ID='b1gtest', YANDEX_MODEL='  yandexgpt-lite/latest  '):
             self.assertEqual(model_uri(), full)
+
+    def test_request_matches_chat_completions_contract(self):
+        """Тело запроса и разбор ответа должны совпадать с /v1/chat/completions.
+
+        Формат легко разъехаться: у «родного» foundationModels ключи другие
+        (modelUri, completionOptions, text, result.alternatives). Ошибка в
+        одном ключе не видна снаружи — подбор молча уходит на локальный
+        алгоритм, а сайт при этом выглядит здоровым.
+        """
+        import json as _json
+        import urllib.request
+
+        from django.test import override_settings
+
+        from booking import assist as A
+        from booking.models import Resource
+
+        sent = {}
+
+        class FakeResp:
+            def read(self):
+                return _json.dumps({'choices': [{'message': {'content':
+                    '{"reply":"Готово.","items":[{"id":"eq-nmr","why":"тест"}]}'}}]}).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            sent['url'] = req.full_url
+            sent['headers'] = {k.lower(): v for k, v in req.headers.items()}
+            sent['body'] = _json.loads(req.data.decode())
+            return FakeResp()
+
+        real = urllib.request.urlopen
+        urllib.request.urlopen = fake_urlopen
+        try:
+            with override_settings(YANDEX_API_KEY='k', YANDEX_FOLDER_ID='b1gtest',
+                                   YANDEX_MODEL='yandexgpt-lite/latest'):
+                got = A.ask_yandex('нужен ЯМР', list(Resource.objects.filter(is_active=True)))
+        finally:
+            urllib.request.urlopen = real
+
+        b = sent['body']
+        self.assertEqual(b['model'], 'gpt://b1gtest/yandexgpt-lite/latest')
+        self.assertIn('max_tokens', b)                  # не maxTokens
+        self.assertNotIn('modelUri', b)
+        self.assertNotIn('completionOptions', b)
+        for m in b['messages']:                          # content, а не text
+            self.assertIn('content', m)
+            self.assertNotIn('text', m)
+        # каталог передаётся заголовком, иначе запрос уходит «в никуда»
+        self.assertEqual(sent['headers'].get('Openai-project'.lower()), 'b1gtest')
+        self.assertTrue(sent['headers'].get('Authorization'.lower(), '').startswith('Api-Key '))
+        # ответ разбирается из choices, а не из result.alternatives
+        self.assertEqual(got, ('Готово.', [{'id': 'eq-nmr', 'why': 'тест'}]))
+
+    def test_default_llm_url_is_chat_completions(self):
+        """Значение по умолчанию должно быть рабочим: при новой установке
+        .env заполняют не полностью, и подбор молча ушёл бы на локальный."""
+        self.assertIn('/v1/chat/completions', settings.YANDEX_LLM_URL)
 
     # --- поведение ассистента: что он отвечает и о чём молчит ---
 

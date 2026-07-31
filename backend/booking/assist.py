@@ -299,31 +299,34 @@ def ask_yandex(query, resources):
     import urllib.error
     import urllib.request
 
+    # OpenAI-совместимый эндпойнт Yandex Cloud (/v1/chat/completions).
+    # Отличается от «родного» foundationModels: model вместо modelUri,
+    # параметры на верхнем уровне вместо completionOptions, content вместо
+    # text в сообщениях и ответ в choices вместо result.alternatives.
+    # Каталог передаётся в заголовке OpenAI-Project.
     body = {
-        'modelUri': model_uri(),
-        'completionOptions': {
-            'stream': False,
-            'temperature': 0.1,      # подбор, а не сочинение: нужна стабильность
-            'maxTokens': 800,
-        },
+        'model': model_uri(),
+        'temperature': 0.1,          # подбор, а не сочинение: нужна стабильность
+        'max_tokens': 800,
         'messages': [
-            {'role': 'system', 'text': SYSTEM_PROMPT},
+            {'role': 'system', 'content': SYSTEM_PROMPT},
             {'role': 'user',
-             'text': f'КАТАЛОГ (идентификатор | тип | название | подразделение | '
-                     f'класс | характеристики | описание):\n{_catalog_for_prompt(resources)}\n\n'
-                     f'ЗАДАЧА КЛИЕНТА: {query}'},
+             'content': f'КАТАЛОГ (идентификатор | тип | название | подразделение | '
+                        f'класс | характеристики | описание):\n{_catalog_for_prompt(resources)}\n\n'
+                        f'ЗАДАЧА КЛИЕНТА: {query}'},
         ],
     }
     req = urllib.request.Request(
         settings.YANDEX_LLM_URL,
         data=json.dumps(body).encode('utf-8'),
         headers={'Content-Type': 'application/json',
-                 'Authorization': f'Api-Key {key}'},
+                 'Authorization': f'Api-Key {key}',
+                 'OpenAI-Project': folder},
         method='POST')
     try:
         with urllib.request.urlopen(req, timeout=settings.ASSIST_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode('utf-8'))
-        text = payload['result']['alternatives'][0]['message']['text']
+        text = payload['choices'][0]['message']['content']
     except (urllib.error.URLError, OSError, KeyError, IndexError, ValueError) as e:
         log.warning('YandexGPT недоступен, работаем на локальном подборе: %s', e)
         return None
