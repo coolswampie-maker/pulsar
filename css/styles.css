@@ -621,9 +621,15 @@ a.val:hover{color:var(--brass);}
 .hs-chip{background:#fff;border:1px solid var(--line);border-radius:999px;
   padding:6px 13px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;transition:.15s;}
 .hs-chip:hover{border-color:var(--brass-soft);color:var(--navy);}
-.hs-res:not(:empty){margin:0 0 20px;max-width:600px;}
-.hs-res .assist-hits{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));}
-@media(max-width:1024px){ .hs-ex,.hs-res:not(:empty),.hero2 .searchbar{max-width:none;} }
+/* Ответ — отдельная ячейка во всю ширину сетки hero, под обеими колонками. */
+.hs-res{grid-column:1/-1;}
+/* пустой блок остаётся ячейкой сетки и добавляет лишний gap под hero */
+.hs-res:empty{display:none;}
+/* Пока идёт разговор, картинка уходит: диалогу нужна вся ширина, а декоративное
+   фото рядом с ответом только мешает читать. Возвращается по крестику. */
+.hero2-grid.answering{grid-template-columns:1fr;}
+.hero2-grid.answering .hero2-media{display:none;}
+@media(max-width:1024px){ .hs-ex,.hero2 .searchbar{max-width:none;} }
 .hero2-media{position:relative;}
 .hero2-media img{position:relative;z-index:1;width:100%;aspect-ratio:4/4.5;object-fit:cover;border-radius:14px;box-shadow:var(--shadow-lg);}
 .hero2-frame{position:absolute;inset:18px -16px -16px 18px;border:1px solid var(--brass);border-radius:14px;z-index:0;}
@@ -790,9 +796,46 @@ a.val:hover{color:var(--brass);}
   @keyframes ai-spark{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.9)}}
 }
 .ai-wait{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--ink-soft);
-  padding:4px 0;}
-.ai-src{display:flex;align-items:center;gap:7px;margin-top:12px;
-  font-size:12.5px;color:var(--ink-soft);}
+  padding:10px 2px;}
+.ai-src{margin-top:12px;font-size:12.5px;color:var(--ink-soft);}
+
+/* ============================================================ ОКНО ДИАЛОГА */
+.ai-dialog{position:relative;background:#fff;border:1px solid var(--line);
+  border-radius:16px;padding:20px 22px 22px;box-shadow:0 14px 40px rgba(14,42,71,.10);
+  animation:ai-open .22s ease-out;}
+@keyframes ai-open{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){ .ai-dialog{animation:none;} }
+.ai-close{position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;color:var(--ink-soft);
+  background:transparent;border:none;cursor:pointer;transition:.15s;}
+.ai-close svg{width:15px;height:15px;}
+.ai-close:hover{background:var(--paper-2);color:var(--navy);}
+.ai-msg{display:flex;gap:11px;align-items:flex-start;}
+.ai-msg.you{justify-content:flex-end;margin:0 42px 14px 0;}
+.ai-msg.you .ai-bubble{background:var(--navy);color:#fff;border-radius:14px 14px 4px 14px;
+  padding:10px 15px;font-size:14.5px;line-height:1.45;max-width:min(100%,46ch);}
+.ai-msg.bot .ai-bubble{flex:1;min-width:0;background:var(--paper-2);
+  border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:15px 17px;}
+/* аватар ассистента — та же искра, что на плашке AI: один и тот же знак */
+.ai-ava{flex:none;width:32px;height:32px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;color:#fff;
+  background:linear-gradient(120deg,#7C5CE0,#3E7BD6 55%,#2AA6A0);
+  box-shadow:0 2px 7px rgba(62,123,214,.3);}
+.ai-ava svg{width:16px;height:16px;}
+.ai-say{font-size:15px;line-height:1.5;color:var(--ink);margin:0 0 14px;max-width:66ch;}
+.ai-dialog .assist-hits{grid-template-columns:repeat(auto-fill,minmax(215px,1fr));}
+.ai-dialog .assist-hit{background:#fff;}
+.ai-foot{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--ink-soft);line-height:2;}
+.ai-foot span{margin-right:4px;}
+@media(max-width:600px){
+  .ai-dialog{padding:18px 15px 20px;border-radius:14px;}
+  .ai-msg.you{margin-right:36px;}
+  .ai-msg.bot{gap:9px;}
+  .ai-ava{width:27px;height:27px;}
+  .ai-ava svg{width:14px;height:14px;}
+  .ai-foot{line-height:2.1;}
+}
 
 #aqres{margin-top:14px;}
 /* ответ ассистента словами — над карточками; читается как реплика, а не как

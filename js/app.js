@@ -141,38 +141,73 @@
       .map(function(x){ return { id:x.r.id, title:x.r.title, why:'',
                                  priceValue:x.r.priceValue, priceUnit:x.r.priceUnit }; });
   }
-  // out — куда рисовать; catalogLink — показывать ли «показать всё в каталоге»;
-  // done — вызывается после отрисовки (вернуть кнопку в рабочее состояние)
-  function runAssist(q, out, catalogLink, done){
-    done=done||function(){};
+  /* Ответ показываем диалогом: слева реплика человека, ниже ответ ассистента
+     с подобранным. Список карточек под формой читался как выдача поисковика —
+     а тут именно разговор, и продолжение разговора («уточнить», «заявка»)
+     должно быть видно сразу, а не угадываться. */
+  function aiDialogHtml(q, reply, items, mode, catalogLink){
+    // честная подпись: ИИ ставим только там, где отвечала модель
+    var src = mode==='ai' ? 'Подобрал ИИ-ассистент'
+            : mode==='licensed' ? ''
+            : 'Подобрано поиском по каталогу';
+    var acts=['<button class="pick-link" id="airefine">Уточнить запрос</button>'];
+    if(items.length && catalogLink)
+      acts.push('<button class="pick-link" id="aiall">Показать всё в каталоге</button>');
+    acts.push('<button class="pick-link" id="pickopen">Оставить заявку на подбор</button>');
+
+    return '<div class="ai-dialog">'+
+      '<button class="ai-close" id="aiclose" type="button" aria-label="Закрыть подбор">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">'+
+        '<path d="M6 6l12 12M18 6L6 18"/></svg></button>'+
+      '<div class="ai-msg you"><div class="ai-bubble">'+esc(q)+'</div></div>'+
+      '<div class="ai-msg bot">'+
+        '<span class="ai-ava" aria-hidden="true">'+
+          '<svg viewBox="0 0 24 24" fill="currentColor">'+
+          '<path d="M12 2.6l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1-5.1-1.9 5.1-1.9z"/>'+
+          '<path d="M18.6 14.4l.85 2.25 2.25.85-2.25.85-.85 2.25-.85-2.25-2.25-.85 2.25-.85z"/>'+
+          '</svg></span>'+
+        '<div class="ai-bubble">'+
+          '<p class="ai-say">'+esc(reply||'Вот что нашлось под вашу задачу:')+'</p>'+
+          (items.length?aiHitsHtml(items):'')+
+          (src?'<div class="ai-src">'+esc(src)+'</div>':'')+
+          '<div class="ai-foot"><span>Нужно что-то другое?</span> '+acts.join(' · ')+'</div>'+
+          '<div id="pickbox"></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  /* o = { out, input, catalogLink, onOpen, onClose, done } */
+  function runAssist(q, o){
+    o=o||{};
+    var out=o.out, done=o.done||function(){};
     if(!out) return done();
     q=(q||'').trim();
     if(!q){ out.innerHTML=''; return done(); }
-    out.innerHTML='<div class="ai-wait">'+aiBadge()+'Подбираем…</div>';
+    out.innerHTML='<div class="ai-dialog"><div class="ai-msg you"><div class="ai-bubble">'+
+      esc(q)+'</div></div><div class="ai-wait">'+aiBadge()+'Подбираем…</div></div>';
+    if(o.onOpen) o.onOpen();
+    // окно открывается ниже формы и на невысоком экране остаётся за кадром:
+    // человек нажал «Найти» и решил бы, что ничего не произошло
+    if(out.getBoundingClientRect().bottom > window.innerHeight)
+      out.scrollIntoView({ behavior:'smooth', block:'nearest' });
     P.assistApi.ask(q).then(function(res){
       var d=(res && res.ok) ? (res.data||{}) : null;
+      // бэкенд не ответил — ищем в браузере, человек не должен остаться ни с чем
       var items = d ? (d.items||[]) : localSearch(q);
-      var reply = d ? (d.reply||'') : '';
-      var mode  = d ? (d.mode||'') : 'offline';
-      // честная подпись: ИИ ставим только там, где отвечала модель
-      var src = mode==='ai' ? 'Подобрал ИИ-ассистент'
-              : mode==='licensed' ? ''
-              : 'Подобрано поиском по каталогу';
-      var html = (reply ? '<p class="assist-reply">'+esc(reply)+'</p>' : '');
-      if(items.length){
-        html += aiHitsHtml(items);
-        if(src) html += '<div class="ai-src">'+(mode==='ai'?aiBadge('mini'):'')+esc(src)+'</div>';
-        if(catalogLink) html += '<div class="pick-more">'+
-          '<button class="pick-link" id="aiall">Показать все совпадения в каталоге →</button></div>';
-        html += '<div class="pick-more">Не то, что нужно? '+
-          '<button class="pick-link" id="pickopen">Оставить заявку на подбор</button></div>'+
-          '<div id="pickbox"></div>';
-        out.innerHTML=html;
-      } else {
-        // реплика уже всё объяснила — второй раз то же не повторяем
-        out.innerHTML=html+noMatchHtml(reply?'':'По такому описанию ничего не нашлось.');
-      }
+      out.innerHTML=aiDialogHtml(q, d?(d.reply||''):'', items,
+                                 d?(d.mode||''):'offline', o.catalogLink);
       bindPick(q);
+      var close=el('aiclose');
+      if(close) close.onclick=function(){
+        out.innerHTML='';
+        if(o.onClose) o.onClose();
+        if(o.input) o.input.focus();
+      };
+      var refine=el('airefine');
+      if(refine) refine.onclick=function(){
+        if(o.input){ o.input.focus(); o.input.select(); }
+      };
       var all=el('aiall');
       if(all) all.onclick=function(){
         catState.q=q; catState.cat=''; catState.onlyFree=false; catState.sort='default';
@@ -222,7 +257,6 @@
         '<div class="hs-ex">'+['чистая комната под GMP','посмотреть поверхность материала','высушить опытную партию']
           .map(function(x){ return '<button class="hs-chip" type="button" data-q="'+esc(x)+'">'+esc(x)+'</button>'; }).join('')+
         '</div>'+
-        '<div id="hres" class="hs-res"></div>'+
         '<div class="chips">'+
           typeChip('room','Лаборатории')+typeChip('equipment','Оборудование')+
           typeChip('specialist','Специалисты')+typeChip('service','Услуги под ключ')+
@@ -236,6 +270,9 @@
           '<div><b>Единый оператор</b><span>научной инфраструктуры МГУ</span></div>'+
         '</div>'+
       '</div>'+
+      // ответ — отдельная ячейка сетки во всю ширину: иначе диалог ютился бы
+      // в левой колонке рядом с картинкой и выглядел приложением к форме
+      '<div id="hres" class="hs-res"></div>'+
     '</div></div></section>'+
 
     /* ---- ПЛИТКИ КАТЕГОРИЙ ---- */
@@ -288,13 +325,21 @@
   function mountHome(){
     var inp=el('hq'), out=el('hres'), btn=el('hgo');
     if(!inp||!out) return;
+    var grid=qsAll('.hero2-grid')[0];
     // Раньше здесь был выбор раздела и переход в каталог. Теперь ответ даётся
     // сразу на главной: человек не обязан знать, прибор ему нужен или услуга.
     var go=function(){
       var q=inp.value.trim();
       if(!q){ out.innerHTML=''; return; }
       if(btn) btn.disabled=true;
-      runAssist(q, out, true, function(){ if(btn) btn.disabled=false; });
+      runAssist(q, {
+        out:out, input:inp, catalogLink:true,
+        // на время разговора картинка уходит: диалог занимает всю ширину,
+        // иначе он зажат в колонке и читается как довесок к форме
+        onOpen: function(){ if(grid) grid.classList.add('answering'); },
+        onClose:function(){ if(grid) grid.classList.remove('answering'); },
+        done:   function(){ if(btn) btn.disabled=false; }
+      });
     };
     if(btn) btn.onclick=go;
     inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); go(); } });
@@ -385,9 +430,8 @@
     if(!inp||!btn) return;
     function run(){
       btn.disabled=true; btn.textContent='Подбираем…';
-      runAssist(inp.value, out, false, function(){
-        btn.disabled=false; btn.textContent='Подобрать';
-      });
+      runAssist(inp.value, { out:out, input:inp, catalogLink:false,
+        done:function(){ btn.disabled=false; btn.textContent='Подобрать'; } });
     }
     btn.onclick=run;
     inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); run(); } };
