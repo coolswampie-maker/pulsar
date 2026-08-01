@@ -1119,8 +1119,9 @@ class ThrottleTests(TestCase):
     def test_compose_actually_returns_429(self):
         """Сквозная проверка на настоящем лимите из настроек."""
         from booking import compose as C
-        real = C._ask_model
+        real, real_run = C._ask_model, C.run_job
         C._ask_model = lambda p, f: json.dumps({'blocks': [{'heading': 'h', 'text': 't'}], 'gaps': []})
+        C.run_job = lambda job_id: None      # поток в этом тесте не нужен
         self.c.patch('/api/profile/', data=json.dumps({
             'title': 'т', 'summary': 'с', 'problem': 'п', 'solution': 'р',
             'stage': 'lab', 'groundwork': 'з', 'team': 'к'}),
@@ -1131,7 +1132,7 @@ class ThrottleTests(TestCase):
                                  content_type='application/json', **self.auth).status_code
                      for _ in range(limit + 2)]
         finally:
-            C._ask_model = real
+            C._ask_model, C.run_job = real, real_run
         self.assertIn(429, codes, f'лимит {limit}/час не сработал: {codes[-3:]}')
 
     def test_compose_survives_array_body(self):
@@ -1157,6 +1158,22 @@ class ProjectProfileTests(TestCase):
     def _patch(self, **kw):
         return self.c.patch('/api/profile/', data=json.dumps(kw),
                             content_type='application/json', **self.auth)
+
+    def _compose(self, fmt):
+        """Поставить сборку и выполнить задание тут же — в тестах поток не нужен."""
+        from booking import compose as C
+        real = C.run_job
+        C.run_job = lambda job_id: None
+        try:
+            r = self.c.post('/api/profile/compose/', data=json.dumps({'format': fmt}),
+                            content_type='application/json', **self.auth)
+        finally:
+            C.run_job = real
+        d = json.loads(r.content)
+        if d.get('status') != 'pending':
+            return d
+        C.run_job(d['jobId'])
+        return json.loads(self.c.get(f"/api/profile/compose/{d['jobId']}/", **self.auth).content)
 
     def _fill_core(self):
         self._patch(title='Сенсор метана', summary='Оптический сенсор метана для ЖКХ',
@@ -1259,11 +1276,9 @@ class ProjectProfileTests(TestCase):
         real = C._ask_model
         C._ask_model = lambda p, f: called.append(f)
         try:
-            r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
-                            content_type='application/json', **self.auth)
+            d = self._compose('teaser')
         finally:
             C._ask_model = real
-        d = json.loads(r.content)
         self.assertEqual(d['mode'], 'need')
         self.assertEqual(called, [], 'обратились к модели, не имея данных')
         self.assertTrue(d['gaps'])
@@ -1276,11 +1291,9 @@ class ProjectProfileTests(TestCase):
             'blocks': [{'heading': 'Проблема', 'text': 'Датчики дороги в обслуживании.'}],
             'gaps': ['объём рынка']})
         try:
-            r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
-                            content_type='application/json', **self.auth)
+            d = self._compose('teaser')
         finally:
             C._ask_model = real
-        d = json.loads(r.content)
         self.assertEqual(d['mode'], 'ok')
         self.assertEqual(d['blocks'][0]['heading'], 'Проблема')
         self.assertIn('объём рынка', d['gaps'])
@@ -1305,11 +1318,64 @@ class ProjectProfileTests(TestCase):
         real = C._ask_model
         C._ask_model = lambda p, f: None
         try:
+            d = self._compose('teaser')
+        finally:
+            C._ask_model = real
+        self.assertEqual(d['mode'], 'offline')
+        self.assertEqual(d['status'], 'failed')
+
+    # --- фоновая сборка ---
+
+    def test_compose_returns_immediately(self):
+        """Ответ приходит сразу: обращение к модели идёт в фоне.
+
+        Прямой вызов держал бы процесс Gunicorn до полуминуты — три
+        одновременные сборки заняли бы все три, и сайт встал бы целиком.
+        """
+        from booking import compose as C
+        self._fill_core()
+        real = C.run_job
+        C.run_job = lambda job_id: None          # не даём потоку выполниться
+        try:
             r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
                             content_type='application/json', **self.auth)
         finally:
-            C._ask_model = real
-        self.assertEqual(json.loads(r.content)['mode'], 'offline')
+            C.run_job = real
+        self.assertEqual(r.status_code, 202)
+        d = json.loads(r.content)
+        self.assertEqual(d['status'], 'pending')
+        self.assertTrue(d['jobId'])
+
+    def test_job_is_private_to_its_company(self):
+        """Чужое задание отдавать нельзя — в нём текст чужого проекта."""
+        from booking.models import ComposeJob
+        other_user = User.objects.create_user(username='b@x.ru', email='b@x.ru',
+                                              password='Nauka2026lab')
+        other = Company.objects.create(user=other_user, name='ООО «Чужая»')
+        job = ComposeJob.objects.create(company=other, fmt='teaser',
+                                        status='done', blocks=[{'heading': 'секрет', 'text': 'х'}])
+        r = self.c.get(f'/api/profile/compose/{job.pk}/', **self.auth)
+        self.assertEqual(r.status_code, 404)
+
+    def test_stale_job_does_not_hang_forever(self):
+        """Процесс перезапустили посреди работы — задание не должно навсегда
+        остаться «выполняется», иначе кнопка крутится бесконечно."""
+        from datetime import timedelta as _td
+
+        from booking.models import ComposeJob
+        job = ComposeJob.objects.create(company=self.company, fmt='teaser')
+        ComposeJob.objects.filter(pk=job.pk).update(
+            created_at=timezone.now() - _td(minutes=10))
+        d = json.loads(self.c.get(f'/api/profile/compose/{job.pk}/', **self.auth).content)
+        self.assertEqual(d['status'], 'failed')
+
+    def test_missing_fields_answered_without_a_job(self):
+        """Нехватку полей видно без модели — задание заводить незачем."""
+        from booking.models import ComposeJob
+        r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
+                        content_type='application/json', **self.auth)
+        self.assertEqual(json.loads(r.content)['mode'], 'need')
+        self.assertEqual(ComposeJob.objects.count(), 0)
 
     def test_unknown_format_rejected(self):
         r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'диплом'}),

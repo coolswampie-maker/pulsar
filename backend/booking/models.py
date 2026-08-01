@@ -6,6 +6,7 @@ from datetime import time
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 RES_TYPES = [
     ('room', 'Лаборатория'),
@@ -560,3 +561,48 @@ class ProjectProfile(models.Model):
                 v = dict(PROFILE_STAGES).get(v, v)
             out.append(f'{PROFILE_LABELS[k]}: {v}')
         return '\n'.join(out)
+
+
+class ComposeJob(models.Model):
+    """Задание на сборку документа, выполняемое в фоне.
+
+    Зачем не напрямую: обращение к модели длится до полуминуты, а Gunicorn
+    работает синхронными процессами. Прямой вызов держал бы процесс целиком —
+    три одновременные сборки занимали бы все три, и на это время вставал бы
+    весь сайт, включая каталог и бронирование. При показе нескольким людям
+    сразу это проявилось бы сразу.
+
+    Хранение в базе, а не в кэше: процессов несколько, у каждого свой кэш в
+    памяти, и задание, созданное одним, второй бы не увидел. База общая.
+    """
+    STATUS = [
+        ('pending', 'Выполняется'),
+        ('done', 'Готово'),
+        ('failed', 'Не удалось'),
+    ]
+    company = models.ForeignKey('Company', on_delete=models.CASCADE,
+                                related_name='compose_jobs', verbose_name='Компания')
+    fmt = models.CharField('Формат', max_length=32)
+    status = models.CharField('Статус', max_length=10, choices=STATUS, default='pending')
+    mode = models.CharField('Режим', max_length=10, blank=True)
+    blocks = models.JSONField('Блоки', default=list, blank=True)
+    gaps = models.JSONField('Чего не хватило', default=list, blank=True)
+    created_at = models.DateTimeField('Создано', auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField('Завершено', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Сборка документа'
+        verbose_name_plural = 'Сборки документов'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.fmt} — {self.get_status_display()}'
+
+    @property
+    def stale(self):
+        """Задание, о котором никто не отчитался. Процесс мог быть перезапущен
+        посреди работы — тогда статус так и остался бы «выполняется» навсегда."""
+        from django.conf import settings
+        limit = getattr(settings, 'COMPOSE_TIMEOUT', 30) + 30
+        return (self.status == 'pending'
+                and (timezone.now() - self.created_at).total_seconds() > limit)

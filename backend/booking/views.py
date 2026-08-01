@@ -1,3 +1,5 @@
+import threading
+
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from rest_framework import mixins, viewsets
@@ -11,9 +13,10 @@ from rest_framework.views import APIView
 
 from . import querylog
 from .assist import assist
-from .compose import FORMATS, compose, missing_for
+from .compose import FORMATS, missing_for, run_job
 from .models import (KPI_KEYS, PROFILE_LABELS, BusySlot, CustomRequest, Kpi,
-                     KpiEntry, Order, ProjectProfile, Resource, profile_field_spec)
+                     ComposeJob, KpiEntry, Order, ProjectProfile, Resource,
+                     profile_field_spec)
 from .serializers import (CompanySerializer, CustomRequestSerializer,
                           KpiEntrySerializer, KpiSerializer,
                           OrderCreateSerializer, OrderListSerializer,
@@ -482,10 +485,20 @@ class ProfileNextView(APIView):
         })
 
 
+def _job_payload(job):
+    return {'jobId': job.pk, 'format': job.fmt, 'title': FORMATS[job.fmt]['title'],
+            'status': job.status, 'mode': job.mode,
+            'blocks': job.blocks, 'gaps': job.gaps}
+
+
 class ComposeView(APIView):
-    """POST /api/profile/compose/ — собрать документ из профиля.
+    """POST /api/profile/compose/ — поставить сборку документа в очередь.
 
     Тело: {"format": "sections" | "teaser" | "onepager" | "deck"}
+    Ответ приходит не сразу: обращение к модели длится до полуминуты, а
+    Gunicorn работает синхронными процессами — держать процесс всё это время
+    значит останавливать сайт для остальных. Возвращаем номер задания,
+    клиент опрашивает его через ComposeJobView.
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [ComposeThrottle]
@@ -498,14 +511,36 @@ class ComposeView(APIView):
         fmt = (data.get('format') or '').strip()
         if fmt not in FORMATS:
             return Response({'detail': 'Неизвестный формат документа.'}, status=400)
-        blocks, gaps, mode = compose(profile, fmt)
-        return Response({
-            'format': fmt,
-            'title': FORMATS[fmt]['title'],
-            'mode': mode,
-            'blocks': blocks,
-            'gaps': gaps,
-        })
+
+        # Нехватку полей видно без модели — отвечаем сразу, не заводя задание.
+        lack = missing_for(profile, fmt)
+        if lack:
+            return Response({'jobId': None, 'format': fmt, 'title': FORMATS[fmt]['title'],
+                             'status': 'done', 'mode': 'need', 'blocks': [],
+                             'gaps': [PROFILE_LABELS[k] for k in lack]})
+
+        job = ComposeJob.objects.create(company=profile.company, fmt=fmt)
+        threading.Thread(target=run_job, args=(job.pk,), daemon=True).start()
+        return Response(_job_payload(job), status=202)
+
+
+class ComposeJobView(APIView):
+    """GET /api/profile/compose/<id>/ — статус и результат сборки."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, job_id):
+        company = getattr(getattr(request, 'user', None), 'company', None)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        # фильтр по своей компании — чужое задание не отдаём
+        job = ComposeJob.objects.filter(pk=job_id, company=company).first()
+        if not job:
+            return Response({'detail': 'Задание не найдено.'}, status=404)
+        if job.stale:
+            # процесс перезапустили посреди работы — иначе «выполняется» навсегда
+            job.status, job.mode = 'failed', 'offline'
+            job.save(update_fields=['status', 'mode'])
+        return Response(_job_payload(job))
 
 
 class ComposeFormatsView(APIView):

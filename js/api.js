@@ -144,7 +144,8 @@
     save:function(d){ return sendJson('PATCH', '/profile/', d); },
     next:function(){ return P.apiFetch('/profile/next/').then(parse); },
     formats:function(){ return P.apiFetch('/profile/formats/').then(parse); },
-    compose:function(fmt){ return postJson('/profile/compose/', {format:fmt}); }
+    compose:function(fmt){ return postJson('/profile/compose/', {format:fmt}); },
+    composeJob:function(id){ return P.apiFetch('/profile/compose/'+id+'/').then(parse); }
   };
 
   /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */

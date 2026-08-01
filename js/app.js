@@ -1313,19 +1313,44 @@
     });
   }
 
+  /* Сборка идёт в фоне: сервер ставит задание и сразу отвечает, мы
+     опрашиваем результат. Прямой вызов держал бы процесс сервера до
+     полуминуты, и на это время сайт вставал бы для остальных. */
+  var POLL_MS=1500, POLL_LIMIT=40;      // 40 попыток ≈ минута ожидания
+
   function composeDoc(fmt, btn){
     var out=el('projout');
     btn.disabled=true; btn.textContent='Собираем…';
     out.innerHTML='<div class="ai-wait">'+aiBadge()+'Помощник пишет черновик, это занимает до полуминуты…</div>';
-    P.profileApi.compose(fmt).then(function(r){
+    var done=function(r){
       btn.disabled=false; btn.textContent='Собрать';
       if(!r.ok){ out.innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
-      var d=r.data;
+      showDoc(r.data, out);
+    };
+    P.profileApi.compose(fmt).then(function(r){
+      if(!r.ok || !r.data || r.data.status!=='pending') return done(r);
+      // задание принято — ждём результата
+      var tries=0;
+      (function poll(){
+        if(++tries>POLL_LIMIT)
+          return done({ok:true, data:{status:'failed', mode:'offline', blocks:[], gaps:[]}});
+        setTimeout(function(){
+          P.profileApi.composeJob(r.data.jobId).then(function(j){
+            if(!j.ok) return done(j);
+            if(j.data.status==='pending') return poll();
+            done(j);
+          });
+        }, POLL_MS);
+      })();
+    });
+  }
+
+  function showDoc(d, out){
       if(d.mode==='need'){
         out.innerHTML='<div class="form-msg err">Сначала заполните: '+esc(d.gaps.join(', '))+'</div>';
         return;
       }
-      if(d.mode==='offline'){
+      if(d.status==='failed' || d.mode==='offline' || !d.blocks || !d.blocks.length){
         out.innerHTML='<div class="form-msg err">Помощник сейчас недоступен — '+
           'попробуйте через несколько минут.</div>';
         return;
@@ -1351,7 +1376,6 @@
           self.textContent='Скопировано'; setTimeout(function(){ self.textContent='Скопировать текст'; },1600);
         });
       };
-    });
   }
 
   function cabTabs(active){

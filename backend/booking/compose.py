@@ -177,3 +177,48 @@ def compose(profile, fmt):
         log.info('Сборка документа: модель вернула пустой или неразборный ответ')
         return [], [], 'offline'
     return blocks, gaps, 'ok'
+
+
+def run_job(job_id):
+    """Выполнить задание в отдельном потоке.
+
+    Соединение с базой закрываем сами: Django открывает своё на каждый поток,
+    и без закрытия они копились бы до исчерпания пула.
+    """
+    import time
+
+    from django.db import OperationalError, connection
+    from django.utils import timezone
+
+    from .models import ComposeJob
+    try:
+        job = ComposeJob.objects.select_related('company__profile').get(pk=job_id)
+    except ComposeJob.DoesNotExist:
+        connection.close()
+        return
+    try:
+        profile = getattr(job.company, 'profile', None)
+        if profile is None:
+            job.status, job.mode = 'failed', 'need'
+        else:
+            blocks, gaps, mode = compose(profile, job.fmt)
+            job.blocks, job.gaps, job.mode = blocks, gaps, mode
+            job.status = 'done' if mode in ('ok', 'need') else 'failed'
+    except Exception:                       # noqa: BLE001 — поток не должен молча умереть
+        log.exception('Сборка документа не удалась (задание %s)', job_id)
+        job.status, job.mode = 'failed', 'offline'
+    finally:
+        job.finished_at = timezone.now()
+        # SQLite не любит одновременную запись из нескольких потоков; на бою
+        # стоит Postgres, где этого нет, но терять готовый результат из-за
+        # занятой базы нельзя — пробуем несколько раз.
+        for attempt in range(5):
+            try:
+                job.save(update_fields=['status', 'mode', 'blocks', 'gaps', 'finished_at'])
+                break
+            except OperationalError:
+                if attempt == 4:
+                    log.warning('Не удалось записать результат сборки %s', job_id)
+                else:
+                    time.sleep(0.3 * (attempt + 1))
+        connection.close()
