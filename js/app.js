@@ -98,11 +98,17 @@
   window.addEventListener('pulsar:cart', syncCart);
 
   /* ---------------- переиспользуемые куски ---------------- */
+  /* «Занято сегодня» само по себе — тупик: человек не знает, ждать ему день
+     или месяц, и уходит. Показываем, с какого числа свободно. */
+  /* Плашка занятости на карточке каталога.
+     Показываем, только когда ресурс занят сегодня: «свободно» на тридцати
+     карточках подряд — шум, который перестают замечать. Занятость же
+     сообщает то, чего иначе не узнать, не открыв карточку. */
   function availBadge(id){
-    var s=P.availabilityLabel(id);
-    return s==='ok'
-      ? '<span class="res-avail ok">Свободно сегодня</span>'
-      : '<span class="res-avail busy">Занято сегодня</span>';
+    if(P.availabilityLabel(id)==='ok') return '';
+    var free=P.nextFreeDate(id);
+    return '<span class="res-avail busy">'+
+      (free ? 'Занято до '+esc(P.dates.humanShort(free)) : 'Занято надолго')+'</span>';
   }
   function resCard(r){
     var op = r.requiresOperator ? '<span class="op-flag">'+icon('user',13)+' с оператором</span>' : '';
@@ -110,6 +116,7 @@
     '<a class="res-card" href="#/resource/'+r.id+'">'+
       '<div class="res-media">'+img(r,'',r.title)+
         '<span class="res-badge">'+(r.cleanClass||P.typeMeta[r.type].single)+'</span>'+
+        availBadge(r.id)+
       '</div>'+
       '<div class="res-body">'+
         '<div class="res-lab">'+esc(r.lab)+'</div>'+
@@ -763,10 +770,26 @@
     return span+' · '+SHIFT_DESC[book.shiftType]+' · <strong>'+n+' '+unitWord(n,'смена')+'</strong>';
   }
 
+  /* Подсказка «ближайшее свободное». Календарь показывает занятые дни, но
+     искать в нём первый свободный человек должен сам — а если ближайшее окно
+     через три недели, он этого просто не увидит и уйдёт. Кнопка сразу ставит
+     дату, чтобы не листать месяцы вручную.
+     Услуги «под ключ» календаря не имеют — там подсказка не нужна. */
+  function freeHintHtml(r){
+    if(r.type==='service') return '';
+    var free=P.nextFreeDate(r.id);
+    if(!free) return '<div class="free-hint none">В ближайшие месяцы свободных дат нет — '+
+      '<a href="#/catalog">оставьте заявку на подбор</a>.</div>';
+    var soon = free===P.dates.plusISO(1);
+    return '<div class="free-hint">'+
+      (soon ? 'Свободно уже завтра' : 'Ближайшее свободное — '+esc(P.dates.human(free)))+
+      ' <button type="button" class="pick-link" data-free="'+esc(free)+'">выбрать</button></div>';
+  }
+
   function renderBooking(){
     var r=book.res, b=el('booking'); if(!b) return;
     var priceHead=fmt(r.priceValue)+' <small>'+unitLabel(r)+'</small>';
-    var html='<div class="price-lead">'+priceHead+'</div><hr>';
+    var html='<div class="price-lead">'+priceHead+'</div>'+freeHintHtml(r)+'<hr>';
 
     if(r.type==='service'){
       html+='<div class="field"><label for="bqty">Количество образцов</label>'+
@@ -860,6 +883,17 @@
     });
     el('badd').onclick=addToCart;
     if(el('btobud')) el('btobud').onclick=addToBudget;
+    qsAll('[data-free]').forEach(function(x){
+      x.onclick=function(){
+        var d=x.getAttribute('data-free');
+        book.startDate=book.endDate=book.date=d;
+        book.rangePick='start';
+        // перелистываем календарь на месяц выбранной даты, иначе кнопка
+        // ставит дату, которой на экране не видно
+        book.cal=new Date(parseInt(d.slice(0,4),10), parseInt(d.slice(5,7),10)-1, 1);
+        renderBooking(); updateEstimate();
+      };
+    });
   }
 
   /* Смета — это план, а не бронь: даты и слоты ей не нужны, нужно только
@@ -1605,8 +1639,10 @@
           '<div class="bud-total"><span>Итого</span><strong>'+fmt(b.total)+'</strong></div></div>'
         : '<div class="bud-empty">Пока пусто. Найдите ниже то, что нужно '+
           'для проекта — например «микроскоп» или «чистая комната».</div>')+
-      budPicker();
+      budPicker()+
+      '<div id="budreview"></div>';
     bindBudget();
+    drawReview();
   }
 
   function budRow(l){
@@ -1649,6 +1685,75 @@
     '</div>';
   }
 
+  /* Проверка сметы моделью. Отдельной кнопкой, а не автоматически при
+     каждом открытии: каждый вызов платный, а смета между заходами обычно
+     та же. Плюс человек сам решает, спрашивать ли совета. */
+  var reviewState={items:null, mode:null, busy:false};
+
+  function drawReview(){
+    var m=el('budreview'); if(!m) return;
+    if(!(appl.budget&&appl.budget.lines&&appl.budget.lines.length)){ m.innerHTML=''; return; }
+    var body='';
+    if(reviewState.busy){
+      body='<div class="ai-wait">'+aiBadge()+'Смотрим, чего не хватает…</div>';
+    } else if(reviewState.mode==='need'){
+      body='<div class="bud-empty">Чтобы проверить смету, нужно описание проекта — '+
+        '<a href="#/cabinet/project">заполните профиль</a>.</div>';
+    } else if(reviewState.mode==='off'){
+      body='<div class="form-msg err">Проверка сейчас недоступна. '+
+        'Смета сохранена — попробуйте позже.</div>';
+    } else if(reviewState.items && !reviewState.items.length){
+      body='<div class="bud-empty">Ничего очевидно не упущено. Это не гарантия '+
+        'полноты — окончательный состав работ всё равно за вами.</div>';
+    } else if(reviewState.items){
+      body='<div class="rev-list">'+reviewState.items.map(function(x){
+        return '<div class="rev-item"><div>'+
+            '<div class="bud-t">'+esc(x.title)+'</div>'+
+            (x.why?'<div class="bud-note">'+esc(x.why)+'</div>':'')+
+            '<div class="bud-per">'+fmt(x.priceValue)+' / '+esc(x.priceUnit||'ед.')+'</div>'+
+          '</div>'+
+          '<button class="btn btn-outline btn-sm" data-add="'+esc(x.id)+'">В смету</button>'+
+        '</div>';
+      }).join('')+'</div>'+
+      '<p class="sub" style="margin-top:10px">Предлагается только то, что есть '+
+      'в каталоге. Решение за вами — помощник не знает вашего плана работ '+
+      'целиком.</p>';
+    }
+    m.innerHTML='<div class="rev-head">'+
+        '<button class="btn btn-outline btn-sm" id="budrev"'+(reviewState.busy?' disabled':'')+'>'+
+        (reviewState.items===null&&!reviewState.mode?'Проверить, чего не хватает':'Проверить ещё раз')+
+        '</button>'+aiBadge('mini')+'</div>'+body;
+    if(el('budrev')) el('budrev').onclick=runReview;
+    bindAddButtons();
+  }
+
+  function runReview(){
+    reviewState.busy=true; drawReview();
+    P.profileApi.budgetReview().then(function(r){
+      reviewState.busy=false;
+      if(!r.ok){ reviewState.mode='off'; reviewState.items=null; drawReview(); return; }
+      reviewState.mode=r.data.mode; reviewState.items=r.data.items||[];
+      drawReview();
+    });
+  }
+
+  // Кнопки «В смету» есть и в поиске, и в советах — обработчик один.
+  function bindAddButtons(){
+    qsAll('[data-add]').forEach(function(b){
+      b.onclick=function(){
+        b.disabled=true; b.textContent='Добавляем…';
+        P.profileApi.budgetAdd({resourceId:b.getAttribute('data-add'), qty:1})
+          .then(function(r){
+            appl.pick=[];
+            // добавленную позицию убираем из советов: она уже в смете
+            if(reviewState.items) reviewState.items=reviewState.items.filter(function(x){
+              return x.id!==b.getAttribute('data-add'); });
+            afterBudget(r);
+          });
+      };
+    });
+  }
+
   function bindBudget(){
     qsAll('[data-del]').forEach(function(b){
       b.onclick=function(){
@@ -1678,13 +1783,7 @@
     };
     if(el('bud_find')) el('bud_find').onclick=find;
     if(el('bud_q')) el('bud_q').onkeydown=function(e){ if(e.key==='Enter') find(); };
-    qsAll('[data-add]').forEach(function(b){
-      b.onclick=function(){
-        b.disabled=true; b.textContent='Добавляем…';
-        P.profileApi.budgetAdd({resourceId:b.getAttribute('data-add'), qty:1})
-          .then(function(r){ appl.pick=[]; afterBudget(r); });
-      };
-    });
+    bindAddButtons();
   }
 
   function afterBudget(r){
@@ -1991,6 +2090,7 @@
       (o.note?'<div class="ord-note"><strong>Комментарий:</strong> '+esc(o.note)+'</div>':'')+
       (o.changeRequest?'<div class="ord-note"><strong>Запрос на изменение:</strong> '+esc(o.changeRequest)+'</div>':'')+
       '<div class="ord-actions">'+
+        '<button class="btn btn-outline btn-sm" data-again=\''+esc(JSON.stringify(repeatLines(o)))+'\'>Повторить</button>'+
         (o.status==='new'
           ? '<button class="btn btn-ghost btn-sm" data-chg="'+o.id+'">Попросить перенос</button>'+
             '<button class="btn btn-ghost btn-sm" data-cancel="'+o.id+'">Отменить заявку</button>'
@@ -1999,7 +2099,62 @@
       '<div id="ordmsg-'+o.id+'"></div>'+
     '</div>';
   }
+  /* Повтор заявки.
+
+     Даты из старой заявки в прошлом, поэтому берём ближайшие свободные —
+     иначе корзина сразу отвергнет всё как «дата в прошлом». Позиции
+     оператора пропускаем: их корзина добавляет сама к родительской строке,
+     а вручную добавленная задвоится.
+
+     Состав кладём в атрибут кнопки, а не ищем заявку заново: список уже
+     на экране, лишний запрос ради того, что и так есть, — только повод
+     для рассинхрона. */
+  function repeatLines(o){
+    return (o.lines||[]).filter(function(l){ return !l.isOperator; })
+      .map(function(l){ return {id:l.resourceId, qty:l.qty||1, hours:l.hours||null,
+                                slotStart:l.slotStart||null}; });
+  }
+
+  function repeatOrder(lines, btn){
+    var added=0, moved=0, failed=[];
+    lines.forEach(function(l){
+      var r=P.getById(l.id);
+      if(!r){ failed.push(l.id); return; }          // позицию сняли с каталога
+      var d=P.nextFreeDate(l.id);
+      if(!d){ failed.push(r.title); return; }
+      var o={ date:d, startDate:d, endDate:d, qty:l.qty };
+      if(r.bookMode==='hour'){
+        o.hours=l.hours||r.minUnits||2;
+        o.slotStart=l.slotStart||'09:00';
+        o.slotEnd=computeEnd(o.slotStart, o.hours);
+        o.days=1;
+      }
+      if(r.bookMode==='shift'){ o.shifts=1; o.shiftType='day'; }
+      var res=P.cart.add(l.id, o);
+      if(res && res.ok===false) failed.push(r.title+' — '+(res.msg||'не удалось'));
+      else { added++; if(d!==P.dates.plusISO(1)) moved++; }
+    });
+    if(!added){
+      toast('Повторить не удалось: '+(failed[0]||'позиции недоступны'));
+      return;
+    }
+    // Честно говорим, что даты не те же самые: человек ждёт «как в прошлый
+    // раз», а получает ближайшее свободное — молча подменить дату нельзя.
+    toast('Добавлено позиций: '+added+
+      (moved ? '. Даты — ближайшие свободные, проверьте их' : '')+
+      (failed.length ? '. Не добавлено: '+failed.length : ''));
+    location.hash='#/cart';
+  }
+
   function bindCabOrders(){
+    qsAll('[data-again]').forEach(function(b){
+      b.onclick=function(){
+        var lines=[];
+        try{ lines=JSON.parse(b.getAttribute('data-again')); }catch(e){}
+        if(!lines.length){ toast('В заявке нет позиций для повтора'); return; }
+        repeatOrder(lines, b);
+      };
+    });
     qsAll('[data-cancel]').forEach(function(b){
       b.onclick=function(){
         var id=b.getAttribute('data-cancel');

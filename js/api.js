@@ -153,7 +153,8 @@
     budgetSet:function(id,d){ return sendJson('PATCH', '/profile/budget/'+id+'/', d); },
     budgetDel:function(id){
       return P.apiFetch('/profile/budget/'+id+'/', {method:'DELETE'}).then(parse);
-    }
+    },
+    budgetReview:function(){ return postJson('/profile/budget/review/', {}); }
   };
 
   /* ---------- программы поддержки и проверка на формальные отказы ---------- */
@@ -190,6 +191,13 @@
       if(!s) return '';
       var p=s.split('-'); var m=['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
       return parseInt(p[2],10)+' '+m[parseInt(p[1],10)-1]+' '+p[0];
+    },
+    // «10 авг», и только для другого года — «10 авг 2027». Год в подписи
+    // почти всегда текущий, а места на карточке мало.
+    humanShort:function(s){
+      if(!s) return '';
+      var full=this.human(s);
+      return s.slice(0,4)===this.todayISO().slice(0,4) ? full.replace(/\s\d{4}$/,'') : full;
     },
     // список ISO-дат в промежутке [startISO..endISO] включительно
     range:function(startISO,endISO){
@@ -268,6 +276,32 @@
     return busyToday ? 'busy' : 'ok';
   };
   // дата ближайшей брони (для подписи «свободно, ближайшая бронь …»)
+  /* Ближайший день, когда ресурс можно взять. Нужен в двух местах: в каталоге
+     («занято сегодня, свободно с 6 авг» вместо глухого «занято») и при
+     повторе прошлой заявки — там даты из старого заказа давно в прошлом.
+
+     Правило занятости то же, что в календаре на карточке: смены и сутки
+     закрывает любая запись на дату, почасовой ресурс — только запись без
+     времени (закрыт весь день); частичную занятость снимает выбор
+     другого часа. Иначе календарь и подпись под ним противоречили бы. */
+  P.nextFreeDate = function(id, fromISO, maxDays){
+    var res = P.getById(id); if(!res) return null;
+    var byDay = {};
+    P.getBusy(id).forEach(function(b){ (byDay[b.date] = byDay[b.date] || []).push(b); });
+    var start = fromISO || P.dates.plusISO(1);
+    var base = new Date(start + 'T12:00:00');
+    maxDays = maxDays || 120;          // дальше искать бессмысленно
+    for (var i = 0; i < maxDays; i++) {
+      var d = P.dates.iso(P.dates.addDays(base, i));
+      if (d < P.dates.todayISO()) continue;
+      var list = byDay[d];
+      if (!list || !list.length) return d;
+      if (res.bookMode === 'hour' && !list.some(function(x){ return x.slotStart == null; }))
+        return d;
+    }
+    return null;
+  };
+
   P.nextBusyDate = function(id){
     var t=P.dates.todayISO();
     var future=P.getBusy(id).map(function(b){return b.date;}).filter(function(d){return d>t;}).sort();

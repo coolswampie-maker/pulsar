@@ -2326,3 +2326,88 @@ class HealthTests(TestCase):
         self.assertNotIn('SECRET', body)
         self.assertNotIn('postgres://', body)
         self.assertIn('недоступна', body)
+
+
+class BudgetReviewTests(TestCase):
+    """Проверка сметы моделью.
+
+    Главное здесь не «модель даёт хорошие советы» — этого тестом не
+    проверить, — а то, что ничего выдуманного до человека не доходит.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'rv@r.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Смета', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        self.co = Company.objects.get(user__email='rv@r.ru')
+        self.profile = ProjectProfile.objects.create(
+            company=self.co, summary='Разрабатываем износостойкое покрытие для подшипников.')
+        Resource.objects.create(slug='eq-sem', type='equipment', book_mode='hour',
+                                title='Электронный микроскоп', price_value=9000,
+                                price_unit='час', units_total=1)
+        Resource.objects.create(slug='srv-prep', type='service', book_mode='sample',
+                                title='Пробоподготовка', price_value=3000,
+                                price_unit='образец', units_total=1)
+
+    def _ask(self, answer):
+        from unittest import mock
+        with mock.patch('booking.review.ask_model', return_value=answer):
+            r = self.c.post('/api/profile/budget/review/', **self.auth)
+        return r, json.loads(r.content)
+
+    def test_invented_position_is_dropped(self):
+        """Модель назвала того, чего в каталоге нет — наружу это не уходит."""
+        _, d = self._ask(json.dumps({'add': [
+            {'id': 'eq-sem', 'why': 'контроль поверхности'},
+            {'id': 'eq-выдуманный-прибор', 'why': 'звучит убедительно'},
+        ]}))
+        ids = [i['id'] for i in d['items']]
+        self.assertEqual(ids, ['eq-sem'])
+
+    def test_price_comes_from_catalog_not_from_model(self):
+        """Цену берём свою: назвать её модель может какую угодно."""
+        _, d = self._ask(json.dumps({'add': [
+            {'id': 'eq-sem', 'why': 'нужен', 'priceValue': 1, 'title': 'Дёшево'}]}))
+        self.assertEqual(d['items'][0]['priceValue'], 9000)
+        self.assertEqual(d['items'][0]['title'], 'Электронный микроскоп')
+
+    def test_position_already_in_budget_not_suggested(self):
+        self.c.post('/api/profile/budget/', content_type='application/json',
+                    data=json.dumps({'resourceId': 'eq-sem', 'qty': 2}), **self.auth)
+        _, d = self._ask(json.dumps({'add': [{'id': 'eq-sem', 'why': 'ещё раз'}]}))
+        self.assertEqual(d['items'], [], 'предложена позиция, которая уже в смете')
+
+    def test_empty_answer_is_normal(self):
+        _, d = self._ask(json.dumps({'add': []}))
+        self.assertEqual(d['mode'], 'ai')
+        self.assertEqual(d['items'], [])
+
+    def test_model_silent_says_so(self):
+        """Если модель не ответила, это должно быть видно, а не выглядеть
+        как «всё в порядке»."""
+        _, d = self._ask(None)
+        self.assertEqual(d['mode'], 'off')
+
+    def test_garbage_answer_does_not_crash(self):
+        _, d = self._ask('извините, не могу помочь')
+        self.assertEqual(d['mode'], 'off')
+        self.assertEqual(d['items'], [])
+
+    def test_no_project_description_says_need(self):
+        self.profile.summary = ''
+        self.profile.save()
+        _, d = self._ask(json.dumps({'add': [{'id': 'eq-sem', 'why': 'x'}]}))
+        self.assertEqual(d['mode'], 'need')
+
+    def test_limited_to_five(self):
+        for i in range(9):
+            Resource.objects.create(slug=f'eq-m{i}', type='equipment', book_mode='hour',
+                                    title=f'Прибор {i}', price_value=100, units_total=1)
+        _, d = self._ask(json.dumps({'add': [
+            {'id': f'eq-m{i}', 'why': 'нужен'} for i in range(9)]}))
+        self.assertEqual(len(d['items']), 5)
+
+    def test_requires_auth(self):
+        self.assertEqual(self.c.post('/api/profile/budget/review/').status_code, 401)

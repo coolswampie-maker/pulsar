@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import formal, querylog
+from . import review as reviewer
 from .assist import assist
 from . import compose as composer
 from .compose import FORMATS, missing_for
@@ -738,3 +739,27 @@ class HealthView(APIView):
             ok = False
         return Response({'status': 'ok' if ok else 'fail', **checks},
                         status=200 if ok else 503)
+
+
+class BudgetReviewThrottle(UserRateThrottle):
+    """Проверка сметы — обращение к модели с каталогом на входе.
+    Дешевле сборки документа, но дороже подбора; и то и другое платное."""
+    scope = 'review'
+
+
+class BudgetReviewView(APIView):
+    """POST /api/profile/budget/review/ — чего не хватает в смете.
+
+    Советы — только позиции каталога: идентификаторы от модели сверяются
+    с базой, всё остальное отбрасывается. Подробности — в booking/review.py.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [BudgetReviewThrottle]
+
+    def post(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        lines = list(profile.budget.select_related('resource')) if profile.pk else []
+        items, mode = reviewer.review(profile, lines)
+        return Response({'mode': mode, 'items': items})

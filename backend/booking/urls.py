@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (AllBusyView, AssistView, BudgetLineView, BudgetView,
                     ComposeFormatsView, ComposeJobView, ComposeView,
-                    HealthView,
+                    BudgetReviewView, HealthView,
                     CustomRequestView, KpiEntriesView, KpiEntryView,
                     KpiExtractView, KpiView, LoginView, MeView, OrderViewSet,
                     ProfileNextView, ProfileView, ProgramsView, RegisterView,
@@ -28,6 +28,7 @@ urlpatterns = [
     path('profile/compose/<int:job_id>/', ComposeJobView.as_view(), name='profile-compose-job'),
     path('profile/budget/', BudgetView.as_view(), name='profile-budget'),
     path('profile/budget/<int:line_id>/', BudgetLineView.as_view(), name='profile-budget-line'),
+    path('profile/budget/review/', BudgetReviewView.as_view(), name='profile-budget-review'),
     path('programs/', ProgramsView.as_view(), name='programs'),
     path('kpi/', KpiView.as_view(), name='kpi'),
     path('kpi/<str:key>/entries/', KpiEntriesView.as_view(), name='kpi-entries'),

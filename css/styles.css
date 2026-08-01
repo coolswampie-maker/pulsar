@@ -1054,3 +1054,24 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   background:var(--navy);color:#fff;padding:10px 16px;border-radius:var(--r);
   font-size:14px;font-weight:600;transition:top .12s;}
 .skip-link:focus{top:8px;}
+/* подсказка о ближайшей свободной дате под ценой */
+.free-hint{font-size:13.5px;color:var(--ink-soft);margin-top:8px;line-height:1.5;}
+.free-hint.none{color:var(--busy);}
+.free-hint .pick-link{font-size:13.5px;}
+/* «Занято до …» длиннее прежнего «Занято сегодня» — на узкой карточке
+   метка налезала на класс чистоты слева, поэтому ограничиваем ширину. */
+/* Занятость — вниз изображения, а не наверх: сверху слева стоит класс
+   чистоты («ISO 7 · УНУ»), и на узкой карточке две метки налезали друг
+   на друга, обе обрезаясь до нечитаемости. */
+.res-avail.busy{color:var(--busy);background:var(--busy-bg);
+  top:auto;bottom:12px;right:12px;white-space:nowrap;}
+/* советы по смете */
+.rev-head{display:flex;align-items:center;gap:10px;margin:22px 0 12px;flex-wrap:wrap;}
+.rev-list{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--white);}
+.rev-item{display:flex;justify-content:space-between;align-items:center;gap:14px;
+  padding:13px 16px;border-bottom:1px solid var(--line-2);}
+.rev-item:last-child{border-bottom:0;}
+@media (max-width:600px){
+  .rev-item{flex-direction:column;align-items:flex-start;gap:9px;}
+  .rev-item .btn{width:100%;}
+}
