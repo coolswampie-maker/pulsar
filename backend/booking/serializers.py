@@ -80,9 +80,10 @@ class CompanySerializer(serializers.ModelSerializer):
         # Реквизиты нужны проверке на формальные отказы: без них она
         # честно отвечает «не знаем», а это почти никогда не помогает.
         # Все они необязательные — спрашиваются, когда доходит до заявки.
+        # Численность и выручка сюда не входят: они живут в «Показателях».
         fields = ('name', 'inn', 'category', 'resident', 'confirmed',
                   'contact_name', 'phone', 'email', 'created_at',
-                  'ogrn', 'okved', 'founded', 'staff', 'revenue')
+                  'ogrn', 'okved', 'founded')
         read_only_fields = ('created_at', 'email', 'resident', 'confirmed')
 
     def validate_founded(self, v):

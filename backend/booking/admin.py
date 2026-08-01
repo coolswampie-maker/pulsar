@@ -156,8 +156,9 @@ class CompanyAdmin(RuTitlesMixin, admin.ModelAdmin):
         ('Реквизиты для проверки заявок', {
             'classes': ('collapse',),
             'description': 'Нужны только для проверки на формальные отказы. '
-                           'Заполняются по мере необходимости.',
-            'fields': ('ogrn', 'okved', 'founded', 'staff', 'revenue')}),
+                           'Численность и выручка сюда не входят — они '
+                           'берутся из раздела «Показатели».',
+            'fields': ('ogrn', 'okved', 'founded')}),
         ('Согласие на обработку ПДн', {
             'classes': ('collapse',),
             'fields': ('consent_at', 'consent_version')}),

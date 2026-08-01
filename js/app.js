@@ -1963,13 +1963,7 @@
       P.authApi.refresh().then(function(){ syncNav(); drawProfile(); });
     });
   }
-  // Пустое поле числа — «не знаем», а не ноль. Ноль сотрудников или нулевую
-  // выручку проверка приняла бы за настоящие данные и ответила бы «в порядке»
-  // там, где она вообще ничего не знает.
-  function num(v){ v=(v||'').trim(); return v===''?null:Math.max(0, parseInt(v,10)||0); }
-  function reqFilled(c){
-    return !!(c.ogrn||c.okved||c.founded||c.staff!=null||c.revenue!=null);
-  }
+  function reqFilled(c){ return !!(c.ogrn||c.okved||c.founded); }
 
   function drawProfile(){
     var box=el('cabbody'); if(!box) return;
@@ -1994,10 +1988,12 @@
       '<details class="req-block"'+(reqFilled(c)?' open':'')+'>'+
         '<summary>Реквизиты для проверки заявок'+
           (reqFilled(c)?'':' <span class="req-hint">— не заполнены</span>')+'</summary>'+
-        '<p class="sub" style="margin:8px 0 14px">Нужны только проверке на '+
-        'формальные отказы во вкладке «Заявка». Без них проверка честно '+
+        '<p class="sub" style="margin:8px 0 14px">Нужны только проверке '+
+        'условий программ на вкладке «Заявка». Без них проверка честно '+
         'отвечает «не знаем» — а это почти никогда не помогает. '+
-        'Всё необязательно.</p>'+
+        'Всё необязательно.<br>Численность и выручку сюда вводить не надо: '+
+        'проверка берёт их из раздела <a href="#/cabinet/kpi">«Показатели»</a>, '+
+        'где они уже сдаются по годам с подтверждающими документами.</p>'+
         '<div class="form-grid">'+
           '<div class="field"><label for="p_ogrn">ОГРН</label>'+
             '<input id="p_ogrn" value="'+esc(c.ogrn||'')+'" placeholder="13 или 15 цифр"></div>'+
@@ -2006,10 +2002,6 @@
           '<div class="field full"><label for="p_okved">ОКВЭД</label>'+
             '<input id="p_okved" value="'+esc(c.okved||'')+'" '+
             'placeholder="Основной и дополнительные, через запятую: 72.19, 26.51"></div>'+
-          '<div class="field"><label for="p_staff">Численность, чел.</label>'+
-            '<input id="p_staff" type="number" min="0" value="'+esc(c.staff==null?'':c.staff)+'"></div>'+
-          '<div class="field"><label for="p_revenue">Выручка за прошлый год, ₽</label>'+
-            '<input id="p_revenue" type="number" min="0" value="'+esc(c.revenue==null?'':c.revenue)+'"></div>'+
         '</div>'+
       '</details>'+
       '<div id="p_msg"></div>'+
@@ -2023,10 +2015,7 @@
               contact_name:el('p_contact').value.trim(), phone:el('p_phone').value.trim(),
               category:el('p_cat').value,
               ogrn:el('p_ogrn').value.trim(), okved:el('p_okved').value.trim(),
-              // пустое число — это «не знаем», а не ноль: ноль сотрудников
-              // проверка приняла бы за настоящую численность
-              founded:el('p_founded').value || null,
-              staff:num(el('p_staff').value), revenue:num(el('p_revenue').value) };
+              founded:el('p_founded').value || null };
       if(!d.name){ msg.innerHTML='<div class="form-msg err">Укажите название организации.</div>'; return; }
       var b=el('psave'); b.disabled=true; b.textContent='Сохранение…';
       P.authApi.save(d).then(function(res){
@@ -2352,7 +2341,32 @@
       default: return viewHome();
     }
   }
-  window.addEventListener('hashchange', route);
+  /* Перевод фокуса при смене страницы.
+
+     Приложение одностраничное: при переходе по меню адрес меняется, экран
+     перерисовывается, а фокус остаётся на нажатом пункте меню. Человеку с
+     мышью это незаметно, а тому, кто пользуется клавиатурой или читающей
+     программой, — нет: страница сменилась, но об этом ничто не сообщило,
+     и следующий Tab продолжает обход меню, а не нового содержимого.
+
+     Переводим фокус только при смене раздела. Внутри одного раздела адрес
+     меняют фильтры каталога (#/catalog?type=room) — там забирать фокус с
+     нажатого фильтра нельзя, человек как раз перебирает варианты. */
+  var lastSection=null;
+  function currentSection(){
+    return (location.hash.replace('#','').split('?')[0].split('/').filter(Boolean)[0]) || '/';
+  }
+  lastSection=currentSection();
+
+  window.addEventListener('hashchange', function(){
+    var was=lastSection, now=currentSection();
+    lastSection=now;
+    route();
+    if(was===now) return;
+    var m=el('app');
+    // tabindex="-1" стоит в разметке: без него focus() на <main> не работает
+    if(m) m.focus({preventScroll:true});
+  });
 
   // мобильное меню
   // мобильное меню: состояние дублируем в aria-expanded, иначе с экранного

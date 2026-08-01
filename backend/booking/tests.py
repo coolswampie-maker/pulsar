@@ -1996,6 +1996,12 @@ class FormalCheckTests(TestCase):
         self.assertTrue(any('Приём заявок открыт' in i['text'] for i in r['ok']))
 
     # --- неизвестность не равна нарушению ---
+    def _kpi(self, key, value, year=None):
+        from booking.models import Kpi
+        Kpi.objects.update_or_create(
+            company=self.co, key=key, year=year or self.today.year,
+            defaults={'fact': value})
+
     def test_unknown_staff_is_warn_not_stop(self):
         r = self._check(self._p(max_staff=100))
         self.assertEqual(r['verdict'], 'warn')
@@ -2004,6 +2010,11 @@ class FormalCheckTests(TestCase):
     def test_unknown_revenue_is_warn_not_stop(self):
         r = self._check(self._p(max_revenue=800_000_000))
         self.assertEqual(r['verdict'], 'warn')
+
+    def test_revenue_taken_from_kpi(self):
+        self._kpi('revenue', 38_000_000)
+        r = self._check(self._p(max_revenue=800_000_000))
+        self.assertTrue(any('38 млн ₽' in i['text'] for i in r['ok']))
 
     def test_unknown_okved_is_warn_not_stop(self):
         r = self._check(self._p(okved='72'))
@@ -2021,11 +2032,24 @@ class FormalCheckTests(TestCase):
 
     # --- известные данные, которые не проходят ---
     def test_staff_over_limit_is_stop(self):
-        self.co.staff = 250
-        self.co.save()
+        self._kpi('staff', 250)
         r = self._check(self._p(max_staff=100))
         self.assertEqual(r['verdict'], 'stop')
         self.assertIn('250', r['stop'][0]['text'])
+
+    def test_staff_taken_from_kpi_with_year(self):
+        """Число без года непроверяемо: показываем, за какой год оно взято."""
+        self._kpi('staff', 12, year=self.today.year - 1)
+        r = self._check(self._p(max_staff=100))
+        text = ' '.join(i['text'] for i in r['ok'])
+        self.assertIn('12 чел.', text)
+        self.assertIn(str(self.today.year - 1), text)
+
+    def test_latest_year_wins(self):
+        self._kpi('staff', 5, year=self.today.year - 2)
+        self._kpi('staff', 250, year=self.today.year)
+        r = self._check(self._p(max_staff=100))
+        self.assertEqual(r['verdict'], 'stop', 'взят устаревший год')
 
     def test_company_too_old_is_stop(self):
         self.co.founded = self.today - timedelta(days=365 * 6)
@@ -2094,7 +2118,7 @@ class FormalCheckTests(TestCase):
 
     # --- вывод по худшему пункту ---
     def test_one_stop_outweighs_many_ok(self):
-        self.co.staff = 5
+        self._kpi('staff', 5)
         self.co.founded = self.today - timedelta(days=200)
         self.co.okved = '72.19'
         self.co.save()
@@ -2198,32 +2222,32 @@ class CompanyRequisitesTests(TestCase):
 
     def test_saved_and_returned(self):
         r = self._patch({'ogrn': '1027700132195', 'okved': '72.19, 26.51',
-                         'founded': '2023-04-01', 'staff': 12, 'revenue': 45_000_000})
+                         'founded': '2023-04-01'})
         self.assertEqual(r.status_code, 200)
         d = json.loads(self.c.get('/api/auth/me/', **self.auth).content)
         co = d.get('company', d)
         self.assertEqual(co['ogrn'], '1027700132195')
-        self.assertEqual(co['staff'], 12)
-        self.assertEqual(co['revenue'], 45_000_000)
+        self.assertEqual(co['founded'], '2023-04-01')
 
-    def test_empty_is_unknown_not_zero(self):
-        """null означает «не знаем». Ноль проверка приняла бы за настоящую
-        численность и ответила бы «в порядке», ничего не зная."""
-        self._patch({'staff': None, 'revenue': None})
+    def test_staff_and_revenue_are_not_company_fields(self):
+        """Они живут в «Показателях» — по годам и с документами.
+        Вторые такие же поля означали бы два числа об одном и том же."""
         co = Company.objects.get(user__email='rq@r.ru')
-        self.assertIsNone(co.staff)
-        self.assertIsNone(co.revenue)
-        p = Program.objects.create(name='П', max_staff=100)
-        r = formal.check_program(p, co, None, 0, date.today())
-        self.assertTrue(any('численность' in i['text'].lower() for i in r['warn']),
-                        'пустая численность не попала в «стоит посмотреть»')
+        self.assertFalse(hasattr(co, 'staff'))
+        self.assertFalse(hasattr(co, 'revenue'))
+        d = json.loads(self.c.get('/api/auth/me/', **self.auth).content)
+        self.assertNotIn('staff', d.get('company', d))
+        self.assertNotIn('revenue', d.get('company', d))
 
     def test_future_founded_rejected(self):
         r = self._patch({'founded': (date.today() + timedelta(days=1)).isoformat()})
         self.assertEqual(r.status_code, 400)
 
     def test_requisites_reach_the_check(self):
-        self._patch({'staff': 250, 'okved': '47.11',
+        from booking.models import Kpi
+        co = Company.objects.get(user__email='rq@r.ru')
+        Kpi.objects.create(company=co, key='staff', year=date.today().year, fact=250)
+        self._patch({'okved': '47.11',
                      'founded': (date.today() - timedelta(days=200)).isoformat()})
         Program.objects.create(name='Строгая', max_staff=100, okved='72')
         d = json.loads(self.c.get('/api/programs/', **self.auth).content)

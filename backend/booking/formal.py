@@ -18,7 +18,7 @@
 """
 from datetime import date
 
-from .models import PROFILE_STAGES, Program
+from .models import KPI_META, PROFILE_STAGES, Kpi, Program
 
 OK = 'ok'        # проверено, всё в порядке
 WARN = 'warn'    # стоит посмотреть: данных нет или до границы близко
@@ -54,6 +54,22 @@ def _months_between(start, end):
 
 def _item(level, text, fix=''):
     return {'level': level, 'text': text, 'fix': fix}
+
+
+def _kpi(company, key):
+    """Значение показателя из раздела «Показатели» и год, за который оно взято.
+
+    Численность и выручку резидент уже сдаёт там — по годам и с
+    подтверждающими документами. Заводить для проверки заявок вторые такие
+    же поля было ошибкой: два числа об одном и том же неизбежно расходятся,
+    и тогда проверка отвечает уверенно, но по устаревшим данным.
+
+    Берём последний год, за который что-то заполнено, и показываем этот год
+    в тексте — «выручка 38 млн ₽ за 2025» проверяема, просто «38 млн ₽» нет.
+    """
+    row = (Kpi.objects.filter(company=company, key=key, fact__isnull=False)
+           .exclude(fact=0).order_by('-year').first())
+    return (row.fact, row.year) if row else (None, None)
 
 
 # --- отдельные правила -----------------------------------------------------
@@ -103,28 +119,33 @@ def _check_age(program, company, today):
 def _check_staff(program, company):
     if program.max_staff is None:
         return None
-    if company.staff is None:
-        return _item(WARN, 'Не указана численность сотрудников.',
-                     f'Программа берёт компании до {program.max_staff} чел. — '
-                     'укажите на вкладке «Профиль».')
-    if company.staff > program.max_staff:
-        return _item(STOP, f'У вас {company.staff} сотрудников, программа берёт '
-                           f'не больше {program.max_staff}.')
-    return _item(OK, f'Численность {company.staff} чел. — в пределах программы.')
+    staff, year = _kpi(company, 'staff')
+    if staff is None:
+        return _item(WARN, 'Не заполнена численность работников.',
+                     f'Программа принимает компании не больше {program.max_staff} чел. '
+                     'Численность берётся из раздела «Показатели».')
+    staff = int(staff)
+    if staff > program.max_staff:
+        return _item(STOP, f'У вас {staff} работников за {year} год, программа '
+                           f'принимает не больше {program.max_staff}.')
+    return _item(OK, f'Численность {staff} чел. за {year} год — в пределах программы.')
 
 
 def _check_revenue(program, company):
     if program.max_revenue is None:
         return None
-    if company.revenue is None:
-        return _item(WARN, 'Не указана выручка за прошлый год.',
-                     f'Программа берёт компании с выручкой до '
-                     f'{_rub(program.max_revenue)} — укажите на вкладке «Профиль».')
-    if company.revenue > program.max_revenue:
+    rev, year = _kpi(company, 'revenue')
+    if rev is None:
+        return _item(WARN, 'Не заполнена выручка.',
+                     f'Программа принимает компании с выручкой до '
+                     f'{_rub(program.max_revenue)}. Выручка берётся из раздела '
+                     '«Показатели».')
+    rev = int(rev)
+    if rev > program.max_revenue:
         return _item(STOP,
-                     f'Выручка {_rub(company.revenue)} — выше предела программы '
+                     f'Выручка {_rub(rev)} за {year} год выше предела программы '
                      f'({_rub(program.max_revenue)}).')
-    return _item(OK, f'Выручка {_rub(company.revenue)} — в пределах программы.')
+    return _item(OK, f'Выручка {_rub(rev)} за {year} год — в пределах программы.')
 
 
 def _check_okved(program, company):
@@ -170,8 +191,10 @@ def _check_budget(program, budget_total):
     if program.max_grant is None:
         return None
     if not budget_total:
-        return _item(WARN, 'Смета пустая — сравнивать не с чем.',
-                     f'Программа даёт до {_rub(program.max_grant)}. '
+        # Уникальное вперёд: одинаковое начало в каждой карточке подряд
+        # читается как копия и перестаёт нести смысл.
+        return _item(WARN, f'Грант до {_rub(program.max_grant)} — смету пока '
+                           'не с чем сравнить.',
                      'Добавьте позиции в смету выше.')
     if budget_total > program.max_grant:
         over = budget_total - program.max_grant
