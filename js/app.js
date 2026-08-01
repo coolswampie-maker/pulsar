@@ -1414,6 +1414,20 @@
   /* Кнопки честные: если документ сейчас собрать нельзя, это видно ДО
      нажатия и написано, каких полей не хватает. Кнопка, которая при нажатии
      говорит «не могу», раздражает и учит не доверять интерфейсу. */
+  /* Одно-два поля называем, дальше считаем. Подписи полей — это вопросы
+     («какую задачу решаете», «как решаете и в чём новизна»), и семь таких
+     через запятую в маленькой карточке читаются как сплошная строка. */
+  function lackText(miss){
+    var n=miss.length;
+    if(n<=2) return 'Не хватает: '+miss.join(' и ').toLowerCase()+'.';
+    return 'Не хватает '+n+' '+plural(n,'поле','поля','полей')+' профиля.';
+  }
+  function plural(n,one,few,many){
+    var d=n%100, e=n%10;
+    if(d>=11&&d<=14) return many;
+    if(e===1) return one; if(e>=2&&e<=4) return few; return many;
+  }
+
   function drawDocs(){
     var box=el('projdocs'); if(!box) return;
     box.innerHTML='<h2 class="h-md" style="margin:34px 0 6px">Что можно собрать</h2>'+
@@ -1424,7 +1438,7 @@
           '<div class="proj-doc-t">'+esc(f.title)+'</div>'+
           (f.ready
             ? '<button class="btn btn-outline btn-sm" data-fmt="'+esc(f.key)+'">Собрать</button>'
-            : '<div class="proj-doc-need">Не хватает: '+esc(f.missing.join(', '))+'</div>')+
+            : '<div class="proj-doc-need">'+esc(lackText(f.missing))+'</div>')+
         '</div>';
       }).join('')+'</div>'+
       '<div id="projout"></div>';
@@ -1555,9 +1569,10 @@
     box.innerHTML=
       '<div class="proj-head"><div>'+
         '<div class="eyebrow">Помощник резидента</div>'+
-        '<h1 class="h-lg">Заявка на программу</h1>'+
-        '<p class="sub">Посчитайте, во что обойдутся работы в лабораториях, '+
-        'и проверьте, подходите ли вы под условия программ.</p>'+
+        '<h1 class="h-lg">Заявка на грант</h1>'+
+        '<p class="sub">Здесь готовят заявку на грант или другую меру '+
+        'поддержки: считают смету работ в лабораториях и проверяют, '+
+        'не отсеют ли заявку по формальным причинам.</p>'+
       '</div></div>'+
       '<div id="applbudget"></div>'+
       '<div id="applcheck"></div>';
@@ -1570,8 +1585,9 @@
     var m=el('applbudget'); if(!m) return;
     var b=appl.budget, lines=b.lines||[];
     m.innerHTML='<h2 class="h-md" style="margin:30px 0 4px">Смета проекта</h2>'+
-      '<p class="sub" style="margin-bottom:14px">Цены настоящие — по ним же '+
-      'потом пойдёт бронирование.</p>'+
+      '<p class="sub" style="margin-bottom:14px">Работы в лабораториях, '+
+      'которые нужны проекту. Сумма идёт в заявку статьёй расходов, а после '+
+      'гранта по этим же ценам бронируется время.</p>'+
       (lines.length
         ? '<div class="bud-table">'+lines.map(budRow).join('')+
           '<div class="bud-total"><span>Итого</span><strong>'+fmt(b.total)+'</strong></div></div>'
@@ -1678,9 +1694,10 @@
   function drawCheck(){
     var m=el('applcheck'); if(!m) return;
     var h2='<h2 class="h-md" style="margin:36px 0 4px">Условия программ</h2>';
-    var head=h2+'<p class="sub" style="margin-bottom:14px">Сверяем ваши данные '+
-      'с требованиями: сроки подачи, размер гранта, возраст и размер компании, '+
-      'ОКВЭД, стадия проекта.</p>';
+    var head=h2+'<p class="sub" style="margin-bottom:14px">У каждого конкурса '+
+      'свои требования к заявителю — по ним отсеивают ещё до того, как '+
+      'прочитают суть проекта. Сверяем ваши данные: сроки подачи, размер '+
+      'гранта, возраст и численность компании, ОКВЭД, стадия проекта.</p>';
     if(appl.programs===null){
       m.innerHTML=head+'<div class="form-msg err">Проверка сейчас недоступна. '+
         'Смета сохранена — вернитесь к проверке позже.</div>';
@@ -1701,8 +1718,10 @@
       // на странице, где и так ничего нет.
       // Без описания того, что мы сверяем: сверять пока не с чем, и абзац
       // обещал бы работу, которой на странице ещё нет.
-      m.innerHTML=h2+'<div class="bud-empty" style="margin-top:10px">Программы '+
-        'появятся здесь, когда оператор их добавит.</div>';
+      m.innerHTML=h2+'<div class="bud-empty" style="margin-top:10px">Оператор '+
+        'пока не добавил ни одного конкурса. Когда добавит, здесь будет '+
+        'видно, под какие вы подходите, а где заявку отклонят по формальным '+
+        'причинам — из-за срока, размера компании или ОКВЭД.</div>';
       return;
     }
     m.innerHTML=head+pfHtml+'<div class="prg-list">'+list.map(prgCard).join('')+'</div>';

@@ -266,8 +266,12 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .booking hr{border:0;border-top:1px solid var(--line-2);margin:18px 0;}
 .field{margin-bottom:15px;}
 .field label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;}
-.field input,.field select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper-2);}
-.field input:focus,.field select:focus{outline:none;border-color:var(--brass);background:#fff;}
+/* textarea обязательно вместе с input и select: без неё поле получает
+   браузерную ширину в 20 символов, и длинные ответы приходится писать
+   в окошко вдвое уже соседних однострочных полей */
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper-2);}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brass);background:#fff;}
+.field textarea{resize:vertical;min-height:84px;line-height:1.5;}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .slots{display:flex;flex-wrap:wrap;gap:7px;}
 .slot{font-size:13px;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper-2);transition:.14s;}
