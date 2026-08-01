@@ -602,7 +602,6 @@ class ComposeJob(models.Model):
     def stale(self):
         """Задание, о котором никто не отчитался. Процесс мог быть перезапущен
         посреди работы — тогда статус так и остался бы «выполняется» навсегда."""
-        from django.conf import settings
-        limit = getattr(settings, 'COMPOSE_TIMEOUT', 30) + 30
+        limit = settings.COMPOSE_TIMEOUT + 30
         return (self.status == 'pending'
                 and (timezone.now() - self.created_at).total_seconds() > limit)

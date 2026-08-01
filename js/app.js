@@ -1315,27 +1315,46 @@
 
   /* Сборка идёт в фоне: сервер ставит задание и сразу отвечает, мы
      опрашиваем результат. Прямой вызов держал бы процесс сервера до
-     полуминуты, и на это время сайт вставал бы для остальных. */
-  var POLL_MS=1500, POLL_LIMIT=40;      // 40 попыток ≈ минута ожидания
+     полуминуты, и на это время сайт вставал бы для остальных.
+
+     Счётчик поколений нужен потому, что за минуту ожидания успевает
+     произойти многое: человек переключает режим (и блок с результатом
+     перерисовывается заново), жмёт вторую кнопку формата, уходит со
+     страницы. Без него старый опрос писал бы в отцепленный узел — минута
+     работы модели оплачена и выброшена, — а два опроса дрались бы за один
+     блок, и побеждал бы закончивший последним, а не нажатый последним. */
+  var POLL_MS=1500, pollGen=0;
 
   function composeDoc(fmt, btn){
-    var out=el('projout');
+    var out=el('projout'), gen=++pollGen;       // новый запуск отменяет прежний
+    var alive=function(){ return gen===pollGen && document.contains(out); };
+    // отменённый опрос уже не вернёт свою кнопку в рабочее состояние —
+    // возвращаем все перед стартом, иначе прежняя остаётся нажатой навсегда
+    qsAll('.proj-doc [data-fmt]').forEach(function(x){
+      x.disabled=false; x.textContent='Собрать';
+    });
     btn.disabled=true; btn.textContent='Собираем…';
     out.innerHTML='<div class="ai-wait">'+aiBadge()+'Помощник пишет черновик, это занимает до полуминуты…</div>';
     var done=function(r){
+      if(!alive()) return;
       btn.disabled=false; btn.textContent='Собрать';
       if(!r.ok){ out.innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
       showDoc(r.data, out);
     };
     P.profileApi.compose(fmt).then(function(r){
+      if(!alive()) return;
       if(!r.ok || !r.data || r.data.status!=='pending') return done(r);
-      // задание принято — ждём результата
-      var tries=0;
+      // сколько ждать, решает сервер: зашитое здесь число разошлось бы
+      // с настройкой COMPOSE_TIMEOUT при первой же её правке
+      var left=Math.ceil((r.data.timeoutMs||60000)/POLL_MS);
       (function poll(){
-        if(++tries>POLL_LIMIT)
+        if(!alive()) return;
+        if(--left<0)
           return done({ok:true, data:{status:'failed', mode:'offline', blocks:[], gaps:[]}});
         setTimeout(function(){
+          if(!alive()) return;
           P.profileApi.composeJob(r.data.jobId).then(function(j){
+            if(!alive()) return;
             if(!j.ok) return done(j);
             if(j.data.status==='pending') return poll();
             done(j);
@@ -1346,13 +1365,12 @@
   }
 
   function showDoc(d, out){
-      if(d.mode==='need'){
-        out.innerHTML='<div class="form-msg err">Сначала заполните: '+esc(d.gaps.join(', '))+'</div>';
-        return;
-      }
       if(d.status==='failed' || d.mode==='offline' || !d.blocks || !d.blocks.length){
-        out.innerHTML='<div class="form-msg err">Помощник сейчас недоступен — '+
-          'попробуйте через несколько минут.</div>';
+        out.innerHTML='<div class="form-msg err">'+
+          (d.mode==='need' && d.gaps && d.gaps.length
+            ? 'Сначала заполните: '+esc(d.gaps.join(', '))
+            : 'Помощник сейчас недоступен — попробуйте через несколько минут.')+
+          '</div>';
         return;
       }
       out.innerHTML='<div class="proj-out">'+

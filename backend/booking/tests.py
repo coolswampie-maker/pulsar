@@ -1159,6 +1159,24 @@ class ProjectProfileTests(TestCase):
         return self.c.patch('/api/profile/', data=json.dumps(kw),
                             content_type='application/json', **self.auth)
 
+    def test_thread_is_actually_stubbable(self):
+        """Подмена run_job должна действовать на то, что зовёт вьюха.
+
+        Раньше views.py связывал имя при импорте, подмена booking.compose.run_job
+        на него не влияла — поток стартовал по-настоящему, задание выполнялось
+        дважды, и все тесты фоновой сборки проверяли не то, что думали.
+        """
+        from booking import compose as C
+        from booking import views
+        self.assertIs(views.composer.run_job, C.run_job)
+        real = C.run_job
+        C.run_job = lambda job_id: None
+        try:
+            self.assertIsNot(views.composer.run_job, real,
+                             'подмена не видна вьюхе — поток запустится по-настоящему')
+        finally:
+            C.run_job = real
+
     def _compose(self, fmt):
         """Поставить сборку и выполнить задание тут же — в тестах поток не нужен."""
         from booking import compose as C

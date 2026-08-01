@@ -1,19 +1,23 @@
 import threading
 
 from django.contrib.auth import authenticate
+from datetime import timedelta
+
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.throttling import UserRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import querylog
 from .assist import assist
-from .compose import FORMATS, missing_for, run_job
+from . import compose as composer
+from .compose import FORMATS, missing_for
 from .models import (KPI_KEYS, PROFILE_LABELS, BusySlot, CustomRequest, Kpi,
                      ComposeJob, KpiEntry, Order, ProjectProfile, Resource,
                      profile_field_spec)
@@ -82,6 +86,20 @@ class ComposeThrottle(UserRateThrottle):
     """Сборка документа — самый дорогой вызов модели на платформе:
     длинный ответ и объёмный профиль на входе."""
     scope = 'compose'
+
+
+class SignupThrottle(AnonRateThrottle):
+    """Ограничение на регистрацию и вход.
+
+    Регистрация не была ограничена ничем. Это обходило все остальные лимиты
+    разом: они считаются на пользователя, а завести нового — один запрос.
+    Каждая новая учётка получала свою квоту платных обращений к модели, и
+    заодно CRM засорялась мусорными компаниями.
+
+    Считаем по адресу (AnonRateThrottle): регистрируется тот, у кого учётки
+    ещё нет, по пользователю тут считать нечего.
+    """
+    scope = 'signup'
 
 
 class CustomRequestThrottle(UserRateThrottle):
@@ -233,6 +251,7 @@ class CustomRequestView(APIView):
 # ---------- авторизация компании ----------
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [SignupThrottle]
 
     def post(self, request):
         ser = RegisterSerializer(data=request.data)
@@ -243,6 +262,8 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    # тот же счётчик: без него пароль можно подбирать перебором
+    throttle_classes = [SignupThrottle]
 
     def post(self, request):
         user = authenticate(username=request.data.get('email'), password=request.data.get('password'))
@@ -274,7 +295,7 @@ class MeView(APIView):
 
 
 # ---------- показатели (KPI по методологии) ----------
-def _kpi_company(request):
+def _company(request):
     return getattr(request.user, 'company', None)
 
 
@@ -291,7 +312,7 @@ class KpiView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        company = _kpi_company(request)
+        company = _company(request)
         if not company:
             return Response({'detail': 'Нет профиля компании.'}, status=404)
         year = _kpi_year(request)
@@ -334,7 +355,7 @@ class KpiEntriesView(APIView):
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def post(self, request, key):
-        company = _kpi_company(request)
+        company = _company(request)
         if not company:
             return Response({'detail': 'Нет профиля компании.'}, status=404)
         if key not in KPI_KEYS:
@@ -352,7 +373,7 @@ class KpiEntryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, key, entry_id):
-        company = _kpi_company(request)
+        company = _company(request)
         if not company:
             return Response({'detail': 'Нет профиля компании.'}, status=404)
         entry = KpiEntry.objects.filter(pk=entry_id, kpi__company=company, kpi__key=key).first()
@@ -369,7 +390,7 @@ class KpiExtractView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, key):
-        company = _kpi_company(request)
+        company = _company(request)
         if not company:
             return Response({'detail': 'Нет профиля компании.'}, status=404)
         if key not in KPI_KEYS:
@@ -488,7 +509,10 @@ class ProfileNextView(APIView):
 def _job_payload(job):
     return {'jobId': job.pk, 'format': job.fmt, 'title': FORMATS[job.fmt]['title'],
             'status': job.status, 'mode': job.mode,
-            'blocks': job.blocks, 'gaps': job.gaps}
+            'blocks': job.blocks, 'gaps': job.gaps,
+            # сколько ждать — решает сервер: иначе при смене COMPOSE_TIMEOUT
+            # клиент сдавался бы раньше, чем задание успевает завершиться
+            'timeoutMs': int((settings.COMPOSE_TIMEOUT + 30) * 1000)}
 
 
 class ComposeView(APIView):
@@ -515,12 +539,21 @@ class ComposeView(APIView):
         # Нехватку полей видно без модели — отвечаем сразу, не заводя задание.
         lack = missing_for(profile, fmt)
         if lack:
-            return Response({'jobId': None, 'format': fmt, 'title': FORMATS[fmt]['title'],
-                             'status': 'done', 'mode': 'need', 'blocks': [],
-                             'gaps': [PROFILE_LABELS[k] for k in lack]})
+            # несохранённым объектом — чтобы ответ собирался тем же _job_payload
+            # и не разъехался с настоящим при следующей правке
+            return Response(_job_payload(ComposeJob(
+                company=profile.company, fmt=fmt, status='done', mode='need',
+                gaps=[PROFILE_LABELS[k] for k in lack])))
 
+        # заодно подчищаем старые: задание читают один раз, через минуту после
+        # создания. Так же сделана чистка журнала запросов — планировщика в
+        # проекте нет, и заводить его ради этого незачем.
+        ComposeJob.objects.filter(
+            created_at__lt=timezone.now() - timedelta(days=1)).delete()
         job = ComposeJob.objects.create(company=profile.company, fmt=fmt)
-        threading.Thread(target=run_job, args=(job.pk,), daemon=True).start()
+        # через модуль, а не по имени: связанное при импорте имя нельзя
+        # подменить в тестах, и поток запускался бы по-настоящему
+        threading.Thread(target=composer.run_job, args=(job.pk,), daemon=True).start()
         return Response(_job_payload(job), status=202)
 
 
@@ -529,7 +562,7 @@ class ComposeJobView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, job_id):
-        company = getattr(getattr(request, 'user', None), 'company', None)
+        company = _company(request)
         if not company:
             return Response({'detail': 'Нет профиля компании.'}, status=403)
         # фильтр по своей компании — чужое задание не отдаём

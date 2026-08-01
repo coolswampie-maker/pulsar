@@ -19,11 +19,14 @@
 сопровождения — это отдельная работа. Здесь то, что просят почти везде.
 """
 import logging
+import time
 
 from django.conf import settings
+from django.db import OperationalError, connection
+from django.utils import timezone
 
 from .assist import ask_model, json_from_text
-from .models import PROFILE_CORE, PROFILE_LABELS
+from .models import ComposeJob, PROFILE_CORE, PROFILE_LABELS
 
 log = logging.getLogger(__name__)
 
@@ -153,22 +156,12 @@ def _parse(text):
 
 
 def compose(profile, fmt):
-    """Собрать документ. Возвращает (блоки, пробелы, режим).
+    """Собрать документ. Возвращает (блоки, пробелы, режим: ok или offline).
 
-    Режимы:
-      · ok        — собрано моделью;
-      · need      — не хватает обязательных полей, к модели не обращались;
-      · offline   — модель не настроена или не ответила.
+    Формат и полноту профиля проверяет вызывающий — до того, как заводить
+    задание и тратить поток. Раньше те же проверки дублировались здесь и
+    после перехода на фоновое выполнение стали недостижимы.
     """
-    if fmt not in FORMATS:
-        return [], [], 'unknown'
-
-    # Проверяем до обращения к модели: просить её писать раздел без данных —
-    # значит толкать на выдумку, а платить за это будем мы.
-    lack = missing_for(profile, fmt)
-    if lack:
-        return [], [PROFILE_LABELS[k] for k in lack], 'need'
-
     raw = _ask_model(profile, fmt)
     if raw is None:
         return [], [], 'offline'
@@ -180,30 +173,33 @@ def compose(profile, fmt):
 
 
 def run_job(job_id):
-    """Выполнить задание в отдельном потоке.
+    """Выполнить задание в отдельном потоке."""
+    try:
+        _run(job_id)
+    finally:
+        # закрываем при любом исходе: Django открывает соединение на каждый
+        # поток, и незакрытые копятся до исчерпания пула. Раньше закрытие
+        # стояло только на разобранных путях — необычная ошибка базы утекала
+        # мимо него.
+        connection.close()
 
-    Соединение с базой закрываем сами: Django открывает своё на каждый поток,
-    и без закрытия они копились бы до исчерпания пула.
-    """
-    import time
 
-    from django.db import OperationalError, connection
-    from django.utils import timezone
-
-    from .models import ComposeJob
+def _run(job_id):
     try:
         job = ComposeJob.objects.select_related('company__profile').get(pk=job_id)
     except ComposeJob.DoesNotExist:
-        connection.close()
         return
     try:
         profile = getattr(job.company, 'profile', None)
         if profile is None:
-            job.status, job.mode = 'failed', 'need'
+            # профиль исчез между постановкой и выполнением — для клиента это
+            # то же, что недоступная модель. Пара failed+need была невозможной:
+            # клиент рисовал по ней «Сначала заполните» с пустым списком.
+            job.status, job.mode = 'failed', 'offline'
         else:
             blocks, gaps, mode = compose(profile, job.fmt)
             job.blocks, job.gaps, job.mode = blocks, gaps, mode
-            job.status = 'done' if mode in ('ok', 'need') else 'failed'
+            job.status = 'done' if mode == 'ok' else 'failed'
     except Exception:                       # noqa: BLE001 — поток не должен молча умереть
         log.exception('Сборка документа не удалась (задание %s)', job_id)
         job.status, job.mode = 'failed', 'offline'
@@ -221,4 +217,3 @@ def run_job(job_id):
                     log.warning('Не удалось записать результат сборки %s', job_id)
                 else:
                     time.sleep(0.3 * (attempt + 1))
-        connection.close()

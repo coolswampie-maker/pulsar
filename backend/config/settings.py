@@ -106,6 +106,18 @@ ASSIST_LOG_FILE = os.getenv('ASSIST_LOG_FILE', str(BASE_DIR / 'logs' / 'assist.l
 # поэтому и ждать модель приходится дольше.
 COMPOSE_TIMEOUT = float(os.getenv('COMPOSE_TIMEOUT', '30'))
 
+# Кэш общий для всех процессов Gunicorn — в нём живут счётчики частоты.
+# По умолчанию Django берёт кэш в памяти процесса, а процессов три: лимит
+# «30 в час» превращался бы в 90 и обнулялся при каждом перезапуске.
+# Таблица в базе, а не Redis: отдельный сервис на маленьком VPS — лишняя
+# деталь, которая может отвалиться, а нагрузка тут копеечная.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'pulsar_cache',
+    }
+}
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     # Только токен. SessionAuthentication здесь была вредна: она включает
@@ -131,6 +143,10 @@ REST_FRAMEWORK = {
         # Сборка документа — самый дорогой вызов модели: длинный ответ
         # и весь профиль на входе. Живому человеку чаще и не нужно.
         'compose': os.getenv('COMPOSE_RATE', '30/hour'),
+        # Регистрация и вход. Регистрация не была ограничена ничем, а это
+        # обходит все остальные лимиты: они на пользователя, а завести
+        # нового — один запрос. Плюс это же закрывает подбор пароля.
+        'signup': os.getenv('SIGNUP_RATE', '10/hour'),
     },
 }
 
