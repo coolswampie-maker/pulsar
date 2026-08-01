@@ -190,7 +190,7 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;counter-reset:s;}
 .step{position:relative;padding-top:26px;}
 .step::before{counter-increment:s;content:"0" counter(s);font-family:var(--serif);font-size:15px;color:#fff;background:var(--navy);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:16px;}
-.step h3{font-family:var(--sans);font-weight:700;font-size:16px;color:var(--navy);margin-bottom:7px;}
+.step h2,.step h3{font-family:var(--sans);font-weight:700;font-size:16px;color:var(--navy);margin-bottom:7px;}
 .step p{font-size:14px;color:var(--ink-soft);line-height:1.6;}
 
 /* ============================================================ CATALOG */
@@ -597,7 +597,7 @@ a.val:hover{color:var(--brass);}
 .section-invert .eyebrow::before{background:var(--brass-soft);}
 .section-invert h2{color:#fff;}
 .section-invert .step::before{background:var(--brass);color:var(--navy-deep);}
-.section-invert .step h3{color:#fff;}
+.section-invert .step h2,.section-invert .step h3{color:#fff;}
 .section-invert .step p{color:rgba(255,255,255,.66);}
 .section-invert .steps::before{background:rgba(255,255,255,.14);}
 
@@ -1032,3 +1032,25 @@ a.val:hover{color:var(--brass);}
 .req-block summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--ink);}
 .req-block[open] summary{margin-bottom:2px;}
 .req-hint{font-weight:400;color:var(--ink-soft);font-size:13px;}
+
+/* ============================================ доступность: фокус и пропуск */
+/* Явные селекторы для ссылок и кнопок — на случай, если где-то появится
+   правило специфичнее общего `:focus-visible`.
+   transition:none здесь по делу: у ссылок меню стоит `transition:.16s`
+   без указания свойства, то есть на все сразу, — и рамка фокуса
+   проявлялась плавно за эти 160 мс. При быстром переходе табом человек
+   видит подсветку с опозданием и не понимает, где он. Указатель фокуса
+   должен появляться мгновенно. */
+a:focus-visible,button:focus-visible,summary:focus-visible,
+[tabindex]:focus-visible,.tab:focus-visible,.slot:focus-visible,.cal-cell:focus-visible{
+  outline:2px solid var(--brass);outline-offset:2px;transition:none;}
+.topbar a:focus-visible,.footer a:focus-visible,.hero a:focus-visible,
+.hero button:focus-visible{outline-color:var(--brass-soft);}
+
+/* Ссылка «Перейти к содержимому». Без неё человек с клавиатуры на каждой
+   странице проходит табом всю шапку: почта, кабинет оператора, логотип,
+   четыре пункта меню, вход, поиск, корзина — десять нажатий до заголовка. */
+.skip-link{position:absolute;left:8px;top:-60px;z-index:100;
+  background:var(--navy);color:#fff;padding:10px 16px;border-radius:var(--r);
+  font-size:14px;font-weight:600;transition:top .12s;}
+.skip-link:focus{top:8px;}

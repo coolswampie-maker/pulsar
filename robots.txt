@@ -1,0 +1,9 @@
+# Кабинет оператора и API индексировать незачем: там нет страниц для людей,
+# а в /media/ лежат загруженные компаниями подтверждающие документы.
+User-agent: *
+Disallow: /admin/
+Disallow: /api/
+Disallow: /media/
+Allow: /
+
+Sitemap: https://pulsar.jaglionrus.ru/sitemap.xml

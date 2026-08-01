@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (AllBusyView, AssistView, BudgetLineView, BudgetView,
                     ComposeFormatsView, ComposeJobView, ComposeView,
+                    HealthView,
                     CustomRequestView, KpiEntriesView, KpiEntryView,
                     KpiExtractView, KpiView, LoginView, MeView, OrderViewSet,
                     ProfileNextView, ProfileView, ProgramsView, RegisterView,
@@ -13,6 +14,7 @@ router.register('resources', ResourceViewSet, basename='resource')
 router.register('orders', OrderViewSet, basename='order')
 
 urlpatterns = [
+    path('health/', HealthView.as_view(), name='health'),
     path('busy/', AllBusyView.as_view(), name='busy-all'),
     path('assist/', AssistView.as_view(), name='assist'),
     path('custom-request/', CustomRequestView.as_view(), name='custom-request'),

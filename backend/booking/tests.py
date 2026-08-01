@@ -2288,3 +2288,41 @@ class AdminLanguageTests(TestCase):
         """Отрицательной проверки мало: она пройдёт и если кнопки нет вовсе."""
         html = self.c.get('/admin/booking/company/').content.decode()
         self.assertIn('Добавить компанию', html)
+
+
+class HealthTests(TestCase):
+    """Точка проверки живости для внешнего монитора."""
+
+    def test_ok_when_catalog_present(self):
+        Resource.objects.create(slug='eq-h', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=1, units_total=1)
+        r = self.client.get('/api/health/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)['status'], 'ok')
+
+    def test_fails_on_empty_catalog(self):
+        """Пустой каталог снаружи выглядит как исправный сайт: страница
+        открывается, а бронировать нечего. Монитор должен это ловить."""
+        r = self.client.get('/api/health/')
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(json.loads(r.content)['status'], 'fail')
+
+    def test_open_without_token(self):
+        """Монитор ходит без учётной записи — иначе его нечем настроить."""
+        Resource.objects.create(slug='eq-h2', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=1, units_total=1)
+        self.assertEqual(self.client.get('/api/health/').status_code, 200)
+
+    def test_no_secrets_in_response(self):
+        """В тексте исключения бывает строка подключения к базе — наружу
+        уходит только слово «недоступна»."""
+        from unittest import mock
+        with mock.patch('booking.views.Resource') as res:
+            res.objects.filter.side_effect = RuntimeError(
+                'could not connect: postgres://pulsar:SECRET@127.0.0.1/pulsar')
+            r = self.client.get('/api/health/')
+        self.assertEqual(r.status_code, 503)
+        body = r.content.decode()
+        self.assertNotIn('SECRET', body)
+        self.assertNotIn('postgres://', body)
+        self.assertIn('недоступна', body)

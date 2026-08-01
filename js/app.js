@@ -24,6 +24,12 @@
   function plural(n, f){ n=Math.abs(n)%100; var d=n%10;
     if(n>10 && n<20) return f[2]; if(d>1 && d<5) return f[1]; if(d===1) return f[0]; return f[2]; }
   function unitWord(n, unit){ var f=UNIT_FORMS[unit]; return f ? plural(n,f) : (unit||''); }
+  // Уровень заголовка шага задаётся вызывающим: на главной над шагами есть
+  // заголовок раздела, на странице «Как работаем» — только заголовок
+  // страницы, и h3 там оставлял бы пропуск уровня.
+  function stepHtml(s, lvl){
+    return '<div class="step"><h'+lvl+'>'+s[0]+'</h'+lvl+'><p>'+s[1]+'</p></div>';
+  }
   function tileCount(n){ return n+' '+plural(n,['позиция','позиции','позиций']); }
 
   var ICON = {
@@ -340,7 +346,7 @@
         ['Соберите заявку','Выберите дату и время — специалист добавится сам, если он нужен'],
         ['Дождитесь подтверждения','Оператор согласует бронирование и договор'],
         ['Работайте на объекте','Инструктаж, пропуск и дежурный специалист на площадке']
-      ].map(function(s){ return '<div class="step"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
+      ].map(function(s){ return stepHtml(s, 3); }).join('')+'</div>'+
     '</div></section>'+
 
     /* ---- РЕЗИДЕНТАМ (лёгкая полоса) ---- */
@@ -949,7 +955,7 @@
     var lines=P.cart.get();
     if(!lines.length){
       return render('<section class="cart-wrap"><div class="wrap"><div class="empty">'+
-        '<h3>В бронировании пока пусто</h3><p>Добавьте помещения, оборудование, специалистов или услуги из каталога.</p>'+
+        '<h1 class="h-md">В бронировании пока пусто</h1><p>Добавьте помещения, оборудование, специалистов или услуги из каталога.</p>'+
         '<a class="btn btn-primary" href="#/catalog">Открыть каталог</a></div></div></section>');
     }
     var t=P.cart.totals();
@@ -1214,7 +1220,7 @@
         ['Подпишем договор','Типовой договор аренды или технологического хостинга — подготовим и согласуем'],
         ['Пройдите инструктаж','Вводный инструктаж по объекту, безопасности и регламентам чистых зон'],
         ['Работайте на объекте','На площадке дежурит специалист. По итогам работ выдаём отчёт об использовании оборудования']
-      ].map(function(s){ return '<div class="step"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'; }).join('')+'</div>'+
+      ].map(function(s){ return stepHtml(s, 2); }).join('')+'</div>'+
       '<div style="margin-top:44px;text-align:center"><a class="btn btn-brass" href="#/catalog">Перейти в каталог</a></div>'+
     '</div></section>'+
     '<section class="section" style="background:var(--navy-deep)"><div class="wrap text-center">'+
@@ -2190,6 +2196,16 @@
     el('navtoggle').setAttribute('aria-expanded', open ? 'true' : 'false');
   }
   el('navtoggle').onclick=function(){ setNavOpen(!el('navlinks').classList.contains('open')); };
+
+  (function(){
+    var skip=document.querySelector('.skip-link'); if(!skip) return;
+    skip.onclick=function(e){
+      e.preventDefault();
+      var m=el('app'); if(!m) return;
+      m.focus();                       // tabindex="-1" в разметке — ради этого
+      m.scrollIntoView({block:'start'});
+    };
+  })();
   qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ setNavOpen(false); }); });
 
   // ссылки «Кабинет оператора» ведут в Django-админку

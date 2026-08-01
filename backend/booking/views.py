@@ -701,3 +701,40 @@ class ProgramsView(APIView):
             'profile': formal.check_profile_ready(profile),
             'programs': formal.check_all(company, profile, total),
         })
+
+
+class HealthView(APIView):
+    """GET /api/health/ — жив ли сайт целиком, а не только веб-сервер.
+
+    Внешний монитор, дёргающий главную страницу, видит только Nginx: тот
+    отдаёт статику и когда Django лежит, и когда база недоступна. Сайт при
+    этом не работает — каталог пуст, войти нельзя, — а монитор молчит.
+
+    Поэтому проверяем то, без чего сайта нет: отвечает ли база и есть ли
+    в ней каталог. Пустой каталог — это авария (не та база, не прошёл
+    импорт), и внешне она выглядит как исправный сайт.
+
+    Отвечает 200 или 503; подробности — в теле, но по коду ответа монитор
+    поймёт всё и без чтения.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []      # монитор ходит без токена
+
+    def get(self, request):
+        checks, ok = {}, True
+        try:
+            n = Resource.objects.filter(is_active=True).count()
+            checks['catalog'] = n
+            if not n:
+                checks['db'] = 'каталог пуст'
+                ok = False
+            else:
+                checks['db'] = 'ok'
+        except Exception as e:                       # noqa: BLE001
+            # Текст исключения наружу не отдаём: в нём бывает строка
+            # подключения к базе. Монитору хватит слова «недоступна».
+            checks['db'] = 'недоступна'
+            checks['error'] = type(e).__name__
+            ok = False
+        return Response({'status': 'ok' if ok else 'fail', **checks},
+                        status=200 if ok else 503)
