@@ -122,7 +122,22 @@ class CompanyAdmin(admin.ModelAdmin):
     list_filter = ('confirmed', 'resident', 'category')
     list_editable = ('confirmed', 'resident')
     search_fields = ('name', 'inn', 'contact_name', 'user__email')
-    readonly_fields = ('created_at',)
+    # Отметка о согласии — свидетельство, а не настройка: если её можно
+    # проставить руками, она ничего не доказывает. Ставится только кодом
+    # в момент регистрации.
+    readonly_fields = ('created_at', 'consent_at', 'consent_version')
+    fieldsets = (
+        (None, {'fields': ('user', 'name', 'inn', 'category', 'resident',
+                           'confirmed', 'contact_name', 'phone', 'created_at')}),
+        ('Реквизиты для проверки заявок', {
+            'classes': ('collapse',),
+            'description': 'Нужны только для проверки на формальные отказы. '
+                           'Заполняются по мере необходимости.',
+            'fields': ('ogrn', 'okved', 'founded', 'staff', 'revenue')}),
+        ('Согласие на обработку ПДн', {
+            'classes': ('collapse',),
+            'fields': ('consent_at', 'consent_version')}),
+    )
     actions = ['mark_confirmed']
 
     @admin.action(description='Подтвердить выбранные компании')

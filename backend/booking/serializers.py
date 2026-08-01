@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import (KPI_META, PROFILE_KEYS, BookingLine, Company, CustomRequest, Kpi,
+from .models import (CONSENT_VERSION, KPI_META, PROFILE_KEYS, BookingLine, Company,
+                     CustomRequest, Kpi,
                      KpiEntry, Order, ProjectProfile, Resource)
 
 User = get_user_model()
@@ -87,6 +88,18 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
     name = serializers.CharField(max_length=200)
     phone = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    consent = serializers.BooleanField()
+
+    def validate_consent(self, v):
+        # Согласие должно быть действием, а не умолчанием: галочка снята
+        # изначально, и без неё регистрации нет. Отметка о том, КОГДА и на
+        # КАКУЮ редакцию согласились, сохраняется — иначе через год на это
+        # нечем будет ответить.
+        if not v:
+            raise serializers.ValidationError(
+                'Без согласия на обработку персональных данных зарегистрировать '
+                'кабинет нельзя.')
+        return v
 
     def validate_email(self, v):
         if User.objects.filter(username=v).exists():
@@ -108,8 +121,10 @@ class RegisterSerializer(serializers.Serializer):
         user = User.objects.create_user(
             username=validated['email'], email=validated['email'], password=validated['password'])
         # resident/confirmed по умолчанию False — подтверждает оператор
+        from django.utils import timezone
         return Company.objects.create(
-            user=user, name=validated['name'], phone=validated.get('phone', ''))
+            user=user, name=validated['name'], phone=validated.get('phone', ''),
+            consent_at=timezone.now(), consent_version=CONSENT_VERSION)
 
 
 class LineOutSerializer(serializers.ModelSerializer):

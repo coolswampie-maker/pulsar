@@ -60,6 +60,12 @@ CUSTOM_STATUS = [('new', 'Новая'), ('in_work', 'В работе'),
                  ('done', 'Обработана'), ('rejected', 'Отклонена')]
 
 
+# Версия согласия на обработку персональных данных. Поднимается при каждом
+# существенном изменении политики. Хранить именно версию, а не просто «да»:
+# иначе через год нельзя будет ответить, на какую редакцию человек соглашался.
+CONSENT_VERSION = '2026-08-01'
+
+
 class Company(models.Model):
     """Компания-резидент кластера «Ломоносов» — владелец личного кабинета."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -72,6 +78,20 @@ class Company(models.Model):
     contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)
     phone = models.CharField('Телефон', max_length=40, blank=True)
     created_at = models.DateTimeField('Зарегистрирована', auto_now_add=True)
+
+    # --- реквизиты: нужны только для проверки на формальные отказы ---
+    # Спрашиваем не при регистрации, а когда доходит до проверки: программы
+    # отсекают заявителей именно по этим полям.
+    ogrn = models.CharField('ОГРН', max_length=15, blank=True)
+    okved = models.CharField('ОКВЭД', max_length=200, blank=True,
+                             help_text='Основной и дополнительные, через запятую.')
+    founded = models.DateField('Дата регистрации', null=True, blank=True)
+    staff = models.PositiveIntegerField('Численность', null=True, blank=True)
+    revenue = models.BigIntegerField('Выручка за прошлый год, ₽', null=True, blank=True)
+
+    # --- согласие на обработку персональных данных ---
+    consent_at = models.DateTimeField('Согласие на обработку ПДн', null=True, blank=True)
+    consent_version = models.CharField('Редакция политики', max_length=20, blank=True)
 
     class Meta:
         verbose_name = 'Компания'

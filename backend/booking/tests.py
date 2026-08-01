@@ -16,8 +16,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from booking.models import (BookingLine, BusySlot, Company, CustomRequest, Kpi,
-                            Order, ProjectProfile, Resource)
+from booking.models import (CONSENT_VERSION, BookingLine, BusySlot, Company,
+                            CustomRequest, Kpi, Order, ProjectProfile, Resource)
 
 # Даты тестов считаем от сегодняшнего дня, а не фиксируем в календаре: модели и
 # планировщик отклоняют бронь в прошлом, поэтому зашитые даты со временем
@@ -313,7 +313,8 @@ class CabinetApiTests(TestCase):
     # пароль должен проходить AUTH_PASSWORD_VALIDATORS (8+ символов, не из
     # словаря утечек, не только цифры) — иначе регистрация вернёт 400
     def register(self, email='co@x.ru', **kw):
-        data = {'email': email, 'password': 'Nauka2026lab', 'name': 'ООО Тест', 'resident': True}
+        data = {'email': email, 'password': 'Nauka2026lab', 'name': 'ООО Тест',
+                'resident': True, 'consent': True}
         data.update(kw)
         return self.c.post('/api/auth/register/', data=json.dumps(data), content_type='application/json')
 
@@ -340,6 +341,32 @@ class CabinetApiTests(TestCase):
         bad = self.c.post('/api/auth/login/', data=json.dumps({'email': 'a@a.ru', 'password': 'x'}),
                           content_type='application/json')
         self.assertEqual(bad.status_code, 400)
+
+    # --- согласие на обработку персональных данных (152-ФЗ) ---
+    # Смысл трёх тестов ниже: согласие должно быть действием пользователя,
+    # а не умолчанием, и должно оставлять след, который можно предъявить.
+
+    def test_register_without_consent_rejected(self):
+        r = self.register(email='no@x.ru', consent=False)
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(Company.objects.filter(user__email='no@x.ru').exists(),
+                         'кабинет создан без согласия')
+
+    def test_register_missing_consent_rejected(self):
+        # поле не прислали вовсе — это не «согласие по умолчанию», а отказ
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'miss@x.ru',
+                                         'password': 'Nauka2026lab',
+                                         'name': 'ООО Без галочки'}))
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(Company.objects.filter(user__email='miss@x.ru').exists())
+
+    def test_consent_is_recorded_with_version(self):
+        # без версии через год не ответить, на какую редакцию человек соглашался
+        self.register(email='yes@x.ru')
+        co = Company.objects.get(user__email='yes@x.ru')
+        self.assertIsNotNone(co.consent_at, 'не сохранено время согласия')
+        self.assertEqual(co.consent_version, CONSENT_VERSION)
 
     def test_me_requires_auth(self):
         self.assertEqual(self.c.get('/api/auth/me/').status_code, 401)
@@ -412,7 +439,8 @@ class KpiApiTests(TestCase):
     def setUp(self):
         self.c = Client()
         r = self.c.post('/api/auth/register/',
-                        data=json.dumps({'email': 'k@k.ru', 'password': 'Nauka2026lab', 'name': 'ООО КПЭ'}),
+                        data=json.dumps({'email': 'k@k.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО КПЭ', 'consent': True}),
                         content_type='application/json')
         self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
 
@@ -481,7 +509,8 @@ class ConnectivityTests(TestCase):
 
     def _reg(self, email='c@c.ru'):
         r = self.c.post('/api/auth/register/',
-                        data=json.dumps({'email': email, 'password': 'Nauka2026lab', 'name': 'ООО Связь'}),
+                        data=json.dumps({'email': email, 'password': 'Nauka2026lab',
+                                         'name': 'ООО Связь', 'consent': True}),
                         content_type='application/json')
         return {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
 
@@ -1556,6 +1585,21 @@ class SampleQtyTests(TestCase):
         self.assertIsNotNone(m, 'MAX_SAMPLES не найден в js/app.js')
         self.assertEqual(int(m.group(1)), MAX_SAMPLE_QTY)
 
+    def test_consent_version_matches_frontend(self):
+        """Редакция политики продублирована в браузере.
+
+        Разъехаться они могут молча и незаметно: страница показывала бы одну
+        редакцию, а в базу писалась бы другая — и отметка о согласии перестала
+        бы что-либо доказывать. Поднимая CONSENT_VERSION, правьте оба места.
+        """
+        import re
+        from pathlib import Path
+
+        app = (Path(settings.BASE_DIR).parent / 'js' / 'app.js').read_text(encoding='utf-8')
+        m = re.search(r"var CONSENT_VERSION\s*=\s*'([\d-]+)'", app)
+        self.assertIsNotNone(m, 'CONSENT_VERSION не найден в js/app.js')
+        self.assertEqual(m.group(1), CONSENT_VERSION)
+
 
 class CsrfRegressionTests(TestCase):
     """Оператор, вошедший в CRM, не должен ломать себе сайт.
@@ -1594,7 +1638,7 @@ class CsrfRegressionTests(TestCase):
     def test_register_works_for_logged_in_operator(self):
         r = self._post('/api/auth/register/', {
             'email': 'newco@example.com', 'password': 'Nauka2026lab',
-            'name': 'ООО «Новая»'})
+            'name': 'ООО «Новая»', 'consent': True})
         self.assertEqual(r.status_code, 201, 'регистрация отказала вошедшему оператору')
 
     def test_order_works_for_logged_in_operator(self):
