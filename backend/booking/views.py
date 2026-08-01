@@ -11,10 +11,13 @@ from rest_framework.views import APIView
 
 from . import querylog
 from .assist import assist
-from .models import KPI_KEYS, BusySlot, CustomRequest, Kpi, KpiEntry, Order, Resource
+from .compose import FORMATS, compose, missing_for
+from .models import (KPI_KEYS, PROFILE_LABELS, PROFILE_STAGES, BusySlot,
+                     CustomRequest, Kpi, KpiEntry, Order, ProjectProfile, Resource)
 from .serializers import (CompanySerializer, CustomRequestSerializer,
                           KpiEntrySerializer, KpiSerializer,
-                          OrderCreateSerializer, OrderListSerializer, RegisterSerializer,
+                          OrderCreateSerializer, OrderListSerializer,
+                          ProjectProfileSerializer, RegisterSerializer,
                           ResourceSerializer)
 
 
@@ -65,6 +68,12 @@ class AllBusyView(APIView):
 
 class AssistThrottle(AnonRateThrottle):
     scope = 'assist'
+
+
+class ComposeThrottle(AnonRateThrottle):
+    """Сборка документа — самый дорогой вызов модели на платформе:
+    длинный ответ и объёмный профиль на входе."""
+    scope = 'compose'
 
 
 class CustomRequestThrottle(AnonRateThrottle):
@@ -374,3 +383,108 @@ class KpiExtractView(APIView):
         entry = KpiEntry.objects.create(kpi=kpi, title=(title or f.name)[:300],
                                         amount=amount, document=f, source='auto')
         return Response(KpiEntrySerializer(entry).data, status=201)
+
+
+# ---------- помощник резидента: профиль проекта и сборка документов ----------
+def _profile_for(request):
+    """Профиль своей компании. Создаём при первом обращении."""
+    company = getattr(getattr(request, 'user', None), 'company', None)
+    if not company:
+        return None
+    profile, _ = ProjectProfile.objects.get_or_create(company=company)
+    return profile
+
+
+class ProfileView(APIView):
+    """GET/PATCH /api/profile/ — профиль проекта резидента.
+
+    Все поля необязательные: профиль заполняется по частям, и незаполненное —
+    это не ошибка, а повод спросить в нужный момент.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        return Response(ProjectProfileSerializer(profile).data)
+
+    def patch(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        ser = ProjectProfileSerializer(profile, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ProjectProfileSerializer(profile).data)
+
+
+class ProfileNextView(APIView):
+    """GET /api/profile/next/ — следующий вопрос интервью.
+
+    Анкету на тринадцать полей не заполняет никто, поэтому спрашиваем по
+    одному: сначала ядро, потом остальное.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        field, question = profile.next_question()
+        return Response({
+            'field': field,
+            'question': question,
+            'label': PROFILE_LABELS.get(field) if field else None,
+            'stages': [{'value': v, 'label': t} for v, t in PROFILE_STAGES]
+                      if field == 'stage' else None,
+            'completeness': profile.completeness,
+            'coreReady': profile.core_ready,
+        })
+
+
+class ComposeView(APIView):
+    """POST /api/profile/compose/ — собрать документ из профиля.
+
+    Тело: {"format": "sections" | "teaser" | "onepager" | "deck"}
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ComposeThrottle]
+
+    def post(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        fmt = (request.data.get('format') or '').strip()
+        if fmt not in FORMATS:
+            return Response({'detail': 'Неизвестный формат документа.'}, status=400)
+        blocks, gaps, mode = compose(profile, fmt)
+        return Response({
+            'format': fmt,
+            'title': FORMATS[fmt]['title'],
+            'mode': mode,
+            'blocks': blocks,
+            'gaps': gaps,
+        })
+
+
+class ComposeFormatsView(APIView):
+    """GET /api/profile/formats/ — что умеет собирать помощник и чего для
+    этого не хватает. Нужно, чтобы кнопки в кабинете были честными: видно
+    сразу, какой документ сейчас собрать нельзя и почему."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        out = []
+        for key, spec in FORMATS.items():
+            lack = missing_for(profile, key)
+            out.append({
+                'key': key,
+                'title': spec['title'],
+                'ready': not lack,
+                'missing': [PROFILE_LABELS[k] for k in lack],
+            })
+        return Response(out)

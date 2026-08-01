@@ -1140,8 +1140,244 @@
     location.hash='#/login';
     return true;
   }
+  /* ==========================================================
+     ПОМОЩНИК РЕЗИДЕНТА: профиль проекта
+     ==========================================================
+     Резидент рассказывает о проекте один раз, дальше система раскладывает
+     этот рассказ по чужим формам. Ради этого всё и затевалось: не заполнять
+     пятую анкету заново.
+
+     Профиль собирается разговором, а не анкетой на тринадцать полей —
+     анкету такого размера не заполняет никто. Но форма рядом есть: кому
+     удобнее печатать сразу в поля, тот не должен проходить интервью. */
+  var proj={ data:null, formats:[], busy:false, doc:null, mode:'chat' };
+
+  function viewCabProject(){
+    if(!P.isLogged()) return viewLogin();
+    render('<section class="section"><div class="wrap">'+cabTabs('#/cabinet/project')+
+      '<div id="projbox"><div class="cline-meta">Загружаем профиль…</div></div>'+
+    '</div></section>', function(){
+      Promise.all([P.profileApi.get(), P.profileApi.formats()]).then(function(r){
+        if(!r[0].ok){ el('projbox').innerHTML='<div class="empty"><h3>Профиль недоступен</h3></div>'; return; }
+        proj.data=r[0].data; proj.formats=r[1].ok?r[1].data:[];
+        drawProject();
+      });
+    });
+  }
+
+  function drawProject(){
+    var box=el('projbox'); if(!box) return;
+    var d=proj.data;
+    box.innerHTML=
+      '<div class="proj-head">'+
+        '<div><div class="eyebrow">Помощник резидента</div>'+
+          '<h1 class="h-lg">'+(d.title?esc(d.title):'Профиль проекта')+'</h1>'+
+          '<p class="sub">Расскажите о проекте один раз — дальше помощник соберёт '+
+          'из этого черновики разделов заявки, тизер и презентацию.</p></div>'+
+        progressHtml(d.completeness)+
+      '</div>'+
+      aiNoticeHtml()+
+      '<div class="proj-switch">'+
+        '<button class="tab'+(proj.mode==='chat'?' on':'')+'" data-mode="chat">Рассказать в диалоге</button>'+
+        '<button class="tab'+(proj.mode==='form'?' on':'')+'" data-mode="form">Заполнить формой</button>'+
+      '</div>'+
+      '<div id="projmain"></div>'+
+      '<div id="projdocs"></div>';
+    qsAll('.proj-switch .tab').forEach(function(b){
+      b.onclick=function(){ proj.mode=b.getAttribute('data-mode'); drawProject(); };
+    });
+    if(proj.mode==='chat') drawInterview(); else drawProjectForm();
+    drawDocs();
+  }
+
+  function progressHtml(pct){
+    return '<div class="proj-prog"><div class="proj-prog-n">'+pct+'%</div>'+
+      '<div class="proj-prog-bar"><i style="width:'+pct+'%"></i></div>'+
+      '<div class="proj-prog-c">профиль заполнен</div></div>';
+  }
+
+  /* Честная пометка: данные уходят во внешнюю модель. Пока обработка не
+     переехала на своё железо, промолчать об этом нельзя — человек введёт
+     в поле реальные сведения о разработке, полагая, что они никуда не идут. */
+  function aiNoticeHtml(){
+    return '<div class="cab-note wait">'+icon('clock',18)+'<span>'+
+      '<strong>Пока это демонстрация.</strong> Тексты собирает языковая модель '+
+      'YandexGPT — то, что вы напишете в профиле, уходит на её обработку в '+
+      'Yandex Cloud. Не вносите сюда сведения, которые нельзя передавать '+
+      'третьим лицам. Перенос обработки на серверы ПУЛЬСАР запланирован.'+
+      '</span></div>';
+  }
+
+  function drawInterview(){
+    var m=el('projmain'); if(!m) return;
+    m.innerHTML='<div class="cline-meta">Загружаем…</div>';
+    P.profileApi.next().then(function(res){
+      if(!res.ok){ m.innerHTML=''; return; }
+      var q=res.data;
+      if(!q.field){
+        m.innerHTML='<div class="proj-done">'+icon('check',20)+
+          '<div><strong>Профиль заполнен полностью.</strong> Можно собирать документы — '+
+          'или поправить что-нибудь через форму.</div></div>';
+        return;
+      }
+      var input;
+      if(q.stages){
+        input='<select id="pj_val">'+q.stages.map(function(s){
+          return '<option value="'+esc(s.value)+'">'+esc(s.label)+'</option>'; }).join('')+'</select>';
+      } else if(q.field==='title'){
+        input='<input id="pj_val" placeholder="Короткое название">';
+      } else {
+        input='<textarea id="pj_val" rows="4" placeholder="Своими словами, без формальностей"></textarea>';
+      }
+      m.innerHTML='<div class="proj-q">'+
+        '<div class="proj-q-label">'+esc(q.label)+'</div>'+
+        '<p class="proj-q-text">'+esc(q.question)+'</p>'+
+        input+
+        '<div class="proj-q-act">'+
+          '<button class="btn btn-brass" id="pj_save">Сохранить и дальше</button>'+
+          '<button class="pick-link" id="pj_skip">Пропустить пока</button>'+
+        '</div>'+
+        '<div id="pj_msg"></div>'+
+      '</div>';
+      el('pj_val').focus();
+      el('pj_save').onclick=function(){
+        var v=el('pj_val').value.trim();
+        if(!v){ el('pj_msg').innerHTML='<div class="form-msg err">Напишите ответ или нажмите «Пропустить пока».</div>'; return; }
+        var patch={}; patch[q.field]=v;
+        this.disabled=true;
+        P.profileApi.save(patch).then(function(r){
+          if(!r.ok){ el('pj_msg').innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
+          proj.data=r.data;
+          refreshFormats();
+          drawProject();
+        });
+      };
+      // «пропустить» не портит профиль: просто перескакиваем к форме, где
+      // видно все поля сразу и можно вернуться к пропущенному
+      el('pj_skip').onclick=function(){ proj.mode='form'; drawProject(); };
+    });
+  }
+
+  var PROJ_FIELDS=[
+    ['title','Название проекта','input'],
+    ['summary','Суть в двух фразах','area'],
+    ['problem','Какую задачу решаете','area'],
+    ['solution','Как решаете и в чём новизна','area'],
+    ['stage','Стадия готовности','stage'],
+    ['groundwork','Научный задел','area'],
+    ['team','Команда','area'],
+    ['market','Рынок и его объём','area'],
+    ['competitors','Конкуренты и отличия','area'],
+    ['business_model','Как проект зарабатывает','area'],
+    ['workplan','План работ по этапам','area'],
+    ['risks','Риски','area'],
+    ['needs','Какое оборудование и методы нужны','area']
+  ];
+  var PROJ_STAGES=[['idea','Идея'],['calc','Расчёты и моделирование'],['lab','Лабораторный образец'],
+                   ['proto','Опытный образец'],['test','Испытания'],['serial','Серийное производство']];
+
+  function drawProjectForm(){
+    var m=el('projmain'); if(!m) return;
+    var d=proj.data;
+    m.innerHTML='<div class="proj-form">'+PROJ_FIELDS.map(function(f){
+      var id='pf_'+f[0], v=d[f[0]]||'';
+      var ctl;
+      if(f[2]==='input') ctl='<input id="'+id+'" value="'+esc(v)+'">';
+      else if(f[2]==='stage') ctl='<select id="'+id+'"><option value="">— не указана —</option>'+
+        PROJ_STAGES.map(function(s){
+          return '<option value="'+s[0]+'"'+(v===s[0]?' selected':'')+'>'+s[1]+'</option>'; }).join('')+'</select>';
+      else ctl='<textarea id="'+id+'" rows="3">'+esc(v)+'</textarea>';
+      return '<div class="field full"><label for="'+id+'">'+esc(f[1])+'</label>'+ctl+'</div>';
+    }).join('')+
+      '<div class="proj-form-act"><button class="btn btn-brass" id="pf_save">Сохранить профиль</button>'+
+      '<span id="pf_msg"></span></div></div>';
+    el('pf_save').onclick=function(){
+      var patch={};
+      PROJ_FIELDS.forEach(function(f){ patch[f[0]]=el('pf_'+f[0]).value.trim(); });
+      this.disabled=true;
+      var btn=this;
+      P.profileApi.save(patch).then(function(r){
+        btn.disabled=false;
+        if(!r.ok){ el('pf_msg').innerHTML='<span class="form-msg err">'+esc(r.msg)+'</span>'; return; }
+        proj.data=r.data;
+        el('pf_msg').innerHTML='<span class="form-msg ok">Сохранено</span>';
+        refreshFormats();
+        var head=qsAll('.proj-prog')[0];
+        if(head) head.outerHTML=progressHtml(r.data.completeness);
+      });
+    };
+  }
+
+  function refreshFormats(){
+    P.profileApi.formats().then(function(r){ if(r.ok){ proj.formats=r.data; drawDocs(); } });
+  }
+
+  /* Кнопки честные: если документ сейчас собрать нельзя, это видно ДО
+     нажатия и написано, каких полей не хватает. Кнопка, которая при нажатии
+     говорит «не могу», раздражает и учит не доверять интерфейсу. */
+  function drawDocs(){
+    var box=el('projdocs'); if(!box) return;
+    box.innerHTML='<h2 class="h-md" style="margin:34px 0 6px">Что можно собрать</h2>'+
+      '<p class="sub" style="margin-bottom:16px">Черновики для правки, а не готовые документы. '+
+      'Помощник не придумывает факты: чего нет в профиле, того не будет и в тексте.</p>'+
+      '<div class="proj-docs">'+proj.formats.map(function(f){
+        return '<div class="proj-doc'+(f.ready?'':' off')+'">'+
+          '<div class="proj-doc-t">'+esc(f.title)+'</div>'+
+          (f.ready
+            ? '<button class="btn btn-outline btn-sm" data-fmt="'+esc(f.key)+'">Собрать</button>'
+            : '<div class="proj-doc-need">Не хватает: '+esc(f.missing.join(', '))+'</div>')+
+        '</div>';
+      }).join('')+'</div>'+
+      '<div id="projout"></div>';
+    qsAll('.proj-doc [data-fmt]').forEach(function(b){
+      b.onclick=function(){ composeDoc(b.getAttribute('data-fmt'), b); };
+    });
+  }
+
+  function composeDoc(fmt, btn){
+    var out=el('projout');
+    btn.disabled=true; btn.textContent='Собираем…';
+    out.innerHTML='<div class="ai-wait">'+aiBadge()+'Помощник пишет черновик, это занимает до полуминуты…</div>';
+    P.profileApi.compose(fmt).then(function(r){
+      btn.disabled=false; btn.textContent='Собрать';
+      if(!r.ok){ out.innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
+      var d=r.data;
+      if(d.mode==='need'){
+        out.innerHTML='<div class="form-msg err">Сначала заполните: '+esc(d.gaps.join(', '))+'</div>';
+        return;
+      }
+      if(d.mode==='offline'){
+        out.innerHTML='<div class="form-msg err">Помощник сейчас недоступен — '+
+          'попробуйте через несколько минут.</div>';
+        return;
+      }
+      out.innerHTML='<div class="proj-out">'+
+        '<div class="proj-out-head"><h3>'+esc(d.title)+'</h3>'+aiBadge('mini')+'</div>'+
+        d.blocks.map(function(b){
+          return '<div class="proj-block"><h4>'+esc(b.heading)+'</h4>'+
+            '<div class="proj-block-t">'+esc(b.text).replace(/\n/g,'<br>')+'</div></div>';
+        }).join('')+
+        (d.gaps.length
+          ? '<div class="proj-gaps"><strong>Стоит дополнить в профиле:</strong> '+
+            esc(d.gaps.join('; '))+'</div>' : '')+
+        '<div class="proj-out-act">'+
+          '<button class="btn btn-outline btn-sm" id="pj_copy">Скопировать текст</button>'+
+          '<span class="sub">Проверьте факты и цифры перед отправкой куда бы то ни было.</span>'+
+        '</div>'+
+      '</div>';
+      el('pj_copy').onclick=function(){
+        var t=d.blocks.map(function(b){ return b.heading+'\n'+b.text; }).join('\n\n');
+        var self=this;
+        navigator.clipboard.writeText(t).then(function(){
+          self.textContent='Скопировано'; setTimeout(function(){ self.textContent='Скопировать текст'; },1600);
+        });
+      };
+    });
+  }
+
   function cabTabs(active){
-    var t=[['#/cabinet','Профиль'],['#/cabinet/orders','Мои заявки'],['#/cabinet/kpi','Показатели']];
+    var t=[['#/cabinet','Профиль'],['#/cabinet/project','Проект'],
+           ['#/cabinet/orders','Мои заявки'],['#/cabinet/kpi','Показатели']];
     return '<div class="cab-tabs">'+t.map(function(x){
       return '<a href="'+x[0]+'" class="cab-tab'+(x[0]===active?' on':'')+'">'+x[1]+'</a>';
     }).join('')+'</div>';
@@ -1511,6 +1747,7 @@
       case 'order': return viewOrder(seg[1]);
       case 'login': return viewLogin();
       case 'cabinet':
+        if(seg[1]==='project') return viewCabProject();
         if(seg[1]==='orders') return viewCabOrders();
         if(seg[1]==='kpi') return viewCabKpi();
         return viewCabinet();

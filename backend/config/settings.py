@@ -102,6 +102,10 @@ ASSIST_TIMEOUT = float(os.getenv('ASSIST_TIMEOUT', '8'))
 # Файл лежит внутри backend/, который Nginx не отдаёт наружу.
 ASSIST_LOG_FILE = os.getenv('ASSIST_LOG_FILE', str(BASE_DIR / 'logs' / 'assist.log'))
 
+# Сборка документов из профиля проекта — текста больше, чем в подборе,
+# поэтому и ждать модель приходится дольше.
+COMPOSE_TIMEOUT = float(os.getenv('COMPOSE_TIMEOUT', '30'))
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
     # Только токен. SessionAuthentication здесь была вредна: она включает
@@ -124,6 +128,9 @@ REST_FRAMEWORK = {
         # публичная. Свой счётчик: перебор формулировок в подборе не должен
         # закрывать возможность оставить заявку.
         'custom_request': os.getenv('CUSTOM_REQUEST_RATE', '10/hour'),
+        # Сборка документа — самый дорогой вызов модели: длинный ответ
+        # и весь профиль на входе. Живому человеку чаще и не нужно.
+        'compose': os.getenv('COMPOSE_RATE', '30/hour'),
     },
 }
 

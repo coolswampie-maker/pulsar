@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from booking.models import (BookingLine, BusySlot, Company, CustomRequest, Kpi,
-                            Order, Resource)
+                            Order, ProjectProfile, Resource)
 
 # Даты тестов считаем от сегодняшнего дня, а не фиксируем в календаре: модели и
 # планировщик отклоняют бронь в прошлом, поэтому зашитые даты со временем
@@ -1066,6 +1066,168 @@ class AssistTests(TestCase):
         from booking.assist import SYSTEM_PROMPT
         for must in ('ПУЛЬСАР', 'языковой модели', 'Не выдавай себя за человека',
                      'ТОЛЬКО из идентификаторов', 'лицензий'):
+            self.assertIn(must, SYSTEM_PROMPT)
+
+
+class ProjectProfileTests(TestCase):
+    """Профиль проекта и сборка документов — помощник резидента."""
+
+    def setUp(self):
+        self.c = Client()
+        cache.clear()
+        u = User.objects.create_user(username='co@x.ru', email='co@x.ru', password='Nauka2026lab')
+        self.company = Company.objects.create(user=u, name='ООО «Тест»', contact_name='Иванов')
+        r = self.c.post('/api/auth/login/',
+                        data=json.dumps({'email': 'co@x.ru', 'password': 'Nauka2026lab'}),
+                        content_type='application/json')
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+
+    def _patch(self, **kw):
+        return self.c.patch('/api/profile/', data=json.dumps(kw),
+                            content_type='application/json', **self.auth)
+
+    def _fill_core(self):
+        self._patch(title='Сенсор метана', summary='Оптический сенсор метана для ЖКХ',
+                    problem='Существующие датчики дороги в обслуживании',
+                    solution='Безрасходный оптический принцип, поверка раз в 5 лет',
+                    stage='lab', groundwork='Две статьи, лабораторный макет',
+                    team='Иванов — оптика, к.ф.-м.н.; Петров — электроника')
+
+    # --- профиль ---
+
+    def test_profile_created_on_first_visit(self):
+        r = self.c.get('/api/profile/', **self.auth)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)['completeness'], 0)
+
+    def test_stranger_cannot_read_profile(self):
+        """Профиль проекта — чувствительные данные, чужому нельзя."""
+        self.assertEqual(self.c.get('/api/profile/').status_code, 401)
+
+    def test_partial_fill_and_completeness(self):
+        self._patch(title='Сенсор метана')
+        d = json.loads(self.c.get('/api/profile/', **self.auth).content)
+        self.assertEqual(d['title'], 'Сенсор метана')
+        self.assertGreater(d['completeness'], 0)
+        self.assertFalse(d['coreReady'])
+
+    def test_core_ready_after_core_fields(self):
+        self._fill_core()
+        d = json.loads(self.c.get('/api/profile/', **self.auth).content)
+        self.assertTrue(d['coreReady'])
+
+    def test_bad_stage_rejected(self):
+        self.assertEqual(self._patch(stage='космос').status_code, 400)
+
+    # --- интервью ---
+
+    def test_interview_asks_core_first(self):
+        r = self.c.get('/api/profile/next/', **self.auth)
+        d = json.loads(r.content)
+        self.assertEqual(d['field'], 'title')      # первым — название
+        self.assertTrue(d['question'])
+
+    def test_interview_moves_on(self):
+        self._patch(title='Сенсор метана')
+        d = json.loads(self.c.get('/api/profile/next/', **self.auth).content)
+        self.assertEqual(d['field'], 'summary')
+
+    def test_interview_offers_stage_options(self):
+        """У стадии нельзя спрашивать текстом — нужен список вариантов."""
+        self._patch(title='т', summary='с', problem='п', solution='р')
+        d = json.loads(self.c.get('/api/profile/next/', **self.auth).content)
+        self.assertEqual(d['field'], 'stage')
+        self.assertTrue(d['stages'])
+
+    def test_interview_ends(self):
+        self._fill_core()
+        self._patch(market='м', competitors='к', business_model='б',
+                    workplan='п', risks='р', needs='н')
+        d = json.loads(self.c.get('/api/profile/next/', **self.auth).content)
+        self.assertIsNone(d['field'])
+        self.assertEqual(d['completeness'], 100)
+
+    # --- сборка документов ---
+
+    def test_formats_show_what_is_missing(self):
+        """Кнопки должны быть честными: видно, чего не хватает, до нажатия."""
+        r = self.c.get('/api/profile/formats/', **self.auth)
+        formats = json.loads(r.content)
+        self.assertTrue(formats)
+        for f in formats:
+            self.assertFalse(f['ready'])
+            self.assertTrue(f['missing'])
+
+    def test_compose_refuses_without_core(self):
+        """Без данных модель не зовём: просить её писать раздел без фактов —
+        значит толкать на выдумку, и платить за это будем мы."""
+        from booking import compose as C
+        called = []
+        real = C._ask_model
+        C._ask_model = lambda p, f: called.append(f)
+        try:
+            r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
+                            content_type='application/json', **self.auth)
+        finally:
+            C._ask_model = real
+        d = json.loads(r.content)
+        self.assertEqual(d['mode'], 'need')
+        self.assertEqual(called, [], 'обратились к модели, не имея данных')
+        self.assertTrue(d['gaps'])
+
+    def test_compose_uses_model_when_ready(self):
+        from booking import compose as C
+        self._fill_core()
+        real = C._ask_model
+        C._ask_model = lambda p, f: json.dumps({
+            'blocks': [{'heading': 'Проблема', 'text': 'Датчики дороги в обслуживании.'}],
+            'gaps': ['объём рынка']})
+        try:
+            r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
+                            content_type='application/json', **self.auth)
+        finally:
+            C._ask_model = real
+        d = json.loads(r.content)
+        self.assertEqual(d['mode'], 'ok')
+        self.assertEqual(d['blocks'][0]['heading'], 'Проблема')
+        self.assertIn('объём рынка', d['gaps'])
+
+    def test_empty_fields_not_sent_to_model(self):
+        """В модель уходят только заполненные поля.
+
+        Пустое поле в запросе — приглашение заполнить его правдоподобной
+        выдумкой, а выдуманная цифра рынка в заявке это отказ заявителю.
+        """
+        self._fill_core()
+        profile = ProjectProfile.objects.get(company=self.company)
+        text = profile.as_prompt()
+        self.assertIn('Сенсор метана', text)
+        self.assertNotIn('Рынок', text)          # не заполнено — не отправлено
+        self.assertNotIn('Риски', text)
+
+    def test_model_failure_is_honest(self):
+        """Модель не ответила — так и говорим, а не показываем пустоту."""
+        from booking import compose as C
+        self._fill_core()
+        real = C._ask_model
+        C._ask_model = lambda p, f: None
+        try:
+            r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
+                            content_type='application/json', **self.auth)
+        finally:
+            C._ask_model = real
+        self.assertEqual(json.loads(r.content)['mode'], 'offline')
+
+    def test_unknown_format_rejected(self):
+        r = self.c.post('/api/profile/compose/', data=json.dumps({'format': 'диплом'}),
+                        content_type='application/json', **self.auth)
+        self.assertEqual(r.status_code, 400)
+
+    def test_prompt_forbids_inventing(self):
+        """Запрет выдумок — часть поведения, а не комментарий."""
+        from booking.compose import SYSTEM_PROMPT
+        for must in ('НИЧЕГО НЕ ПРИДУМЫВАТЬ', 'Запрещено сочинять цифры',
+                     'Нужно дополнить', 'ПУЛЬСАР', 'языковой модели'):
             self.assertIn(must, SYSTEM_PROMPT)
 
 

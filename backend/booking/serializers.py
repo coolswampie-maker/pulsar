@@ -1,8 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import (KPI_META, BookingLine, Company, CustomRequest, Kpi, KpiEntry,
-                     Order, Resource)
+from .models import (KPI_META, PROFILE_STAGES, BookingLine, Company, CustomRequest, Kpi,
+                     KpiEntry, Order, ProjectProfile, Resource)
 
 User = get_user_model()
 
@@ -288,3 +288,21 @@ class OrderCreateSerializer(serializers.Serializer):
             order.subtotal, order.discount, order.total = subtotal, discount, subtotal - discount
             order.save(update_fields=['subtotal', 'discount', 'total'])
         return order
+
+
+class ProjectProfileSerializer(serializers.ModelSerializer):
+    """Профиль проекта: всё необязательно, заполняется по частям."""
+    completeness = serializers.IntegerField(read_only=True)
+    coreReady = serializers.BooleanField(source='core_ready', read_only=True)
+
+    class Meta:
+        model = ProjectProfile
+        fields = ('title', 'summary', 'problem', 'solution', 'stage', 'groundwork',
+                  'team', 'market', 'competitors', 'business_model', 'workplan',
+                  'risks', 'needs', 'completeness', 'coreReady', 'updated_at')
+        read_only_fields = ('updated_at',)
+
+    def validate_stage(self, v):
+        if v and v not in dict(PROFILE_STAGES):
+            raise serializers.ValidationError('Неизвестная стадия готовности.')
+        return v

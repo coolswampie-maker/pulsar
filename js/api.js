@@ -139,6 +139,18 @@
   };
 
   /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */
+  /* ---------- помощник резидента: профиль проекта ---------- */
+  P.profileApi = {
+    get:function(){ return P.apiFetch('/profile/').then(parse); },
+    save:function(d){
+      return P.apiFetch('/profile/', {method:'PATCH',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify(d)}).then(parse);
+    },
+    next:function(){ return P.apiFetch('/profile/next/').then(parse); },
+    formats:function(){ return P.apiFetch('/profile/formats/').then(parse); },
+    compose:function(fmt){ return postJson('/profile/compose/', {format:fmt}); }
+  };
+
   P.kpiApi = {
     get:function(year){ return P.apiFetch('/kpi/'+(year?'?year='+year:'')).then(parse); },
     addEntry:function(key,d,year){

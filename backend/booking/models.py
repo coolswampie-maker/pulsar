@@ -407,3 +407,133 @@ class KpiEntry(models.Model):
         kpi = self.kpi
         super().delete(*args, **kwargs)
         kpi.recompute()
+
+
+# ============================================================ ПРОФИЛЬ ПРОЕКТА
+# Резидент рассказывает о проекте один раз, дальше система раскладывает этот
+# рассказ по чужим формам: черновики разделов заявки, тизер, презентация.
+# Смысл всей затеи в том, чтобы не заполнять пятую анкету заново.
+#
+# Поля намеренно текстовые и необязательные: профиль заполняется по частям, а
+# незаполненное — это не ошибка, а повод спросить в нужный момент.
+
+PROFILE_STAGES = [
+    ('idea', 'Идея'),
+    ('calc', 'Расчёты и моделирование'),
+    ('lab', 'Лабораторный образец'),
+    ('proto', 'Опытный образец'),
+    ('test', 'Испытания'),
+    ('serial', 'Серийное производство'),
+]
+
+# Порядок важен: по нему считается полнота и задаются вопросы интервью.
+PROFILE_CORE = ['title', 'summary', 'problem', 'solution', 'stage', 'groundwork', 'team']
+PROFILE_EXTRA = ['market', 'competitors', 'business_model', 'workplan', 'risks', 'needs']
+
+PROFILE_LABELS = {
+    'title': 'Название проекта',
+    'summary': 'Суть в двух фразах',
+    'problem': 'Какую задачу решаете',
+    'solution': 'Как решаете и в чём новизна',
+    'stage': 'Стадия готовности',
+    'groundwork': 'Научный задел',
+    'team': 'Команда',
+    'market': 'Рынок и его объём',
+    'competitors': 'Конкуренты и отличия',
+    'business_model': 'Как проект зарабатывает',
+    'workplan': 'План работ по этапам',
+    'risks': 'Риски',
+    'needs': 'Какое оборудование и методы нужны',
+}
+
+# Вопросы интервью: помощник спрашивает по одному, а не показывает анкету на
+# тринадцать полей. Формулировки разговорные — это разговор, а не форма.
+PROFILE_QUESTIONS = {
+    'title': 'Как называется ваш проект или разработка?',
+    'summary': 'Опишите в двух фразах: что вы делаете и для кого?',
+    'problem': 'Какую задачу это решает? Чья это боль и почему она важна?',
+    'solution': 'Как именно вы её решаете? В чём отличие от существующих способов?',
+    'stage': 'На какой стадии проект: идея, расчёты, лабораторный образец, '
+             'опытный образец, испытания или уже серия?',
+    'groundwork': 'Что уже есть: публикации, патенты, диссертации, прототипы, '
+                  'результаты испытаний?',
+    'team': 'Кто в команде? Роль и компетенция каждого — трёх-шести человек достаточно.',
+    'market': 'Кто ваши покупатели и насколько велик рынок? Если есть оценка — с источником.',
+    'competitors': 'Кто ещё решает эту задачу и чем вы лучше?',
+    'business_model': 'Как проект будет зарабатывать?',
+    'workplan': 'Какие этапы работ планируете и в какие сроки?',
+    'risks': 'Что может пойти не так и как вы это предусмотрели?',
+    'needs': 'Какое оборудование, методы или лаборатории нужны для работ?',
+}
+
+
+class ProjectProfile(models.Model):
+    """Единый рассказ резидента о проекте.
+
+    Одна компания — один профиль. Если проектов станет несколько, добавится
+    внешний ключ и выбор; пока это усложнило бы интерфейс без пользы.
+    """
+    company = models.OneToOneField('Company', on_delete=models.CASCADE,
+                                   related_name='profile', verbose_name='Компания')
+    created_at = models.DateTimeField('Создан', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлён', auto_now=True)
+
+    title = models.CharField(PROFILE_LABELS['title'], max_length=250, blank=True)
+    summary = models.TextField(PROFILE_LABELS['summary'], blank=True)
+    problem = models.TextField(PROFILE_LABELS['problem'], blank=True)
+    solution = models.TextField(PROFILE_LABELS['solution'], blank=True)
+    stage = models.CharField(PROFILE_LABELS['stage'], max_length=12,
+                             choices=PROFILE_STAGES, blank=True)
+    groundwork = models.TextField(PROFILE_LABELS['groundwork'], blank=True)
+    team = models.TextField(PROFILE_LABELS['team'], blank=True)
+
+    market = models.TextField(PROFILE_LABELS['market'], blank=True)
+    competitors = models.TextField(PROFILE_LABELS['competitors'], blank=True)
+    business_model = models.TextField(PROFILE_LABELS['business_model'], blank=True)
+    workplan = models.TextField(PROFILE_LABELS['workplan'], blank=True)
+    risks = models.TextField(PROFILE_LABELS['risks'], blank=True)
+    needs = models.TextField(PROFILE_LABELS['needs'], blank=True)
+
+    class Meta:
+        verbose_name = 'Профиль проекта'
+        verbose_name_plural = 'Профили проектов'
+
+    def __str__(self):
+        return self.title or f'Профиль {self.company.name}'
+
+    def filled(self, keys):
+        return [k for k in keys if (getattr(self, k) or '').strip()]
+
+    def missing(self, keys):
+        return [k for k in keys if not (getattr(self, k) or '').strip()]
+
+    @property
+    def core_ready(self):
+        """Ядро заполнено — можно что-то генерировать."""
+        return not self.missing(PROFILE_CORE)
+
+    @property
+    def completeness(self):
+        """Процент заполненности по всем полям — для индикатора в кабинете."""
+        keys = PROFILE_CORE + PROFILE_EXTRA
+        return round(100 * len(self.filled(keys)) / len(keys))
+
+    def next_question(self):
+        """Следующее незаполненное поле: сначала ядро, потом остальное."""
+        for k in PROFILE_CORE + PROFILE_EXTRA:
+            if not (getattr(self, k) or '').strip():
+                return k, PROFILE_QUESTIONS[k]
+        return None, None
+
+    def as_prompt(self):
+        """Профиль для передачи модели. Пустые поля не отправляем — иначе
+        модель начнёт заполнять пробелы правдоподобными выдумками."""
+        out = []
+        for k in PROFILE_CORE + PROFILE_EXTRA:
+            v = (getattr(self, k) or '').strip()
+            if not v:
+                continue
+            if k == 'stage':
+                v = dict(PROFILE_STAGES).get(v, v)
+            out.append(f'{PROFILE_LABELS[k]}: {v}')
+        return '\n'.join(out)
