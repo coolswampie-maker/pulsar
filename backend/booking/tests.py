@@ -2078,6 +2078,16 @@ class FormalCheckTests(TestCase):
         r = self._check(self._p(max_grant=1_000_000), total=0)
         self.assertEqual(r['verdict'], 'warn')
 
+    def test_money_reads_like_money(self):
+        """Суммы читают, чтобы принять решение: «3 989 тыс. ₽» приходится
+        пересчитывать в уме, «3,99 млн ₽» — нет."""
+        self.assertEqual(formal._rub(11_000), '11 000 ₽')
+        self.assertEqual(formal._rub(99_999), '99 999 ₽')
+        self.assertEqual(formal._rub(340_000), '340 тыс. ₽')
+        self.assertEqual(formal._rub(3_989_000), '3,99 млн ₽')
+        self.assertEqual(formal._rub(4_000_000), '4 млн ₽')
+        self.assertEqual(formal._rub(1_500_000), '1,5 млн ₽')
+
     def test_cofinancing_amount_is_computed(self):
         r = self._check(self._p(cofinancing_pct=30), total=1_000_000)
         self.assertTrue(any('300 тыс. ₽' in i['text'] for i in r['warn']))
@@ -2159,3 +2169,55 @@ class ProgramsApiTests(TestCase):
         self.assertEqual(d['budgetTotal'], 1_400_000)
         self.assertEqual(d['programs'][0]['verdict'], 'stop')
         self.assertIn('400 тыс. ₽', d['programs'][0]['stop'][0]['text'])
+
+
+class CompanyRequisitesTests(TestCase):
+    """Реквизиты компании — вход проверки на формальные отказы."""
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'rq@r.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Реквизиты', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+
+    def _patch(self, d):
+        return self.c.patch('/api/auth/me/', data=json.dumps(d),
+                            content_type='application/json', **self.auth)
+
+    def test_saved_and_returned(self):
+        r = self._patch({'ogrn': '1027700132195', 'okved': '72.19, 26.51',
+                         'founded': '2023-04-01', 'staff': 12, 'revenue': 45_000_000})
+        self.assertEqual(r.status_code, 200)
+        d = json.loads(self.c.get('/api/auth/me/', **self.auth).content)
+        co = d.get('company', d)
+        self.assertEqual(co['ogrn'], '1027700132195')
+        self.assertEqual(co['staff'], 12)
+        self.assertEqual(co['revenue'], 45_000_000)
+
+    def test_empty_is_unknown_not_zero(self):
+        """null означает «не знаем». Ноль проверка приняла бы за настоящую
+        численность и ответила бы «в порядке», ничего не зная."""
+        self._patch({'staff': None, 'revenue': None})
+        co = Company.objects.get(user__email='rq@r.ru')
+        self.assertIsNone(co.staff)
+        self.assertIsNone(co.revenue)
+        p = Program.objects.create(name='П', max_staff=100)
+        r = formal.check_program(p, co, None, 0, date.today())
+        self.assertTrue(any('численность' in i['text'].lower() for i in r['warn']),
+                        'пустая численность не попала в «стоит посмотреть»')
+
+    def test_future_founded_rejected(self):
+        r = self._patch({'founded': (date.today() + timedelta(days=1)).isoformat()})
+        self.assertEqual(r.status_code, 400)
+
+    def test_requisites_reach_the_check(self):
+        self._patch({'staff': 250, 'okved': '47.11',
+                     'founded': (date.today() - timedelta(days=200)).isoformat()})
+        Program.objects.create(name='Строгая', max_staff=100, okved='72')
+        d = json.loads(self.c.get('/api/programs/', **self.auth).content)
+        p = d['programs'][0]
+        self.assertEqual(p['verdict'], 'stop')
+        texts = ' '.join(i['text'] for i in p['stop'])
+        self.assertIn('250', texts)
+        self.assertIn('47.11', texts)

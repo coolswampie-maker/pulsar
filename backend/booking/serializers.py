@@ -77,9 +77,19 @@ class CompanySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Company
+        # Реквизиты нужны проверке на формальные отказы: без них она
+        # честно отвечает «не знаем», а это почти никогда не помогает.
+        # Все они необязательные — спрашиваются, когда доходит до заявки.
         fields = ('name', 'inn', 'category', 'resident', 'confirmed',
-                  'contact_name', 'phone', 'email', 'created_at')
+                  'contact_name', 'phone', 'email', 'created_at',
+                  'ogrn', 'okved', 'founded', 'staff', 'revenue')
         read_only_fields = ('created_at', 'email', 'resident', 'confirmed')
+
+    def validate_founded(self, v):
+        from django.utils import timezone
+        if v and v > timezone.localdate():
+            raise serializers.ValidationError('Дата регистрации в будущем.')
+        return v
 
 
 class RegisterSerializer(serializers.Serializer):

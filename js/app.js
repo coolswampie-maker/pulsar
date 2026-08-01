@@ -1830,6 +1830,14 @@
       P.authApi.refresh().then(function(){ syncNav(); drawProfile(); });
     });
   }
+  // Пустое поле числа — «не знаем», а не ноль. Ноль сотрудников или нулевую
+  // выручку проверка приняла бы за настоящие данные и ответила бы «в порядке»
+  // там, где она вообще ничего не знает.
+  function num(v){ v=(v||'').trim(); return v===''?null:Math.max(0, parseInt(v,10)||0); }
+  function reqFilled(c){
+    return !!(c.ogrn||c.okved||c.founded||c.staff!=null||c.revenue!=null);
+  }
+
   function drawProfile(){
     var box=el('cabbody'); if(!box) return;
     var c=P.company();
@@ -1847,6 +1855,30 @@
         '<div class="field"><label for="p_cat">Направление</label><select id="p_cat"><option value="">— не выбрано —</option>'+opts+'</select></div>'+
         '<div class="field"><label for="p_email">E-mail (логин)</label><input id="p_email" value="'+esc(c.email)+'" disabled></div>'+
       '</div>'+
+      // Реквизиты отдельным блоком и ниже основного: при регистрации их не
+      // спрашивают, они нужны только проверке заявок. Свёрнуты, чтобы форма
+      // кабинета не выглядела анкетой на десять полей.
+      '<details class="req-block"'+(reqFilled(c)?' open':'')+'>'+
+        '<summary>Реквизиты для проверки заявок'+
+          (reqFilled(c)?'':' <span class="req-hint">— не заполнены</span>')+'</summary>'+
+        '<p class="sub" style="margin:8px 0 14px">Нужны только проверке на '+
+        'формальные отказы во вкладке «Заявка». Без них проверка честно '+
+        'отвечает «не знаем» — а это почти никогда не помогает. '+
+        'Всё необязательно.</p>'+
+        '<div class="form-grid">'+
+          '<div class="field"><label for="p_ogrn">ОГРН</label>'+
+            '<input id="p_ogrn" value="'+esc(c.ogrn||'')+'" placeholder="13 или 15 цифр"></div>'+
+          '<div class="field"><label for="p_founded">Дата регистрации</label>'+
+            '<input id="p_founded" type="date" value="'+esc(c.founded||'')+'"></div>'+
+          '<div class="field full"><label for="p_okved">ОКВЭД</label>'+
+            '<input id="p_okved" value="'+esc(c.okved||'')+'" '+
+            'placeholder="Основной и дополнительные, через запятую: 72.19, 26.51"></div>'+
+          '<div class="field"><label for="p_staff">Численность, чел.</label>'+
+            '<input id="p_staff" type="number" min="0" value="'+esc(c.staff==null?'':c.staff)+'"></div>'+
+          '<div class="field"><label for="p_revenue">Выручка за прошлый год, ₽</label>'+
+            '<input id="p_revenue" type="number" min="0" value="'+esc(c.revenue==null?'':c.revenue)+'"></div>'+
+        '</div>'+
+      '</details>'+
       '<div id="p_msg"></div>'+
       '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">'+
         '<button class="btn btn-brass" id="psave">Сохранить</button>'+
@@ -1856,13 +1888,22 @@
       var msg=el('p_msg');
       var d={ name:el('p_name').value.trim(), inn:el('p_inn').value.trim(),
               contact_name:el('p_contact').value.trim(), phone:el('p_phone').value.trim(),
-              category:el('p_cat').value };
+              category:el('p_cat').value,
+              ogrn:el('p_ogrn').value.trim(), okved:el('p_okved').value.trim(),
+              // пустое число — это «не знаем», а не ноль: ноль сотрудников
+              // проверка приняла бы за настоящую численность
+              founded:el('p_founded').value || null,
+              staff:num(el('p_staff').value), revenue:num(el('p_revenue').value) };
       if(!d.name){ msg.innerHTML='<div class="form-msg err">Укажите название организации.</div>'; return; }
       var b=el('psave'); b.disabled=true; b.textContent='Сохранение…';
       P.authApi.save(d).then(function(res){
         b.disabled=false; b.textContent='Сохранить';
         if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
         msg.innerHTML='<div class="form-msg ok">Сохранено.</div>'; syncNav(); toast('Профиль обновлён');
+        // Пометка «не заполнены» осталась бы висеть над только что
+        // заполненными полями — подпись, которая врёт про то, что рядом.
+        var hint=qsAll('.req-block .req-hint')[0];
+        if(hint && reqFilled(d)) hint.remove();
       });
     };
     el('plogout').onclick=function(){ P.authApi.logout(); syncNav(); toast('Вы вышли из кабинета'); location.hash='#/'; };
