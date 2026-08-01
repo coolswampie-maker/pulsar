@@ -29,6 +29,25 @@ except (ImportError, admin.sites.NotRegistered):   # на случай смен�
     pass
 
 
+# Надпись на кнопке «Добавить …» в винительном падеже. Django подставляет
+# verbose_name как есть, а он именительный, — выходило «Добавить компания».
+#
+# Список, а не правило: винительный падеж в русском по слову не вычислить
+# (ресурс → ресурс, компания → компанию, заявка → заявку). Чтобы для новой
+# модели его не забыли, за полнотой этого словаря следит тест
+# AdminLanguageTests.test_every_model_has_add_label.
+ADD_LABELS = {
+    'resource': 'Добавить ресурс',
+    'company': 'Добавить компанию',
+    'kpi': 'Добавить показатель',
+    'order': 'Добавить заявку',
+    'customrequest': 'Добавить обращение',
+    'busyslot': 'Добавить занятость',
+    'program': 'Добавить программу',
+    'projectprofile': 'Добавить профиль',
+}
+
+
 class RuTitlesMixin:
     """Человеческие заголовки страниц: Django по умолчанию ставит именительный
     падеж («Изменить Заявка», «Выберите Заявка для изменения»)."""
@@ -37,9 +56,13 @@ class RuTitlesMixin:
     ru_change = None   # заголовок формы редактирования
 
     def changelist_view(self, request, extra_context=None):
+        extra = {**(extra_context or {})}
         if self.ru_plural:
-            extra_context = {**(extra_context or {}), 'title': self.ru_plural}
-        return super().changelist_view(request, extra_context)
+            extra['title'] = self.ru_plural
+        label = ADD_LABELS.get(self.model._meta.model_name)
+        if label:
+            extra['ru_add_label'] = label
+        return super().changelist_view(request, extra)
 
     def add_view(self, request, form_url='', extra_context=None):
         if self.ru_add:
@@ -118,7 +141,7 @@ class BookingLineInline(admin.TabularInline):
 
 
 @admin.register(Company)
-class CompanyAdmin(admin.ModelAdmin):
+class CompanyAdmin(RuTitlesMixin, admin.ModelAdmin):
     list_display = ('name', 'inn', 'confirmed', 'resident', 'contact_name', 'phone', 'created_at')
     list_filter = ('confirmed', 'resident', 'category')
     list_editable = ('confirmed', 'resident')
@@ -171,7 +194,7 @@ class KpiEntryInline(DocAcceptMixin, admin.TabularInline):
 
 
 @admin.register(Kpi)
-class KpiAdmin(DocAcceptMixin, admin.ModelAdmin):
+class KpiAdmin(RuTitlesMixin, DocAcceptMixin, admin.ModelAdmin):
     list_display = ('company', 'year', 'key', 'plan', 'fact', 'status_col', 'updated_at')
     list_editable = ('plan',)          # оператор задаёт план (из календарного плана)
     list_filter = ('year', 'key', 'company')
@@ -471,7 +494,7 @@ class CustomRequestAdmin(RuTitlesMixin, admin.ModelAdmin):
 
 
 @admin.register(BusySlot)
-class BusySlotAdmin(admin.ModelAdmin):
+class BusySlotAdmin(RuTitlesMixin, admin.ModelAdmin):
     date_hierarchy = 'date'
     list_display = ('date', 'slot_start', 'slot_end', 'resource', 'note')
     list_filter = ('date', 'resource__type', 'resource')
@@ -759,7 +782,7 @@ class BusySlotAdmin(admin.ModelAdmin):
 
 
 @admin.register(Program)
-class ProgramAdmin(admin.ModelAdmin):
+class ProgramAdmin(RuTitlesMixin, admin.ModelAdmin):
     """Программы поддержки: параметры вносит оператор из официальной
     документации программы.
 
@@ -798,7 +821,7 @@ class BudgetLineInline(admin.TabularInline):
 
 
 @admin.register(ProjectProfile)
-class ProjectProfileAdmin(admin.ModelAdmin):
+class ProjectProfileAdmin(RuTitlesMixin, admin.ModelAdmin):
     """Профиль проекта резидента и смета к нему.
 
     Текст проекта — только для чтения. Это слова резидента о его разработке;

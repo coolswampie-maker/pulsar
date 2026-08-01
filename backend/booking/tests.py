@@ -2232,3 +2232,59 @@ class CompanyRequisitesTests(TestCase):
         texts = ' '.join(i['text'] for i in p['stop'])
         self.assertIn('250', texts)
         self.assertIn('47.11', texts)
+
+
+class AdminLanguageTests(TestCase):
+    """Русский язык в кабинете оператора.
+
+    Django подставляет verbose_name в кнопки как есть, а он в именительном
+    падеже: «Добавить компания», «Изменить Заявка». Падеж по слову не
+    вычислить, поэтому надписи заданы списком — и список должен быть полным.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        User.objects.create_superuser('op', 'op@x.ru', 'Nauka2026lab')
+        self.c.login(username='op', password='Nauka2026lab')
+
+    def test_every_model_has_add_label(self):
+        """Забытая модель молча возвращается к «Добавить компания»."""
+        from django.contrib import admin as dj_admin
+
+        from booking.admin import ADD_LABELS
+        registered = {m._meta.model_name for m in dj_admin.site._registry}
+        missing = registered - set(ADD_LABELS)
+        self.assertFalse(missing, 'нет надписи для кнопки «Добавить»: '
+                                  + ', '.join(sorted(missing)))
+
+    def test_add_labels_are_accusative(self):
+        """Именительный падеж — та самая ошибка, ради которой всё это.
+
+        У женского рода винительный на -у/-ю («компанию», «заявку»),
+        у мужского и среднего совпадает с именительным («ресурс»,
+        «показатель», «обращение»). Значит ловим окончания -а/-я.
+        """
+        from booking.admin import ADD_LABELS
+        for name, label in ADD_LABELS.items():
+            self.assertTrue(label.startswith('Добавить '), name)
+            word = label.split(' ', 1)[1]
+            self.assertFalse(word.endswith(('а', 'я')),
+                             f'«{label}» — именительный падеж')
+
+    def test_button_never_shows_nominative(self):
+        """То, ради чего всё: «Добавить компания» не должно быть нигде."""
+        from django.contrib import admin as dj_admin
+        for model in dj_admin.site._registry:
+            opts = model._meta
+            if opts.app_label != 'booking':
+                continue
+            r = self.c.get(f'/admin/booking/{opts.model_name}/')
+            self.assertEqual(r.status_code, 200, opts.model_name)
+            self.assertNotIn(f'Добавить {opts.verbose_name}',
+                             r.content.decode(),
+                             f'{opts.model_name}: кнопка в именительном падеже')
+
+    def test_correct_label_reaches_the_page(self):
+        """Отрицательной проверки мало: она пройдёт и если кнопки нет вовсе."""
+        html = self.c.get('/admin/booking/company/').content.decode()
+        self.assertIn('Добавить компанию', html)

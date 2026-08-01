@@ -1,12 +1,14 @@
 {% load i18n admin_urls %}
+{# Кнопка «Добавить …». Django подставляет verbose_name как есть, а он в
+   именительном падеже — получалось «Добавить компания». Винительный падеж
+   приходит из ADD_LABELS в booking/admin.py, там же тест следит, чтобы для
+   новой модели его не забыли. #}
 {% block object-tools-items %}
   {% if has_add_permission %}
   <li>
     {% url cl.opts|admin_urlname:'add' as add_url %}
     <a href="{% add_preserved_filters add_url is_popup to_field %}" class="addlink">
-      {% if cl.opts.model_name == 'order' %}Добавить заявку
-      {% elif cl.opts.model_name == 'resource' %}Добавить ресурс
-      {% elif cl.opts.model_name == 'busyslot' %}Добавить запись
+      {% if ru_add_label %}{{ ru_add_label }}
       {% else %}{% blocktranslate with cl.opts.verbose_name as name %}Add {{ name }}{% endblocktranslate %}{% endif %}
     </a>
   </li>
