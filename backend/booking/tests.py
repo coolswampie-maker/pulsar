@@ -1069,6 +1069,78 @@ class AssistTests(TestCase):
             self.assertIn(must, SYSTEM_PROMPT)
 
 
+class ThrottleTests(TestCase):
+    """Лимиты частоты должны действовать и на вошедших.
+
+    AnonRateThrottle в DRF возвращает None из get_cache_key для
+    авторизованных запросов — то есть не ограничивает их вовсе. Сборка
+    документа доступна только вошедшим, поэтому её лимит не срабатывал
+    никогда: самый дорогой вызов модели оставался без потолка. Подбор и
+    заявку вошедшая компания обходила тем же способом.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        cache.clear()
+        call_command('import_catalog')
+        u = User.objects.create_user(username='co@x.ru', email='co@x.ru', password='Nauka2026lab')
+        Company.objects.create(user=u, name='ООО «Тест»', contact_name='Иванов')
+        self.user = u
+        r = self.c.post('/api/auth/login/',
+                        data=json.dumps({'email': 'co@x.ru', 'password': 'Nauka2026lab'}),
+                        content_type='application/json')
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+
+    def test_throttles_count_authenticated_requests(self):
+        """Ключ счётчика должен строиться и для вошедшего.
+
+        Это и есть суть дефекта: None вместо ключа означает «не считать».
+        """
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        from booking.views import AssistThrottle, ComposeThrottle, CustomRequestThrottle
+        req = APIRequestFactory().post('/api/assist/')
+        force_authenticate(req, user=self.user)
+        req.user = self.user
+        for cls in (AssistThrottle, ComposeThrottle, CustomRequestThrottle):
+            key = cls().get_cache_key(req, None)
+            self.assertIsNotNone(key, f'{cls.__name__} не считает вошедших — лимит не работает')
+            self.assertIn(str(self.user.pk), key, f'{cls.__name__} считает не по пользователю')
+
+    def test_throttles_still_count_guests(self):
+        """Гостей по-прежнему считаем по адресу — иначе лимит потеряется."""
+        from rest_framework.test import APIRequestFactory
+
+        from booking.views import AssistThrottle
+        req = APIRequestFactory().post('/api/assist/')
+        req.user = None
+        self.assertIsNotNone(AssistThrottle().get_cache_key(req, None))
+
+    def test_compose_actually_returns_429(self):
+        """Сквозная проверка на настоящем лимите из настроек."""
+        from booking import compose as C
+        real = C._ask_model
+        C._ask_model = lambda p, f: json.dumps({'blocks': [{'heading': 'h', 'text': 't'}], 'gaps': []})
+        self.c.patch('/api/profile/', data=json.dumps({
+            'title': 'т', 'summary': 'с', 'problem': 'п', 'solution': 'р',
+            'stage': 'lab', 'groundwork': 'з', 'team': 'к'}),
+            content_type='application/json', **self.auth)
+        limit = int(settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['compose'].split('/')[0])
+        try:
+            codes = [self.c.post('/api/profile/compose/', data=json.dumps({'format': 'teaser'}),
+                                 content_type='application/json', **self.auth).status_code
+                     for _ in range(limit + 2)]
+        finally:
+            C._ask_model = real
+        self.assertIn(429, codes, f'лимит {limit}/час не сработал: {codes[-3:]}')
+
+    def test_compose_survives_array_body(self):
+        """Тело-массив не должно валить сервер в 500."""
+        r = self.c.post('/api/profile/compose/', data=json.dumps([1, 2]),
+                        content_type='application/json', **self.auth)
+        self.assertEqual(r.status_code, 400)
+
+
 class ProjectProfileTests(TestCase):
     """Профиль проекта и сборка документов — помощник резидента."""
 
@@ -1109,12 +1181,32 @@ class ProjectProfileTests(TestCase):
         d = json.loads(self.c.get('/api/profile/', **self.auth).content)
         self.assertEqual(d['title'], 'Сенсор метана')
         self.assertGreater(d['completeness'], 0)
-        self.assertFalse(d['coreReady'])
 
     def test_core_ready_after_core_fields(self):
+        """Ядро заполнено — формат «разделы заявки» становится доступен."""
         self._fill_core()
+        formats = json.loads(self.c.get('/api/profile/formats/', **self.auth).content)
+        sections = next(f for f in formats if f['key'] == 'sections')
+        self.assertTrue(sections['ready'], sections['missing'])
+
+    def test_profile_carries_field_spec(self):
+        """Подписи и виды полей приходят с сервера — в JS их копии быть не должно."""
+        from booking.models import PROFILE_KEYS
         d = json.loads(self.c.get('/api/profile/', **self.auth).content)
-        self.assertTrue(d['coreReady'])
+        self.assertEqual([f['key'] for f in d['fields']], PROFILE_KEYS)
+        stage = next(f for f in d['fields'] if f['key'] == 'stage')
+        self.assertEqual(stage['kind'], 'choice')
+        self.assertTrue(stage['options'])
+
+    def test_serializer_covers_every_field(self):
+        """Забытое в сериализаторе поле раньше молча выбрасывалось при
+        сохранении, и интервью спрашивало его по кругу без единой ошибки."""
+        from booking.serializers import ProjectProfileSerializer
+
+        from booking.models import PROFILE_KEYS
+        for k in PROFILE_KEYS:
+            self.assertIn(k, ProjectProfileSerializer().fields,
+                          f'поле {k} не сохраняется — интервью зациклится')
 
     def test_bad_stage_rejected(self):
         self.assertEqual(self._patch(stage='космос').status_code, 400)
@@ -1137,7 +1229,8 @@ class ProjectProfileTests(TestCase):
         self._patch(title='т', summary='с', problem='п', solution='р')
         d = json.loads(self.c.get('/api/profile/next/', **self.auth).content)
         self.assertEqual(d['field'], 'stage')
-        self.assertTrue(d['stages'])
+        self.assertEqual(d['kind'], 'choice')
+        self.assertTrue(d['options'])
 
     def test_interview_ends(self):
         self._fill_core()

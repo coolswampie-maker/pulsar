@@ -734,7 +734,12 @@ a.val:hover{color:var(--brass);}
 .kpi-docs{font-size:11px;line-height:1.45;display:block;margin-top:4px;}
 
 @media(max-width:640px){
-  .cab-link{padding:8px 10px;font-size:13px;}
+  /* У вошедшей компании здесь её название, и длинное раздвигало шапку
+     шире экрана: на телефоне появлялась горизонтальная прокрутка на
+     всех страницах сразу. Обрезаем многоточием. */
+  .cab-link{padding:8px 10px;font-size:13px;max-width:38vw;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;}
+  .nav-right{min-width:0;}
   .kpi-grid{grid-template-columns:1fr;}
   .ord-head{flex-direction:column;}
   .ord-head>div:last-child{text-align:left!important;}
@@ -857,7 +862,8 @@ a.val:hover{color:var(--brass);}
 .pick-none-t{font-weight:700;color:var(--navy);margin-bottom:6px;}
 .pick-none-p{font-size:14px;color:var(--ink-soft);line-height:1.5;margin-bottom:14px;max-width:56ch;}
 .pick-more{margin-top:14px;font-size:14px;color:var(--ink-soft);}
-.pick-link{background:none;border:none;padding:0;font:inherit;color:var(--brass);
+/* цель для пальца: ниже 32px промахиваются, поэтому добавляем поле по вертикали */
+.pick-link{background:none;border:none;padding:6px 0;font:inherit;color:var(--brass);
   font-weight:600;cursor:pointer;text-decoration:underline;}
 .pick-link:hover{color:var(--navy);}
 .pick-form{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
@@ -880,12 +886,13 @@ a.val:hover{color:var(--brass);}
 .proj-prog-bar i{display:block;height:100%;background:linear-gradient(90deg,#7C5CE0,#3E7BD6 55%,#2AA6A0);
   transition:width .3s;}
 .proj-prog-c{font-size:12px;color:var(--ink-soft);}
-.proj-switch{display:flex;gap:8px;margin:18px 0 16px;flex-wrap:wrap;}
+.proj-switch{display:flex;gap:8px;margin:18px 0 16px;flex-wrap:wrap;}  /* контейнер вкладок */
 /* --- интервью --- */
 .proj-q{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;}
 .proj-q-label{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
   color:var(--ink-soft);margin-bottom:8px;}
-.proj-q-text{font-size:17px;line-height:1.45;color:var(--navy);margin-bottom:14px;max-width:60ch;}
+.proj-q-text{display:block;font-size:17px;line-height:1.45;color:var(--navy);
+  margin-bottom:14px;max-width:60ch;font-weight:400;}
 .proj-q input,.proj-q textarea,.proj-q select{width:100%;border:1px solid var(--line);
   border-radius:9px;padding:11px 14px;font-size:15px;background:#fff;font-family:inherit;}
 .proj-q input:focus,.proj-q textarea:focus,.proj-q select:focus{outline:none;border-color:#7C5CE0;
@@ -894,11 +901,10 @@ a.val:hover{color:var(--brass);}
 .proj-done{display:flex;gap:12px;align-items:flex-start;background:#eef5ef;border:1px solid #cfe3d4;
   border-radius:12px;padding:16px 18px;font-size:14.5px;line-height:1.5;}
 /* --- форма --- */
+/* Поля берут общий стиль .field — иначе это была бы единственная форма на
+   сайте, выглядящая не как все остальные. */
 .proj-form{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;}
-.proj-form .field{margin-bottom:14px;}
-.proj-form label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
-.proj-form input,.proj-form textarea,.proj-form select{width:100%;border:1px solid var(--line);
-  border-radius:9px;padding:10px 13px;font-size:14.5px;font-family:inherit;background:#fff;}
+.proj-form textarea{font-family:inherit;resize:vertical;}
 .proj-form-act{display:flex;align-items:center;gap:14px;margin-top:6px;}
 /* --- документы --- */
 .proj-docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}

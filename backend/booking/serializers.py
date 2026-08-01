@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import (KPI_META, PROFILE_STAGES, BookingLine, Company, CustomRequest, Kpi,
+from .models import (KPI_META, PROFILE_KEYS, BookingLine, Company, CustomRequest, Kpi,
                      KpiEntry, Order, ProjectProfile, Resource)
 
 User = get_user_model()
@@ -293,16 +293,12 @@ class OrderCreateSerializer(serializers.Serializer):
 class ProjectProfileSerializer(serializers.ModelSerializer):
     """Профиль проекта: всё необязательно, заполняется по частям."""
     completeness = serializers.IntegerField(read_only=True)
-    coreReady = serializers.BooleanField(source='core_ready', read_only=True)
 
     class Meta:
         model = ProjectProfile
-        fields = ('title', 'summary', 'problem', 'solution', 'stage', 'groundwork',
-                  'team', 'market', 'competitors', 'business_model', 'workplan',
-                  'risks', 'needs', 'completeness', 'coreReady', 'updated_at')
+        # Состав выводится из PROFILE_KEYS, а не переписывается списком.
+        # Забытое здесь поле раньше молча выбрасывалось при сохранении:
+        # интервью спрашивало его снова и снова, и человек ходил по кругу
+        # без единого сообщения об ошибке.
+        fields = tuple(PROFILE_KEYS) + ('completeness', 'updated_at')
         read_only_fields = ('updated_at',)
-
-    def validate_stage(self, v):
-        if v and v not in dict(PROFILE_STAGES):
-            raise serializers.ValidationError('Неизвестная стадия готовности.')
-        return v

@@ -1150,17 +1150,18 @@
      Профиль собирается разговором, а не анкетой на тринадцать полей —
      анкету такого размера не заполняет никто. Но форма рядом есть: кому
      удобнее печатать сразу в поля, тот не должен проходить интервью. */
-  var proj={ data:null, formats:[], busy:false, doc:null, mode:'chat' };
+  var proj={ data:null, formats:[], mode:'chat', doc:null };
 
   function viewCabProject(){
     if(!P.isLogged()) return viewLogin();
     render('<section class="section"><div class="wrap">'+cabTabs('#/cabinet/project')+
       '<div id="projbox"><div class="cline-meta">Загружаем профиль…</div></div>'+
     '</div></section>', function(){
-      Promise.all([P.profileApi.get(), P.profileApi.formats()]).then(function(r){
-        if(!r[0].ok){ el('projbox').innerHTML='<div class="empty"><h3>Профиль недоступен</h3></div>'; return; }
-        proj.data=r[0].data; proj.formats=r[1].ok?r[1].data:[];
-        drawProject();
+      // один запрос: сервер отдаёт профиль, описание полей, следующий вопрос
+      // и готовность форматов сразу — всё это считается из одного объекта
+      P.profileApi.get().then(function(r){
+        if(!r.ok){ el('projbox').innerHTML='<div class="empty"><h3>Профиль недоступен</h3></div>'; return; }
+        setProfile(r.data); drawProject();
       });
     });
   }
@@ -1176,7 +1177,6 @@
           'из этого черновики разделов заявки, тизер и презентацию.</p></div>'+
         progressHtml(d.completeness)+
       '</div>'+
-      aiNoticeHtml()+
       '<div class="proj-switch">'+
         '<button class="tab'+(proj.mode==='chat'?' on':'')+'" data-mode="chat">Рассказать в диалоге</button>'+
         '<button class="tab'+(proj.mode==='form'?' on':'')+'" data-mode="form">Заполнить формой</button>'+
@@ -1196,42 +1196,24 @@
       '<div class="proj-prog-c">профиль заполнен</div></div>';
   }
 
-  /* Честная пометка: данные уходят во внешнюю модель. Пока обработка не
-     переехала на своё железо, промолчать об этом нельзя — человек введёт
-     в поле реальные сведения о разработке, полагая, что они никуда не идут. */
-  function aiNoticeHtml(){
-    return '<div class="cab-note wait">'+icon('clock',18)+'<span>'+
-      '<strong>Пока это демонстрация.</strong> Тексты собирает языковая модель '+
-      'YandexGPT — то, что вы напишете в профиле, уходит на её обработку в '+
-      'Yandex Cloud. Не вносите сюда сведения, которые нельзя передавать '+
-      'третьим лицам. Перенос обработки на серверы ПУЛЬСАР запланирован.'+
-      '</span></div>';
-  }
-
   function drawInterview(){
     var m=el('projmain'); if(!m) return;
-    m.innerHTML='<div class="cline-meta">Загружаем…</div>';
-    P.profileApi.next().then(function(res){
-      if(!res.ok){ m.innerHTML=''; return; }
-      var q=res.data;
+    // вопрос уже пришёл вместе с профилем — за ним не ходим
+    var q=proj.next;
+    if(!q){ m.innerHTML=''; return; }
+    (function(){
       if(!q.field){
         m.innerHTML='<div class="proj-done">'+icon('check',20)+
           '<div><strong>Профиль заполнен полностью.</strong> Можно собирать документы — '+
           'или поправить что-нибудь через форму.</div></div>';
         return;
       }
-      var input;
-      if(q.stages){
-        input='<select id="pj_val">'+q.stages.map(function(s){
-          return '<option value="'+esc(s.value)+'">'+esc(s.label)+'</option>'; }).join('')+'</select>';
-      } else if(q.field==='title'){
-        input='<input id="pj_val" placeholder="Короткое название">';
-      } else {
-        input='<textarea id="pj_val" rows="4" placeholder="Своими словами, без формальностей"></textarea>';
-      }
+      var input=fieldControl('pj_val', q.kind, '', q.options, 4);
       m.innerHTML='<div class="proj-q">'+
-        '<div class="proj-q-label">'+esc(q.label)+'</div>'+
-        '<p class="proj-q-text">'+esc(q.question)+'</p>'+
+        '<div class="proj-q-label" id="pj_cap">'+esc(q.label)+'</div>'+
+        // вопрос виден глазами, но программе чтения с экрана поле без подписи
+        // безымянное — связываем явным label
+        '<label class="proj-q-text" for="pj_val">'+esc(q.question)+'</label>'+
         input+
         '<div class="proj-q-act">'+
           '<button class="btn btn-brass" id="pj_save">Сохранить и дальше</button>'+
@@ -1243,73 +1225,70 @@
       el('pj_save').onclick=function(){
         var v=el('pj_val').value.trim();
         if(!v){ el('pj_msg').innerHTML='<div class="form-msg err">Напишите ответ или нажмите «Пропустить пока».</div>'; return; }
-        var patch={}; patch[q.field]=v;
-        this.disabled=true;
+        var patch={}, btn=this; patch[q.field]=v;
+        btn.disabled=true;
         P.profileApi.save(patch).then(function(r){
+          // без этого кнопка оставалась мёртвой до перезагрузки страницы
+          btn.disabled=false;
           if(!r.ok){ el('pj_msg').innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
-          proj.data=r.data;
-          refreshFormats();
+          setProfile(r.data);
           drawProject();
         });
       };
       // «пропустить» не портит профиль: просто перескакиваем к форме, где
       // видно все поля сразу и можно вернуться к пропущенному
       el('pj_skip').onclick=function(){ proj.mode='form'; drawProject(); };
-    });
+    })();
   }
 
-  var PROJ_FIELDS=[
-    ['title','Название проекта','input'],
-    ['summary','Суть в двух фразах','area'],
-    ['problem','Какую задачу решаете','area'],
-    ['solution','Как решаете и в чём новизна','area'],
-    ['stage','Стадия готовности','stage'],
-    ['groundwork','Научный задел','area'],
-    ['team','Команда','area'],
-    ['market','Рынок и его объём','area'],
-    ['competitors','Конкуренты и отличия','area'],
-    ['business_model','Как проект зарабатывает','area'],
-    ['workplan','План работ по этапам','area'],
-    ['risks','Риски','area'],
-    ['needs','Какое оборудование и методы нужны','area']
-  ];
-  var PROJ_STAGES=[['idea','Идея'],['calc','Расчёты и моделирование'],['lab','Лабораторный образец'],
-                   ['proto','Опытный образец'],['test','Испытания'],['serial','Серийное производство']];
+  /* Один построитель поля для интервью и для формы. Раньше их было два, с
+     разными признаками типа, и подписи со стадиями лежали копией в JS —
+     разошедшийся список стадий молча стирал выбранную стадию при сохранении.
+     Теперь вид поля и варианты приходят с сервера. */
+  function fieldControl(id, kind, value, options, rows){
+    if(kind==='choice'){
+      return '<select id="'+id+'"><option value="">— не указана —</option>'+
+        (options||[]).map(function(o){
+          return '<option value="'+esc(o.value)+'"'+(value===o.value?' selected':'')+
+                 '>'+esc(o.label)+'</option>'; }).join('')+'</select>';
+    }
+    if(kind==='line') return '<input id="'+id+'" value="'+esc(value)+'">';
+    return '<textarea id="'+id+'" rows="'+(rows||3)+'" '+
+      'placeholder="Своими словами, без формальностей">'+esc(value)+'</textarea>';
+  }
 
   function drawProjectForm(){
     var m=el('projmain'); if(!m) return;
     var d=proj.data;
-    m.innerHTML='<div class="proj-form">'+PROJ_FIELDS.map(function(f){
-      var id='pf_'+f[0], v=d[f[0]]||'';
-      var ctl;
-      if(f[2]==='input') ctl='<input id="'+id+'" value="'+esc(v)+'">';
-      else if(f[2]==='stage') ctl='<select id="'+id+'"><option value="">— не указана —</option>'+
-        PROJ_STAGES.map(function(s){
-          return '<option value="'+s[0]+'"'+(v===s[0]?' selected':'')+'>'+s[1]+'</option>'; }).join('')+'</select>';
-      else ctl='<textarea id="'+id+'" rows="3">'+esc(v)+'</textarea>';
-      return '<div class="field full"><label for="'+id+'">'+esc(f[1])+'</label>'+ctl+'</div>';
+    m.innerHTML='<div class="proj-form">'+(d.fields||[]).map(function(f){
+      var id='pf_'+f.key;
+      return '<div class="field"><label for="'+id+'">'+esc(f.label)+'</label>'+
+        fieldControl(id, f.kind, d[f.key]||'', f.options, 3)+'</div>';
     }).join('')+
       '<div class="proj-form-act"><button class="btn btn-brass" id="pf_save">Сохранить профиль</button>'+
       '<span id="pf_msg"></span></div></div>';
     el('pf_save').onclick=function(){
       var patch={};
-      PROJ_FIELDS.forEach(function(f){ patch[f[0]]=el('pf_'+f[0]).value.trim(); });
+      (proj.data.fields||[]).forEach(function(f){ patch[f.key]=el('pf_'+f.key).value.trim(); });
       this.disabled=true;
       var btn=this;
       P.profileApi.save(patch).then(function(r){
         btn.disabled=false;
         if(!r.ok){ el('pf_msg').innerHTML='<span class="form-msg err">'+esc(r.msg)+'</span>'; return; }
-        proj.data=r.data;
-        el('pf_msg').innerHTML='<span class="form-msg ok">Сохранено</span>';
-        refreshFormats();
+        setProfile(r.data);
         var head=qsAll('.proj-prog')[0];
         if(head) head.outerHTML=progressHtml(r.data.completeness);
+        drawDocs();
+        el('pf_msg').innerHTML='<span class="form-msg ok">Сохранено</span>';
       });
     };
   }
 
-  function refreshFormats(){
-    P.profileApi.formats().then(function(r){ if(r.ok){ proj.formats=r.data; drawDocs(); } });
+  /* Обновить всё, что зависит от профиля, и перерисовать ОДИН раз.
+     Раньше сохранение ответа рисовало блок документов дважды: сначала со
+     старым списком «не хватает», потом со свежим — блок заметно мигал. */
+  function setProfile(d){
+    proj.data=d; proj.formats=d.formats||[]; proj.next=d.next||null;
   }
 
   /* Кнопки честные: если документ сейчас собрать нельзя, это видно ДО

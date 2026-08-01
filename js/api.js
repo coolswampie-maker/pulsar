@@ -80,10 +80,11 @@
   }
   P.apiErrText = errText;
 
-  function postJson(path, body){
-    return P.apiFetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+  function sendJson(method, path, body){
+    return P.apiFetch(path, {method:method, headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body||{})}).then(parse);
   }
+  function postJson(path, body){ return sendJson('POST', path, body); }
 
   P.authApi = {
     register:function(d){
@@ -109,8 +110,7 @@
       });
     },
     save:function(d){
-      return P.apiFetch('/auth/me/', {method:'PATCH', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(d)}).then(parse).then(function(res){
+      return sendJson('PATCH', '/auth/me/', d).then(function(res){
         if(res.ok) setAuth({token:P.auth.token, company:res.data});
         return res;
       });
@@ -138,19 +138,16 @@
     requestChange:function(id,message){ return postJson('/orders/'+id+'/request-change/', {message:message}); }
   };
 
-  /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */
   /* ---------- помощник резидента: профиль проекта ---------- */
   P.profileApi = {
     get:function(){ return P.apiFetch('/profile/').then(parse); },
-    save:function(d){
-      return P.apiFetch('/profile/', {method:'PATCH',
-        headers:{'Content-Type':'application/json'}, body:JSON.stringify(d)}).then(parse);
-    },
+    save:function(d){ return sendJson('PATCH', '/profile/', d); },
     next:function(){ return P.apiFetch('/profile/next/').then(parse); },
     formats:function(){ return P.apiFetch('/profile/formats/').then(parse); },
     compose:function(fmt){ return postJson('/profile/compose/', {format:fmt}); }
   };
 
+  /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */
   P.kpiApi = {
     get:function(year){ return P.apiFetch('/kpi/'+(year?'?year='+year:'')).then(parse); },
     addEntry:function(key,d,year){

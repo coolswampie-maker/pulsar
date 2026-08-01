@@ -5,15 +5,15 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import querylog
 from .assist import assist
 from .compose import FORMATS, compose, missing_for
-from .models import (KPI_KEYS, PROFILE_LABELS, PROFILE_STAGES, BusySlot,
-                     CustomRequest, Kpi, KpiEntry, Order, ProjectProfile, Resource)
+from .models import (KPI_KEYS, PROFILE_LABELS, BusySlot, CustomRequest, Kpi,
+                     KpiEntry, Order, ProjectProfile, Resource, profile_field_spec)
 from .serializers import (CompanySerializer, CustomRequestSerializer,
                           KpiEntrySerializer, KpiSerializer,
                           OrderCreateSerializer, OrderListSerializer,
@@ -66,17 +66,22 @@ class AllBusyView(APIView):
         return Response(out)
 
 
-class AssistThrottle(AnonRateThrottle):
+# UserRateThrottle, а не AnonRateThrottle: у последнего get_cache_key
+# возвращает None для вошедших, то есть авторизованные запросы не
+# ограничиваются вовсе. Сборка документа доступна только вошедшим, поэтому
+# её лимит не срабатывал никогда — самый дорогой вызов модели оставался без
+# потолка. UserRateThrottle считает по пользователю, а гостей — по адресу.
+class AssistThrottle(UserRateThrottle):
     scope = 'assist'
 
 
-class ComposeThrottle(AnonRateThrottle):
+class ComposeThrottle(UserRateThrottle):
     """Сборка документа — самый дорогой вызов модели на платформе:
     длинный ответ и объёмный профиль на входе."""
     scope = 'compose'
 
 
-class CustomRequestThrottle(AnonRateThrottle):
+class CustomRequestThrottle(UserRateThrottle):
     """Отдельный лимит для индивидуальных заявок.
 
     Раньше форма делила лимит с подбором — и человек, перебравший несколько
@@ -386,13 +391,45 @@ class KpiExtractView(APIView):
 
 
 # ---------- помощник резидента: профиль проекта и сборка документов ----------
-def _profile_for(request):
-    """Профиль своей компании. Создаём при первом обращении."""
+def _profile_for(request, create=False):
+    """Профиль своей компании.
+
+    По умолчанию НЕ создаёт строку: читающий запрос не должен ничего писать
+    в базу. Пустой профиль отдаётся несохранённым объектом, а появляется в
+    базе при первом сохранении.
+    """
     company = getattr(getattr(request, 'user', None), 'company', None)
     if not company:
         return None
-    profile, _ = ProjectProfile.objects.get_or_create(company=company)
-    return profile
+    if create:
+        profile, _ = ProjectProfile.objects.get_or_create(company=company)
+        return profile
+    return (ProjectProfile.objects.filter(company=company).first()
+            or ProjectProfile(company=company))
+
+
+def _profile_payload(profile):
+    """Всё, что нужно вкладке «Проект», одним ответом.
+
+    Следующий вопрос и готовность форматов считаются из уже загруженного
+    объекта, без обращений к базе, — отдавать их отдельными запросами значит
+    трижды ходить на сервер там, где хватает одного. На заполнение профиля
+    из тринадцати вопросов это разница между 42 запросами и 14.
+    """
+    field, question = profile.next_question()
+    spec = next((f for f in profile_field_spec() if f['key'] == field), None)
+    return {
+        **ProjectProfileSerializer(profile).data,
+        'fields': profile_field_spec(),
+        'next': {'field': field, 'question': question,
+                 'label': PROFILE_LABELS.get(field) if field else None,
+                 'kind': spec['kind'] if spec else None,
+                 'options': spec['options'] if spec else None},
+        'formats': [{'key': k, 'title': spec_['title'],
+                     'ready': not missing_for(profile, k),
+                     'missing': [PROFILE_LABELS[m] for m in missing_for(profile, k)]}
+                    for k, spec_ in FORMATS.items()],
+    }
 
 
 class ProfileView(APIView):
@@ -407,16 +444,16 @@ class ProfileView(APIView):
         profile = _profile_for(request)
         if not profile:
             return Response({'detail': 'Нет профиля компании.'}, status=403)
-        return Response(ProjectProfileSerializer(profile).data)
+        return Response(_profile_payload(profile))
 
     def patch(self, request):
-        profile = _profile_for(request)
-        if not profile:
+        if not _profile_for(request):
             return Response({'detail': 'Нет профиля компании.'}, status=403)
+        profile = _profile_for(request, create=True)
         ser = ProjectProfileSerializer(profile, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
-        return Response(ProjectProfileSerializer(profile).data)
+        return Response(_profile_payload(profile))
 
 
 class ProfileNextView(APIView):
@@ -432,14 +469,16 @@ class ProfileNextView(APIView):
         if not profile:
             return Response({'detail': 'Нет профиля компании.'}, status=403)
         field, question = profile.next_question()
+        spec = next((f for f in profile_field_spec() if f['key'] == field), None)
         return Response({
             'field': field,
             'question': question,
             'label': PROFILE_LABELS.get(field) if field else None,
-            'stages': [{'value': v, 'label': t} for v, t in PROFILE_STAGES]
-                      if field == 'stage' else None,
+            # вид поля и варианты выбора решает сервер: он знает, какое поле
+            # строковое, какое многострочное, а какое со списком
+            'kind': spec['kind'] if spec else None,
+            'options': spec['options'] if spec else None,
             'completeness': profile.completeness,
-            'coreReady': profile.core_ready,
         })
 
 
@@ -455,7 +494,8 @@ class ComposeView(APIView):
         profile = _profile_for(request)
         if not profile:
             return Response({'detail': 'Нет профиля компании.'}, status=403)
-        fmt = (request.data.get('format') or '').strip()
+        data = request.data if isinstance(request.data, dict) else {}
+        fmt = (data.get('format') or '').strip()
         if fmt not in FORMATS:
             return Response({'detail': 'Неизвестный формат документа.'}, status=400)
         blocks, gaps, mode = compose(profile, fmt)

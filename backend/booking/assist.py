@@ -250,23 +250,29 @@ def needs_license(query):
 MAX_REPLY_LEN = 600      # длинные простыни в интерфейсе не нужны
 
 
-def _parse_model_json(text):
-    """Достаём из ответа модели пару (реплика, позиции).
+def json_from_text(text):
+    """Словарь из ответа модели либо None.
 
     Модели любят заворачивать JSON в ```json, поэтому берём первый блок от {
-    до последней }. Если разобрать не удалось — возвращаем пустое, вызывающий
-    код уйдёт на локальный подбор.
+    до последней }. Общая для подбора и для сборки документов: пусть правка
+    этого разбора действует сразу на обе.
     """
     if not text:
-        return '', []
+        return None
     m = re.search(r'\{.*\}', text, re.S)
     if not m:
-        return '', []
+        return None
     try:
         data = json.loads(m.group(0))
     except (ValueError, TypeError):
-        return '', []
-    if not isinstance(data, dict):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _parse_model_json(text):
+    """Пара (реплика, позиции) из ответа модели."""
+    data = json_from_text(text)
+    if data is None:
         return '', []
     reply = str(data.get('reply') or '').strip()[:MAX_REPLY_LEN]
     items = data.get('items')
@@ -288,9 +294,16 @@ def model_uri():
     return f'gpt://{getattr(settings, "YANDEX_FOLDER_ID", "")}/{model}'
 
 
-def ask_yandex(query, resources):
-    """Запрос к YandexGPT. Возвращает список {id, why} либо None при любой
-    неудаче — вызывающий код в этом случае откатывается на локальный подбор."""
+def ask_model(system, user, temperature, max_tokens, timeout):
+    """Единственное место, где мы обращаемся к модели. Возвращает текст ответа
+    либо None при любой неудаче — вызывающий решает, чем это заменить.
+
+    Держим транспорт в одной функции намеренно. Это уже подводило: у Yandex
+    два несовместимых эндпойнта, и переход на OpenAI-совместимый пришлось
+    делать вручную. Вторая копия этого кода означала бы, что следующую такую
+    правку где-нибудь забудут, а снаружи это выглядит не как поломка, а как
+    «ассистент поглупел».
+    """
     key = getattr(settings, 'YANDEX_API_KEY', '')
     folder = getattr(settings, 'YANDEX_FOLDER_ID', '')
     if not key or not folder:
@@ -306,15 +319,10 @@ def ask_yandex(query, resources):
     # Каталог передаётся в заголовке OpenAI-Project.
     body = {
         'model': model_uri(),
-        'temperature': 0.1,          # подбор, а не сочинение: нужна стабильность
-        'max_tokens': 800,
-        'messages': [
-            {'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user',
-             'content': f'КАТАЛОГ (идентификатор | тип | название | подразделение | '
-                        f'класс | характеристики | описание):\n{_catalog_for_prompt(resources)}\n\n'
-                        f'ЗАДАЧА КЛИЕНТА: {query}'},
-        ],
+        'temperature': temperature,
+        'max_tokens': max_tokens,
+        'messages': [{'role': 'system', 'content': system},
+                     {'role': 'user', 'content': user}],
     }
     req = urllib.request.Request(
         settings.YANDEX_LLM_URL,
@@ -324,13 +332,25 @@ def ask_yandex(query, resources):
                  'OpenAI-Project': folder},
         method='POST')
     try:
-        with urllib.request.urlopen(req, timeout=settings.ASSIST_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode('utf-8'))
-        text = payload['choices'][0]['message']['content']
+        return payload['choices'][0]['message']['content']
     except (urllib.error.URLError, OSError, KeyError, IndexError, ValueError) as e:
-        log.warning('YandexGPT недоступен, работаем на локальном подборе: %s', e)
+        log.warning('Модель недоступна: %s', e)
         return None
-    return _parse_model_json(text)
+
+
+def ask_yandex(query, resources):
+    """Подбор позиций моделью. None — откатываемся на локальный алгоритм."""
+    text = ask_model(
+        SYSTEM_PROMPT,
+        f'КАТАЛОГ (идентификатор | тип | название | подразделение | '
+        f'класс | характеристики | описание):\n{_catalog_for_prompt(resources)}\n\n'
+        f'ЗАДАЧА КЛИЕНТА: {query}',
+        temperature=0.1,             # подбор, а не сочинение: нужна стабильность
+        max_tokens=800,
+        timeout=settings.ASSIST_TIMEOUT)
+    return None if text is None else _parse_model_json(text)
 
 
 LOCAL_REPLY_FOUND = 'Вот что подходит под вашу задачу:'
