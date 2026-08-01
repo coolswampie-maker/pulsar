@@ -1556,9 +1556,8 @@
       '<div class="proj-head"><div>'+
         '<div class="eyebrow">Помощник резидента</div>'+
         '<h1 class="h-lg">Заявка на программу</h1>'+
-        '<p class="sub">Соберите смету из позиций каталога — по ней проверим '+
-        'формальные требования программ, а после гранта эти же позиции '+
-        'бронируются.</p>'+
+        '<p class="sub">Посчитайте, во что обойдутся работы в лабораториях, '+
+        'и проверьте, подходите ли вы под условия программ.</p>'+
       '</div></div>'+
       '<div id="applbudget"></div>'+
       '<div id="applcheck"></div>';
@@ -1571,13 +1570,13 @@
     var m=el('applbudget'); if(!m) return;
     var b=appl.budget, lines=b.lines||[];
     m.innerHTML='<h2 class="h-md" style="margin:30px 0 4px">Смета проекта</h2>'+
-      '<p class="sub" style="margin-bottom:14px">Цены — из каталога, те же, '+
-      'по которым идёт бронирование.</p>'+
+      '<p class="sub" style="margin-bottom:14px">Цены настоящие — по ним же '+
+      'потом пойдёт бронирование.</p>'+
       (lines.length
         ? '<div class="bud-table">'+lines.map(budRow).join('')+
           '<div class="bud-total"><span>Итого</span><strong>'+fmt(b.total)+'</strong></div></div>'
-        : '<div class="bud-empty">В смете пока пусто. Найдите нужное ниже — '+
-          'например «просвечивающий микроскоп» или «чистая комната».</div>')+
+        : '<div class="bud-empty">Пока пусто. Найдите ниже то, что нужно '+
+          'для проекта — например «микроскоп» или «чистая комната».</div>')+
       budPicker();
     bindBudget();
   }
@@ -1609,9 +1608,9 @@
 
   function budPicker(){
     return '<div class="bud-pick">'+
-      '<label class="bud-pick-lbl" for="bud_q">Добавить позицию в смету</label>'+
+      '<label class="bud-pick-lbl" for="bud_q">Добавить позицию</label>'+
       '<div class="bud-pick-row">'+
-        '<input id="bud_q" placeholder="Что нужно для работ по проекту">'+
+        '<input id="bud_q" placeholder="Что нужно для проекта">'+
         '<button class="btn btn-outline btn-sm" id="bud_find">Найти</button>'+
       '</div>'+
       '<div id="bud_res">'+(appl.pick.length?appl.pick.map(function(x){
@@ -1678,9 +1677,10 @@
 
   function drawCheck(){
     var m=el('applcheck'); if(!m) return;
-    var head='<h2 class="h-md" style="margin:36px 0 4px">Проверка на формальные отказы</h2>'+
-      '<p class="sub" style="margin-bottom:14px">Считает программа, не языковая '+
-      'модель: у формального требования один ответ, и его можно предъявить.</p>';
+    var h2='<h2 class="h-md" style="margin:36px 0 4px">Условия программ</h2>';
+    var head=h2+'<p class="sub" style="margin-bottom:14px">Сверяем ваши данные '+
+      'с требованиями: сроки подачи, размер гранта, возраст и размер компании, '+
+      'ОКВЭД, стадия проекта.</p>';
     if(appl.programs===null){
       m.innerHTML=head+'<div class="form-msg err">Проверка сейчас недоступна. '+
         'Смета сохранена — вернитесь к проверке позже.</div>';
@@ -1696,10 +1696,13 @@
         '<a class="pick-link" href="#/cabinet/project">Дозаполнить профиль →</a></div>';
     }
     if(!list.length){
-      m.innerHTML=head+pfHtml+'<div class="bud-empty">Программы пока не заведены. '+
-        'Их вносит оператор из официальной документации конкурса — '+
-        'придуманные сроки и лимиты выглядели бы достоверно, а решение '+
-        'по ним принимать нельзя.</div>';
+      // Ни слова про профиль: проверять пока не с чем, и предупреждение
+      // о незаполненном профиле было бы третьим серым блоком подряд
+      // на странице, где и так ничего нет.
+      // Без описания того, что мы сверяем: сверять пока не с чем, и абзац
+      // обещал бы работу, которой на странице ещё нет.
+      m.innerHTML=h2+'<div class="bud-empty" style="margin-top:10px">Программы '+
+        'появятся здесь, когда оператор их добавит.</div>';
       return;
     }
     m.innerHTML=head+pfHtml+'<div class="prg-list">'+list.map(prgCard).join('')+'</div>';

@@ -68,12 +68,13 @@ def _check_dates(program, today):
     left = (program.deadline - today).days
     if left < 0:
         return _item(STOP, f'Приём заявок закончился {program.deadline:%d.%m.%Y}.',
-                     'Дождитесь следующей волны — параметры обычно повторяются.')
+                     'Ждите следующего набора — условия обычно те же.')
     if left == 0:
         return _item(WARN, 'Сегодня последний день приёма заявок.')
     if left <= SOON_DAYS:
         return _item(WARN, f'До конца приёма {left} дн. ({program.deadline:%d.%m.%Y}).',
-                     'Проверьте, что подписант на месте: это чаще всего и срывает срок.')
+                     'Проверьте, что руководитель на месте и сможет подписать — '
+                     'чаще всего срок срывается именно из-за этого.')
     return _item(OK, f'Приём заявок открыт до {program.deadline:%d.%m.%Y}.')
 
 
@@ -81,8 +82,9 @@ def _check_age(program, company, today):
     if program.min_age_months is None and program.max_age_months is None:
         return None
     if not company.founded:
-        return _item(WARN, 'Не указана дата регистрации компании — возраст не проверить.',
-                     'Заполните её в кабинете: программа ограничивает возраст заявителя.')
+        return _item(WARN, 'Не указана дата регистрации компании.',
+                     'Программа ограничивает возраст заявителя — заполните дату '
+                     'на вкладке «Профиль».')
     age = _months_between(company.founded, today)
     if program.max_age_months is not None and age > program.max_age_months:
         return _item(STOP,
@@ -103,10 +105,11 @@ def _check_staff(program, company):
         return None
     if company.staff is None:
         return _item(WARN, 'Не указана численность сотрудников.',
-                     f'Программа принимает компании не более {program.max_staff} чел.')
+                     f'Программа берёт компании до {program.max_staff} чел. — '
+                     'укажите на вкладке «Профиль».')
     if company.staff > program.max_staff:
-        return _item(STOP, f'Сотрудников {company.staff}, предел программы — '
-                           f'{program.max_staff}.')
+        return _item(STOP, f'У вас {company.staff} сотрудников, программа берёт '
+                           f'не больше {program.max_staff}.')
     return _item(OK, f'Численность {company.staff} чел. — в пределах программы.')
 
 
@@ -115,8 +118,8 @@ def _check_revenue(program, company):
         return None
     if company.revenue is None:
         return _item(WARN, 'Не указана выручка за прошлый год.',
-                     f'Программа принимает компании с выручкой до '
-                     f'{_rub(program.max_revenue)}.')
+                     f'Программа берёт компании с выручкой до '
+                     f'{_rub(program.max_revenue)} — укажите на вкладке «Профиль».')
     if company.revenue > program.max_revenue:
         return _item(STOP,
                      f'Выручка {_rub(company.revenue)} — выше предела программы '
@@ -130,7 +133,8 @@ def _check_okved(program, company):
         return None
     if not company.okved.strip():
         return _item(WARN, 'Не указан ОКВЭД.',
-                     'Программа принимает заявки по кодам: ' + ', '.join(codes) + '.')
+                     'Программа принимает коды ' + ', '.join(codes) +
+                     ' — укажите свои на вкладке «Профиль».')
     ours = [c.strip() for c in company.okved.split(',') if c.strip()]
     # Сравниваем по началу кода: в положениях пишут «класс 72», а у компании
     # стоит «72.19». Обратное тоже бывает — программа называет подгруппу,
@@ -139,10 +143,10 @@ def _check_okved(program, company):
                 if o.startswith(c) or c.startswith(o)), None)
     if hit:
         return _item(OK, f'ОКВЭД {hit} подходит программе.')
-    return _item(STOP, 'Ни один из ваших ОКВЭД (' + ', '.join(ours) +
-                 ') не входит в перечень программы (' + ', '.join(codes) + ').',
-                 'Если деятельность фактически ведётся — код добавляется в ЕГРЮЛ '
-                 'заявлением, это делается до подачи.')
+    return _item(STOP, 'Ваши ОКВЭД (' + ', '.join(ours) +
+                 ') не подходят: программа принимает ' + ', '.join(codes) + '.',
+                 'Если вы фактически этим занимаетесь, нужный код можно добавить '
+                 'в ЕГРЮЛ заявлением — успеть надо до подачи.')
 
 
 def _check_stage(program, profile):
@@ -166,18 +170,19 @@ def _check_budget(program, budget_total):
     if program.max_grant is None:
         return None
     if not budget_total:
-        return _item(WARN, 'Смета пустая — сумму заявки не с чем сравнить.',
-                     f'Предел гранта по программе — {_rub(program.max_grant)}. '
-                     'Добавьте позиции каталога в смету.')
+        return _item(WARN, 'Смета пустая — сравнивать не с чем.',
+                     f'Программа даёт до {_rub(program.max_grant)}. '
+                     'Добавьте позиции в смету выше.')
     if budget_total > program.max_grant:
         over = budget_total - program.max_grant
         return _item(STOP,
-                     f'Смета {_rub(budget_total)} превышает предел гранта '
-                     f'({_rub(program.max_grant)}) на {_rub(over)}.',
-                     'Уберите позиции из сметы или заложите разницу в софинансирование.')
+                     f'Смета {_rub(budget_total)} — это на {_rub(over)} больше, '
+                     f'чем даёт программа ({_rub(program.max_grant)}).',
+                     'Уберите что-нибудь из сметы или доложите разницу своими '
+                     'средствами.')
     left = program.max_grant - budget_total
-    return _item(OK, f'Смета {_rub(budget_total)} — в пределах гранта '
-                     f'(остаётся {_rub(left)}).')
+    return _item(OK, f'Смета {_rub(budget_total)} — укладывается в грант, '
+                     f'остаётся ещё {_rub(left)}.')
 
 
 def _check_cofinancing(program, budget_total):
@@ -185,32 +190,42 @@ def _check_cofinancing(program, budget_total):
         return None
     need = round((budget_total or 0) * program.cofinancing_pct / 100)
     if not budget_total:
-        return _item(WARN, f'Программа требует софинансирование '
-                           f'{program.cofinancing_pct}% от суммы гранта.',
-                     'Точную сумму посчитаем, когда появится смета.')
+        return _item(WARN, f'Часть расходов ({program.cofinancing_pct}%) '
+                           'программа требует покрыть своими средствами.',
+                     'Сколько именно — посчитаем, когда появится смета.')
     return _item(WARN,
-                 f'Нужно софинансирование {program.cofinancing_pct}% — '
-                 f'это {_rub(need)} собственных или привлечённых средств.',
-                 'Подтверждается письмом инвестора или выпиской; проверьте заранее.')
+                 f'Помимо гранта нужно вложить свои {_rub(need)} '
+                 f'({program.cofinancing_pct}% от сметы).',
+                 'Это подтверждают выпиской со счёта или письмом инвестора — '
+                 'подготовьте заранее.')
 
 
 def check_profile_ready(profile):
-    """Заявку не примут без описания проекта — это тоже формальное основание.
+    """Заполненность профиля — отдельно от программ.
 
-    Отдельно от программ, а не пунктом в каждой карточке: пробел в профиле
-    относится к заявителю, а не к конкретному конкурсу. Повторённый в каждой
-    карточке, он тонул бы среди условий программ, и одно и то же читалось бы
-    по три раза.
+    Пробел в профиле относится к заявителю, а не к конкретному конкурсу.
+    Повторённый в каждой карточке, он тонул бы среди условий программ.
+
+    Считаем поля, а не перечисляем их: подписи полей — это вопросы интервью
+    («какую задачу решаете», «как решаете и в чём новизна»), и семь таких
+    вопросов подряд через запятую читаются как каша. Что именно не заполнено,
+    видно на самой вкладке «Проект».
+
+    Всегда «стоит посмотреть», никогда не «отклонят»: профиль резидент
+    дозаполняет за вечер, это не приговор заявке.
     """
-    if profile is None:
-        return _item(STOP, 'Профиль проекта не заполнен.',
-                     'Заполните его в кабинете — из него собираются разделы заявки.')
-    if not profile.core_ready:
-        from .models import PROFILE_CORE, PROFILE_LABELS
-        gaps = [PROFILE_LABELS[k].lower() for k in profile.missing(PROFILE_CORE)]
-        return _item(WARN, 'В профиле проекта не хватает: ' + ', '.join(gaps) + '.',
-                     'Без этих полей разделы заявки собрать не из чего.')
-    return _item(OK, 'Профиль проекта заполнен — разделы заявки есть из чего собрать.')
+    from .models import PROFILE_CORE
+
+    total = len(PROFILE_CORE)
+    done = 0 if profile is None else total - len(profile.missing(PROFILE_CORE))
+    if done >= total:
+        return _item(OK, 'Профиль проекта заполнен.')
+    if done == 0:
+        return _item(WARN, 'Профиль проекта пока пустой.',
+                     'Без него заявку не собрать.')
+    return _item(WARN, f'В профиле проекта заполнено {done} из {total} '
+                       'основных полей.',
+                 'Оставшиеся нужны, чтобы собрать разделы заявки.')
 
 
 # --- сборка ----------------------------------------------------------------

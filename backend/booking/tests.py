@@ -2072,7 +2072,7 @@ class FormalCheckTests(TestCase):
 
     def test_budget_within_grant_says_what_is_left(self):
         r = self._check(self._p(max_grant=1_000_000), total=600_000)
-        self.assertTrue(any('остаётся 400 тыс. ₽' in i['text'] for i in r['ok']))
+        self.assertTrue(any('остаётся ещё 400 тыс. ₽' in i['text'] for i in r['ok']))
 
     def test_empty_budget_is_warn_not_stop(self):
         r = self._check(self._p(max_grant=1_000_000), total=0)
@@ -2121,7 +2121,17 @@ class FormalCheckTests(TestCase):
         self.profile.save()
         item = formal.check_profile_ready(self.profile)
         self.assertEqual(item['level'], 'warn')
-        self.assertIn('не хватает', item['text'])
+        self.assertIn('пустой', item['text'])
+
+    def test_profile_reports_count_not_a_list_of_questions(self):
+        """Подписи полей — это вопросы интервью; семь таких через запятую
+        читаются как каша. Считаем поля, а не перечисляем."""
+        for k in PROFILE_CORE[2:]:
+            setattr(self.profile, k, '')
+        self.profile.save()
+        item = formal.check_profile_ready(self.profile)
+        self.assertIn('заполнено 2 из', item['text'])
+        self.assertNotIn(',', item['text'], 'вернулось перечисление полей')
 
     def test_profile_gap_not_repeated_in_every_program(self):
         """Пробел в профиле относится к заявителю, а не к конкурсу: в карточке
@@ -2131,7 +2141,8 @@ class FormalCheckTests(TestCase):
         self.profile.save()
         r = self._check(self._p())
         texts = [i['text'] for g in ('stop', 'warn', 'ok') for i in r[g]]
-        self.assertFalse([t for t in texts if 'В профиле проекта не хватает' in t],
+        self.assertFalse([t for t in texts if 'В профиле проекта заполнено' in t
+                          or 'Профиль проекта пока пустой' in t],
                          'пробел профиля продублирован в карточке программы')
 
     def test_no_programs_no_invention(self):
