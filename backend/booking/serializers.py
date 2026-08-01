@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import (CONSENT_VERSION, KPI_META, PROFILE_KEYS, BookingLine, Company,
+from .models import (CONSENT_VERSION, KPI_META, MAX_BUDGET_QTY, PROFILE_KEYS,
+                     BookingLine, BudgetLine, Company,
                      CustomRequest, Kpi,
                      KpiEntry, Order, ProjectProfile, Resource)
 
@@ -317,3 +318,38 @@ class ProjectProfileSerializer(serializers.ModelSerializer):
         # без единого сообщения об ошибке.
         fields = tuple(PROFILE_KEYS) + ('completeness', 'updated_at')
         read_only_fields = ('updated_at',)
+
+
+class BudgetLineSerializer(serializers.ModelSerializer):
+    """Строка сметы. Цена и наименование — из каталога, клиент их не задаёт.
+
+    Иначе повторилась бы история с ценой заявки: присланная сумма попадала
+    в итог, и позицию за 18 000 ₽ можно было заложить в смету по рублю.
+    """
+    resourceId = serializers.CharField(source='resource_id')
+    unitPrice = serializers.IntegerField(source='unit_price', read_only=True)
+    priceUnit = serializers.CharField(source='price_unit', read_only=True)
+    total = serializers.IntegerField(read_only=True)
+    inCatalog = serializers.BooleanField(source='in_catalog', read_only=True)
+
+    class Meta:
+        model = BudgetLine
+        fields = ('id', 'resourceId', 'title', 'unitPrice', 'priceUnit',
+                  'qty', 'note', 'total', 'inCatalog')
+        read_only_fields = ('title',)
+
+    # Имя метода — по имени поля сериализатора (resourceId), а не по source
+    # (resource_id). Названный по source метод просто не вызывается: проверки
+    # нет, а выглядит она написанной, и несуществующий slug доходит до базы.
+    def validate_resourceId(self, v):   # noqa: N802 — имя задаёт DRF
+        if not Resource.objects.filter(pk=v).exists():
+            raise serializers.ValidationError('Такой позиции нет в каталоге.')
+        return v
+
+    def validate_qty(self, v):
+        if v < 1:
+            raise serializers.ValidationError('Количество не меньше единицы.')
+        if v > MAX_BUDGET_QTY:
+            raise serializers.ValidationError(
+                f'Не больше {MAX_BUDGET_QTY} за строку.')
+        return v

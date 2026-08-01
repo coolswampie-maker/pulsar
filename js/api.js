@@ -145,7 +145,20 @@
     next:function(){ return P.apiFetch('/profile/next/').then(parse); },
     formats:function(){ return P.apiFetch('/profile/formats/').then(parse); },
     compose:function(fmt){ return postJson('/profile/compose/', {format:fmt}); },
-    composeJob:function(id){ return P.apiFetch('/profile/compose/'+id+'/').then(parse); }
+    composeJob:function(id){ return P.apiFetch('/profile/compose/'+id+'/').then(parse); },
+    // Смета: каждый ответ возвращает смету целиком, а не одну строку —
+    // итог считает сервер, и клиенту нечего досчитывать самому.
+    budget:function(){ return P.apiFetch('/profile/budget/').then(parse); },
+    budgetAdd:function(d){ return postJson('/profile/budget/', d); },
+    budgetSet:function(id,d){ return sendJson('PATCH', '/profile/budget/'+id+'/', d); },
+    budgetDel:function(id){
+      return P.apiFetch('/profile/budget/'+id+'/', {method:'DELETE'}).then(parse);
+    }
+  };
+
+  /* ---------- программы поддержки и проверка на формальные отказы ---------- */
+  P.programsApi = {
+    list:function(){ return P.apiFetch('/programs/').then(parse); }
   };
 
   /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */

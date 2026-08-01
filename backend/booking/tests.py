@@ -5,7 +5,7 @@
 """
 import json
 import os
-from datetime import time, timedelta
+from datetime import date, time, timedelta
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -16,8 +16,10 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from booking.models import (CONSENT_VERSION, BookingLine, BusySlot, Company,
-                            CustomRequest, Kpi, Order, ProjectProfile, Resource)
+from booking import formal
+from booking.models import (CONSENT_VERSION, PROFILE_CORE, BookingLine,
+                            BusySlot, Company, CustomRequest, Kpi, Order,
+                            ProjectProfile, Program, Resource)
 
 # Даты тестов считаем от сегодняшнего дня, а не фиксируем в календаре: модели и
 # планировщик отклоняют бронь в прошлом, поэтому зашитые даты со временем
@@ -1845,3 +1847,315 @@ class CustomRequestTests(TestCase):
         r = self.c.get('/admin/booking/customrequest/')
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'IND-')
+
+
+class BudgetTests(TestCase):
+    """Смета проекта: позиции каталога, заложенные в заявку (функция 12)."""
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'b@b.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Смета', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        self.res = Resource.objects.create(
+            slug='eq-test', type='equipment', book_mode='hour', title='Прибор',
+            price_value=5000, price_unit='час', units_total=1)
+
+    def _add(self, slug='eq-test', **kw):
+        body = {'resourceId': slug}
+        body.update(kw)
+        return self.c.post('/api/profile/budget/', data=json.dumps(body),
+                           content_type='application/json', **self.auth)
+
+    def test_requires_auth(self):
+        self.assertEqual(self.c.get('/api/profile/budget/').status_code, 401)
+
+    def test_add_line_and_total(self):
+        r = self._add(qty=4, note='Съёмка образцов')
+        self.assertEqual(r.status_code, 201)
+        d = json.loads(r.content)
+        self.assertEqual(len(d['lines']), 1)
+        self.assertEqual(d['lines'][0]['unitPrice'], 5000)
+        self.assertEqual(d['lines'][0]['total'], 20000)
+        self.assertEqual(d['total'], 20000)
+
+    def test_price_comes_from_catalog_not_from_client(self):
+        """Цену задаёт каталог. Ровно на этом уже ловили заявку за рубль."""
+        r = self._add(qty=1, unitPrice=1, title='Дёшево')
+        d = json.loads(r.content)
+        self.assertEqual(d['lines'][0]['unitPrice'], 5000)
+        self.assertEqual(d['lines'][0]['title'], 'Прибор')
+        self.assertEqual(d['total'], 5000)
+
+    def test_same_resource_twice_increases_qty(self):
+        self._add(qty=2)
+        d = json.loads(self._add(qty=3).content)
+        self.assertEqual(len(d['lines']), 1, 'позиция задвоилась')
+        self.assertEqual(d['lines'][0]['qty'], 5)
+
+    def test_unknown_resource_rejected(self):
+        self.assertEqual(self._add(slug='нет-такого').status_code, 400)
+
+    def test_qty_capped(self):
+        from booking.models import MAX_BUDGET_QTY
+        self.assertEqual(self._add(qty=MAX_BUDGET_QTY).status_code, 201)
+        self.c.delete('/api/profile/budget/'
+                      + str(json.loads(self.c.get('/api/profile/budget/', **self.auth)
+                                       .content)['lines'][0]['id']) + '/', **self.auth)
+        self.assertEqual(self._add(qty=MAX_BUDGET_QTY + 1).status_code, 400)
+
+    def test_patch_and_delete(self):
+        line_id = json.loads(self._add(qty=1).content)['lines'][0]['id']
+        r = self.c.patch(f'/api/profile/budget/{line_id}/', content_type='application/json',
+                         data=json.dumps({'qty': 3, 'note': 'уточнил'}), **self.auth)
+        d = json.loads(r.content)
+        self.assertEqual(d['total'], 15000)
+        self.assertEqual(d['lines'][0]['note'], 'уточнил')
+        d = json.loads(self.c.delete(f'/api/profile/budget/{line_id}/', **self.auth).content)
+        self.assertEqual(d['lines'], [])
+        self.assertEqual(d['total'], 0)
+
+    def test_foreign_line_not_touchable(self):
+        line_id = json.loads(self._add(qty=1).content)['lines'][0]['id']
+        r2 = self.c.post('/api/auth/register/', content_type='application/json',
+                         data=json.dumps({'email': 'x@x.ru', 'password': 'Nauka2026lab',
+                                          'name': 'ООО Чужая', 'consent': True}))
+        other = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r2.content)['token']}
+        self.assertEqual(self.c.delete(f'/api/profile/budget/{line_id}/', **other).status_code, 404)
+        self.assertEqual(self.c.patch(f'/api/profile/budget/{line_id}/', **other,
+                                      content_type='application/json',
+                                      data=json.dumps({'qty': 99})).status_code, 404)
+
+    def test_line_survives_resource_removal(self):
+        """Снятая с каталога позиция не должна молча исчезать из сметы:
+        исчезнув, она изменила бы итог заявки за спиной у резидента."""
+        self._add(qty=2)
+        self.res.delete()
+        d = json.loads(self.c.get('/api/profile/budget/', **self.auth).content)
+        self.assertEqual(len(d['lines']), 1)
+        self.assertEqual(d['lines'][0]['title'], 'Прибор')
+        self.assertEqual(d['total'], 10000)
+        self.assertFalse(d['lines'][0]['inCatalog'], 'строка не помечена как снятая')
+
+    def test_price_follows_catalog(self):
+        """Каталог — источник правды: подорожало там, подорожало и в смете."""
+        line_id = json.loads(self._add(qty=2).content)['lines'][0]['id']
+        Resource.objects.filter(pk='eq-test').update(price_value=6000)
+        r = self.c.patch(f'/api/profile/budget/{line_id}/', content_type='application/json',
+                         data=json.dumps({'qty': 2}), **self.auth)
+        self.assertEqual(json.loads(r.content)['total'], 12000)
+
+
+class FormalCheckTests(TestCase):
+    """Проверка на формальные отказы (функция 9).
+
+    Главное, что здесь проверяется, — не арифметика, а честность: незаполненное
+    поле должно попадать в «стоит посмотреть», а не в «откажут». Записать
+    неизвестность в отказ — значит отговорить человека от заявки, которую он
+    бы прошёл.
+    """
+
+    def setUp(self):
+        self.today = date.today()
+        u = User.objects.create_user(username='fc@f.ru', email='fc@f.ru',
+                                     password='Nauka2026lab')
+        self.co = Company.objects.create(user=u, name='ООО Проверка')
+        # Ядро профиля заполнено, чтобы каждый тест проверял своё правило,
+        # а не спотыкался о незаполненное описание проекта.
+        self.profile = ProjectProfile.objects.create(company=self.co, stage='lab')
+        for k in PROFILE_CORE:
+            if k != 'stage':
+                setattr(self.profile, k, 'текст')
+        self.profile.save()
+
+    def _p(self, **kw):
+        base = dict(name='Программа', active=True)
+        base.update(kw)
+        return Program.objects.create(**base)
+
+    def _check(self, program, total=0):
+        return formal.check_program(program, self.co, self.profile, total, self.today)
+
+    def _levels(self, res):
+        return {i['level'] for group in ('stop', 'warn', 'ok') for i in res[group]}
+
+    # --- сроки ---
+    def test_past_deadline_is_stop(self):
+        r = self._check(self._p(deadline=self.today - timedelta(days=1)))
+        self.assertEqual(r['verdict'], 'stop')
+        self.assertIn('закончился', r['stop'][0]['text'])
+
+    def test_deadline_soon_is_warn_not_stop(self):
+        r = self._check(self._p(deadline=self.today + timedelta(days=3)))
+        self.assertNotEqual(r['verdict'], 'stop')
+        self.assertTrue(any('До конца приёма' in i['text'] for i in r['warn']))
+
+    def test_far_deadline_is_ok(self):
+        r = self._check(self._p(deadline=self.today + timedelta(days=200)))
+        self.assertTrue(any('Приём заявок открыт' in i['text'] for i in r['ok']))
+
+    # --- неизвестность не равна нарушению ---
+    def test_unknown_staff_is_warn_not_stop(self):
+        r = self._check(self._p(max_staff=100))
+        self.assertEqual(r['verdict'], 'warn')
+        self.assertTrue(any('численность' in i['text'].lower() for i in r['warn']))
+
+    def test_unknown_revenue_is_warn_not_stop(self):
+        r = self._check(self._p(max_revenue=800_000_000))
+        self.assertEqual(r['verdict'], 'warn')
+
+    def test_unknown_okved_is_warn_not_stop(self):
+        r = self._check(self._p(okved='72'))
+        self.assertEqual(r['verdict'], 'warn')
+
+    def test_unknown_founded_is_warn_not_stop(self):
+        r = self._check(self._p(max_age_months=36))
+        self.assertEqual(r['verdict'], 'warn')
+
+    def test_no_limits_no_items(self):
+        """Программа без ограничений не должна выдумывать пункты."""
+        r = self._check(self._p())
+        self.assertEqual(r['verdict'], 'ok')
+        self.assertEqual(r['stop'], [])
+
+    # --- известные данные, которые не проходят ---
+    def test_staff_over_limit_is_stop(self):
+        self.co.staff = 250
+        self.co.save()
+        r = self._check(self._p(max_staff=100))
+        self.assertEqual(r['verdict'], 'stop')
+        self.assertIn('250', r['stop'][0]['text'])
+
+    def test_company_too_old_is_stop(self):
+        self.co.founded = self.today - timedelta(days=365 * 6)
+        self.co.save()
+        r = self._check(self._p(max_age_months=36))
+        self.assertEqual(r['verdict'], 'stop')
+
+    def test_company_young_enough_is_ok(self):
+        self.co.founded = self.today - timedelta(days=200)
+        self.co.save()
+        r = self._check(self._p(max_age_months=36))
+        self.assertTrue(any('Возраст компании' in i['text'] for i in r['ok']))
+
+    def test_okved_prefix_matches(self):
+        self.co.okved = '72.19, 26.51'
+        self.co.save()
+        self.assertNotEqual(self._check(self._p(okved='72'))['verdict'], 'stop')
+        # обратное направление: программа называет подгруппу, у компании класс
+        self.co.okved = '72'
+        self.co.save()
+        self.assertNotEqual(self._check(self._p(okved='72.19'))['verdict'], 'stop')
+
+    def test_okved_mismatch_is_stop(self):
+        self.co.okved = '47.11'
+        self.co.save()
+        r = self._check(self._p(okved='72, 21.20'))
+        self.assertEqual(r['verdict'], 'stop')
+
+    def test_stage_mismatch_is_stop(self):
+        r = self._check(self._p(stages='idea,calc'))
+        self.assertEqual(r['verdict'], 'stop')
+        self.assertIn('Лабораторный образец', r['stop'][0]['text'])
+
+    def test_stage_match_is_ok(self):
+        r = self._check(self._p(stages='lab,proto'))
+        self.assertTrue(any('подходит программе' in i['text'] for i in r['ok']))
+
+    # --- смета встречается с лимитом гранта: связь функций 9 и 12 ---
+    def test_budget_over_grant_says_by_how_much(self):
+        r = self._check(self._p(max_grant=1_000_000), total=1_340_000)
+        self.assertEqual(r['verdict'], 'stop')
+        text = r['stop'][0]['text']
+        self.assertIn('340 тыс. ₽', text, 'не сказано, на сколько превышение: ' + text)
+
+    def test_budget_within_grant_says_what_is_left(self):
+        r = self._check(self._p(max_grant=1_000_000), total=600_000)
+        self.assertTrue(any('остаётся 400 тыс. ₽' in i['text'] for i in r['ok']))
+
+    def test_empty_budget_is_warn_not_stop(self):
+        r = self._check(self._p(max_grant=1_000_000), total=0)
+        self.assertEqual(r['verdict'], 'warn')
+
+    def test_cofinancing_amount_is_computed(self):
+        r = self._check(self._p(cofinancing_pct=30), total=1_000_000)
+        self.assertTrue(any('300 тыс. ₽' in i['text'] for i in r['warn']))
+
+    # --- вывод по худшему пункту ---
+    def test_one_stop_outweighs_many_ok(self):
+        self.co.staff = 5
+        self.co.founded = self.today - timedelta(days=200)
+        self.co.okved = '72.19'
+        self.co.save()
+        r = self._check(self._p(deadline=self.today + timedelta(days=100),
+                                max_staff=100, max_age_months=36, okved='72',
+                                stages='idea'))
+        self.assertEqual(r['verdict'], 'stop')
+        self.assertTrue(r['ok'], 'пройденные пункты потерялись')
+
+    def test_sorted_passable_first(self):
+        self._p(name='Откажут', deadline=self.today - timedelta(days=1))
+        self._p(name='Пройдёт', deadline=self.today + timedelta(days=100))
+        names = [r['name'] for r in formal.check_all(self.co, self.profile, 0, self.today)]
+        self.assertEqual(names[0], 'Пройдёт')
+
+    def test_inactive_program_hidden(self):
+        self._p(name='Скрытая', active=False)
+        self.assertEqual(formal.check_all(self.co, self.profile, 0, self.today), [])
+
+    def test_empty_profile_is_warn_not_stop(self):
+        """Незаполненный профиль — повод дозаполнить, а не приговор."""
+        for k in PROFILE_CORE:
+            setattr(self.profile, k, '')
+        self.profile.save()
+        item = formal.check_profile_ready(self.profile)
+        self.assertEqual(item['level'], 'warn')
+        self.assertIn('не хватает', item['text'])
+
+    def test_profile_gap_not_repeated_in_every_program(self):
+        """Пробел в профиле относится к заявителю, а не к конкурсу: в карточке
+        программы его быть не должно, иначе одно и то же читается трижды."""
+        for k in PROFILE_CORE:
+            setattr(self.profile, k, '')
+        self.profile.save()
+        r = self._check(self._p())
+        texts = [i['text'] for g in ('stop', 'warn', 'ok') for i in r[g]]
+        self.assertFalse([t for t in texts if 'В профиле проекта не хватает' in t],
+                         'пробел профиля продублирован в карточке программы')
+
+    def test_no_programs_no_invention(self):
+        """Пустой список честнее выдуманной программы."""
+        self.assertEqual(Program.objects.count(), 0)
+        self.assertEqual(formal.check_all(self.co, self.profile, 0, self.today), [])
+
+
+class ProgramsApiTests(TestCase):
+    """Проверка через API — вместе со сметой, как её видит кабинет."""
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'pr@p.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Заявка', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        Resource.objects.create(slug='eq-x', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=100_000,
+                                price_unit='час', units_total=1)
+
+    def test_requires_auth(self):
+        self.assertEqual(self.c.get('/api/programs/').status_code, 401)
+
+    def test_empty_list_when_operator_entered_nothing(self):
+        d = json.loads(self.c.get('/api/programs/', **self.auth).content)
+        self.assertEqual(d['programs'], [])
+        self.assertEqual(d['budgetTotal'], 0)
+
+    def test_budget_total_reaches_check(self):
+        Program.objects.create(name='Грант', max_grant=1_000_000)
+        self.c.post('/api/profile/budget/', content_type='application/json',
+                    data=json.dumps({'resourceId': 'eq-x', 'qty': 14}), **self.auth)
+        d = json.loads(self.c.get('/api/programs/', **self.auth).content)
+        self.assertEqual(d['budgetTotal'], 1_400_000)
+        self.assertEqual(d['programs'][0]['verdict'], 'stop')
+        self.assertIn('400 тыс. ₽', d['programs'][0]['stop'][0]['text'])

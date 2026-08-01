@@ -940,3 +940,85 @@ a.val:hover{color:var(--brass);}
   .proj-q,.proj-form,.proj-out{padding:17px 15px;}
   .proj-docs{grid-template-columns:1fr;}
 }
+
+/* ============================================ смета проекта и проверка заявки */
+.bud-table{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--white);}
+.bud-row{display:grid;grid-template-columns:1fr 120px 150px 130px;gap:14px;align-items:center;
+  padding:14px 16px;border-bottom:1px solid var(--line-2);}
+.bud-row:last-of-type{border-bottom:0;}
+.bud-row.gone{background:var(--busy-bg);}
+.bud-t{font-weight:600;color:var(--ink);font-size:14.5px;line-height:1.35;}
+.bud-note{font-size:12.5px;color:var(--ink-soft);margin-top:3px;}
+.bud-warn{font-size:12.5px;color:var(--busy);margin-top:5px;line-height:1.45;}
+.bud-qty{display:flex;align-items:center;gap:7px;}
+.bud-qty input{width:68px;padding:7px 9px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--paper-2);text-align:center;}
+.bud-qty input:focus{outline:none;border-color:var(--brass);background:#fff;}
+.bud-unit{font-size:12px;color:var(--ink-soft);}
+.bud-sum{text-align:right;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;}
+.bud-per{display:block;font-weight:400;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+.bud-act{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.bud-del{background:none;border:0;padding:0;cursor:pointer;font-size:12.5px;color:var(--busy);
+  text-decoration:underline;font-family:inherit;}
+.bud-total{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;
+  background:var(--paper-2);border-top:1px solid var(--line);font-size:15px;}
+.bud-total strong{font-size:19px;color:var(--navy);font-variant-numeric:tabular-nums;}
+.bud-empty{background:var(--paper-2);border:1px dashed var(--line);border-radius:var(--r-lg);
+  padding:20px;color:var(--ink-soft);font-size:14px;line-height:1.6;}
+
+.bud-pick{margin-top:20px;}
+.bud-pick-lbl{display:block;font-size:13px;font-weight:600;margin-bottom:7px;}
+.bud-pick-row{display:flex;gap:9px;}
+.bud-pick-row input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--paper-2);min-width:0;}
+.bud-pick-row input:focus{outline:none;border-color:var(--brass);background:#fff;}
+.bud-hit{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  border:1px solid var(--line);border-radius:var(--r);padding:11px 14px;margin-top:9px;background:var(--white);}
+
+/* карточки программ: слева цветная полоса — вывод виден до чтения пунктов */
+.prg-card{background:var(--white);border:1px solid var(--line);border-left:4px solid var(--line);
+  border-radius:var(--r-lg);padding:18px 20px;margin-bottom:14px;}
+.prg-card.ok{border-left-color:var(--ok);}
+.prg-card.warn{border-left-color:var(--brass-soft);}
+.prg-card.stop{border-left-color:var(--busy);}
+.prg-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px;}
+.prg-name{font-weight:700;font-size:16px;color:var(--ink);line-height:1.3;}
+.prg-name a{color:var(--navy);}
+.prg-fund{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+.prg-verdict{font-size:12px;font-weight:700;padding:5px 11px;border-radius:20px;white-space:nowrap;
+  background:var(--paper-2);color:var(--ink-soft);}
+.prg-card.ok .prg-verdict{background:var(--ok-bg);color:var(--ok);}
+.prg-card.warn .prg-verdict{background:var(--brass-tint);color:var(--brass);}
+.prg-card.stop .prg-verdict{background:var(--busy-bg);color:var(--busy);}
+.prg-items{list-style:none;margin:0;padding:0;}
+.prg-i{display:flex;flex-direction:column;gap:2px;padding:8px 0 8px 22px;position:relative;
+  font-size:14px;line-height:1.5;color:var(--ink);border-top:1px solid var(--line-2);}
+.prg-items .prg-i:first-child{border-top:0;}
+.prg-i::before{position:absolute;left:0;top:8px;font-size:13px;font-weight:700;}
+.prg-i.ok::before{content:'✓';color:var(--ok);}
+.prg-i.warn::before{content:'!';color:var(--brass);}
+.prg-i.stop::before{content:'✕';color:var(--busy);}
+.prg-i em{font-style:normal;font-size:13px;color:var(--ink-soft);line-height:1.5;}
+.prg-notes{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2);
+  font-size:13px;color:var(--ink-soft);line-height:1.6;}
+
+@media (max-width:760px){
+  /* на телефоне строка сметы становится в две полосы: название сверху,
+     количество и сумма — рядом внизу; четыре колонки в 390px не помещаются */
+  .bud-row{grid-template-columns:1fr auto;gap:8px 12px;}
+  .bud-main{grid-column:1/-1;}
+  .bud-sum{text-align:left;}
+  .bud-act{flex-direction:row;align-items:center;gap:14px;grid-column:1/-1;
+    justify-content:flex-start;padding-top:2px;}
+  /* пальцем в строчку высотой 16px не попасть: расширяем зону нажатия,
+     не раздвигая при этом саму строку сметы */
+  .bud-act .bud-del,.bud-act .pick-link{padding:10px 0;}
+  .bud-qty input{height:40px;}
+  .prg-head{flex-direction:column;gap:8px;}
+}
+/* общий для всех программ пункт (готовность профиля) — над списком карточек */
+.prg-common{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;
+  border-radius:var(--r-lg);padding:14px 16px;margin-bottom:16px;font-size:14px;line-height:1.55;}
+.prg-common.warn{background:var(--brass-tint);color:var(--ink);}
+.prg-common.stop{background:var(--busy-bg);color:var(--busy);}
+.prg-common em{font-style:normal;font-size:13px;color:var(--ink-soft);flex:1 1 100%;}

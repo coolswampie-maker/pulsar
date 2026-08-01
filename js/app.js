@@ -786,7 +786,13 @@
     html+='<hr><div id="best"></div>'+
       '<button class="btn btn-brass btn-block" id="badd" style="margin-top:6px">Добавить в бронирование</button>'+
       '<div id="bmsg"></div>'+
-      '<a href="#/cart" class="btn btn-ghost btn-block btn-sm" style="margin-top:8px">Перейти в бронирование →</a>';
+      '<a href="#/cart" class="btn btn-ghost btn-block btn-sm" style="margin-top:8px">Перейти в бронирование →</a>'+
+      // Кнопка только для вошедших: смета живёт в кабинете компании, и
+      // предлагать её гостю значит вести его в форму входа с полдороги.
+      (P.isLogged()
+        ? '<button class="btn btn-ghost btn-block btn-sm" id="btobud" style="margin-top:6px">'+
+          'В смету проекта</button><div id="budmsg"></div>'
+        : '');
     b.innerHTML=html;
     bindBooking();
     updateEstimate();
@@ -835,6 +841,30 @@
         var n=el('rnote'); if(n) n.innerHTML=hourSummaryHtml(); updateEstimate(); };
     });
     el('badd').onclick=addToCart;
+    if(el('btobud')) el('btobud').onclick=addToBudget;
+  }
+
+  /* Смета — это план, а не бронь: даты и слоты ей не нужны, нужно только
+     количество единиц. Поэтому отдельная кнопка, а не «положить в корзину». */
+  function addToBudget(){
+    var b=el('btobud'), msg=el('budmsg');
+    b.disabled=true; b.textContent='Добавляем…';
+    P.profileApi.budgetAdd({resourceId:book.res.id, qty:budgetQty()}).then(function(r){
+      b.disabled=false; b.textContent='В смету проекта';
+      if(!r.ok){ msg.innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
+      msg.innerHTML='<div class="form-msg ok">Добавлено. '+
+        '<a href="#/cabinet/apply">Смета проекта →</a></div>';
+    });
+  }
+  /* Сколько тарифных единиц заложить в смету. Правила берём из тех же
+     currentOpts(), по которым считается бронь, а не пишем заново: разойдясь,
+     смета показывала бы прибор за один час там, где бронь считает восемь. */
+  function budgetQty(){
+    var r=book.res, o=currentOpts();
+    if(r.bookMode==='hour')  return Math.max(1, (o.hours||1)*(o.days||1));
+    if(r.bookMode==='shift') return Math.max(1, o.shifts||1);
+    if(r.bookMode==='range') return Math.max(1, P.cart.rangeUnits(r, o));
+    return Math.max(1, o.qty||1);
   }
   function currentOpts(){
     var r=book.res, o={};
@@ -1486,8 +1516,221 @@
       };
   }
 
+  /* ==========================================================
+     ЗАЯВКА НА ПРОГРАММУ: смета и проверка на формальные отказы
+     ==========================================================
+     Две вещи на одной странице не случайно. Смета — это позиции каталога
+     с настоящими ценами, которые идут в заявку статьёй расходов. Проверка
+     сравнивает эту же сумму с пределом гранта. Разнеси их по разным
+     вкладкам — и «смета превышает лимит» пришлось бы искать. */
+  var appl={ budget:null, programs:null, pick:[] };
+
+  function viewCabApply(){
+    if(!P.isLogged()) return viewLogin();
+    render('<section class="section"><div class="wrap">'+cabTabs('#/cabinet/apply')+
+      '<div id="applbox"><div class="cline-meta">Загружаем смету…</div></div>'+
+    '</div></section>', function(){
+      loadApply();
+    });
+  }
+
+  function loadApply(){
+    return Promise.all([P.profileApi.budget(), P.programsApi.list()]).then(function(r){
+      var box=el('applbox'); if(!box) return;
+      if(!r[0].ok){
+        box.innerHTML='<div class="empty"><h3>Смета недоступна</h3>'+
+          '<p>'+esc(r[0].msg||'Попробуйте обновить страницу.')+'</p></div>';
+        return;
+      }
+      appl.budget=r[0].data;
+      // Проверка может не ответить, а смета — ответить: показываем то, что
+      // есть, вместо пустой страницы. Молчаливый ноль хуже честного пробела.
+      appl.programs=r[1].ok ? r[1].data : null;
+      drawApply();
+    });
+  }
+
+  function drawApply(){
+    var box=el('applbox'); if(!box) return;
+    box.innerHTML=
+      '<div class="proj-head"><div>'+
+        '<div class="eyebrow">Помощник резидента</div>'+
+        '<h1 class="h-lg">Заявка на программу</h1>'+
+        '<p class="sub">Соберите смету из позиций каталога — по ней проверим '+
+        'формальные требования программ, а после гранта эти же позиции '+
+        'бронируются.</p>'+
+      '</div></div>'+
+      '<div id="applbudget"></div>'+
+      '<div id="applcheck"></div>';
+    drawBudget();
+    drawCheck();
+  }
+
+  /* ---------- смета ---------- */
+  function drawBudget(){
+    var m=el('applbudget'); if(!m) return;
+    var b=appl.budget, lines=b.lines||[];
+    m.innerHTML='<h2 class="h-md" style="margin:30px 0 4px">Смета проекта</h2>'+
+      '<p class="sub" style="margin-bottom:14px">Цены — из каталога, те же, '+
+      'по которым идёт бронирование.</p>'+
+      (lines.length
+        ? '<div class="bud-table">'+lines.map(budRow).join('')+
+          '<div class="bud-total"><span>Итого</span><strong>'+fmt(b.total)+'</strong></div></div>'
+        : '<div class="bud-empty">В смете пока пусто. Найдите нужное ниже — '+
+          'например «просвечивающий микроскоп» или «чистая комната».</div>')+
+      budPicker();
+    bindBudget();
+  }
+
+  function budRow(l){
+    return '<div class="bud-row'+(l.inCatalog?'':' gone')+'" data-line="'+l.id+'">'+
+      '<div class="bud-main">'+
+        '<div class="bud-t">'+esc(l.title)+'</div>'+
+        (l.note?'<div class="bud-note">'+esc(l.note)+'</div>':'')+
+        (l.inCatalog?'':'<div class="bud-warn">Позиция снята с каталога — '+
+          'уточните у оператора. Цена в смете последняя известная.</div>')+
+      '</div>'+
+      '<div class="bud-qty">'+
+        '<input type="number" min="1" value="'+l.qty+'" data-qty="'+l.id+'" '+
+          'aria-label="Количество для «'+esc(l.title)+'»">'+
+        '<span class="bud-unit">'+esc(l.priceUnit||'')+'</span>'+
+      '</div>'+
+      '<div class="bud-sum">'+fmt(l.total)+
+        '<span class="bud-per">'+fmt(l.unitPrice)+' / '+esc(l.priceUnit||'ед.')+'</span></div>'+
+      '<div class="bud-act">'+
+        (l.inCatalog
+          ? '<a class="pick-link" href="#/resource/'+esc(l.resourceId)+'">Забронировать</a>'
+          : '')+
+        '<button class="bud-del" data-del="'+l.id+'" '+
+          'aria-label="Убрать «'+esc(l.title)+'» из сметы">Убрать</button>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function budPicker(){
+    return '<div class="bud-pick">'+
+      '<label class="bud-pick-lbl" for="bud_q">Добавить позицию в смету</label>'+
+      '<div class="bud-pick-row">'+
+        '<input id="bud_q" placeholder="Что нужно для работ по проекту">'+
+        '<button class="btn btn-outline btn-sm" id="bud_find">Найти</button>'+
+      '</div>'+
+      '<div id="bud_res">'+(appl.pick.length?appl.pick.map(function(x){
+        return '<div class="bud-hit"><div><div class="bud-t">'+esc(x.title)+'</div>'+
+          '<div class="bud-per">'+fmt(x.priceValue)+' / '+esc(x.priceUnit||'ед.')+'</div></div>'+
+          '<button class="btn btn-brass btn-sm" data-add="'+esc(x.id)+'">В смету</button></div>';
+      }).join(''):'')+'</div>'+
+    '</div>';
+  }
+
+  function bindBudget(){
+    qsAll('[data-del]').forEach(function(b){
+      b.onclick=function(){
+        b.disabled=true;
+        P.profileApi.budgetDel(b.getAttribute('data-del')).then(afterBudget);
+      };
+    });
+    qsAll('[data-qty]').forEach(function(i){
+      // по change, а не по вводу: иначе каждая цифра уходила бы запросом,
+      // и «10» успевало бы сохраниться как «1»
+      i.onchange=function(){
+        var v=Math.max(1, parseInt(i.value,10)||1);
+        i.disabled=true;
+        P.profileApi.budgetSet(i.getAttribute('data-qty'), {qty:v}).then(afterBudget);
+      };
+    });
+    var find=function(){
+      var q=(el('bud_q').value||'').trim();
+      if(!q){ appl.pick=[]; drawBudget(); return; }
+      appl.pick=localSearch(q);
+      drawBudget();
+      el('bud_q').value=q;
+      if(!appl.pick.length)
+        el('bud_res').innerHTML='<div class="bud-empty">По этому запросу в каталоге '+
+          'ничего не нашлось. Попробуйте другими словами или '+
+          '<a href="#/catalog">посмотрите каталог целиком</a>.</div>';
+    };
+    if(el('bud_find')) el('bud_find').onclick=find;
+    if(el('bud_q')) el('bud_q').onkeydown=function(e){ if(e.key==='Enter') find(); };
+    qsAll('[data-add]').forEach(function(b){
+      b.onclick=function(){
+        b.disabled=true; b.textContent='Добавляем…';
+        P.profileApi.budgetAdd({resourceId:b.getAttribute('data-add'), qty:1})
+          .then(function(r){ appl.pick=[]; afterBudget(r); });
+      };
+    });
+  }
+
+  function afterBudget(r){
+    if(!r.ok){ toast(r.msg||'Не получилось сохранить смету'); drawBudget(); return; }
+    appl.budget=r.data;
+    drawBudget();
+    // Сумма сметы — вход проверки: не перечитав программы, мы оставили бы
+    // на экране вывод, посчитанный по старой смете.
+    P.programsApi.list().then(function(p){
+      appl.programs=p.ok?p.data:null; drawCheck();
+    });
+  }
+
+  /* ---------- проверка на формальные отказы ---------- */
+  var VERDICT={ ok:['Формальных препятствий не видно','ok'],
+                warn:['Стоит посмотреть','warn'],
+                stop:['Заявку отклонят','stop'] };
+
+  function drawCheck(){
+    var m=el('applcheck'); if(!m) return;
+    var head='<h2 class="h-md" style="margin:36px 0 4px">Проверка на формальные отказы</h2>'+
+      '<p class="sub" style="margin-bottom:14px">Считает программа, не языковая '+
+      'модель: у формального требования один ответ, и его можно предъявить.</p>';
+    if(appl.programs===null){
+      m.innerHTML=head+'<div class="form-msg err">Проверка сейчас недоступна. '+
+        'Смета сохранена — вернитесь к проверке позже.</div>';
+      return;
+    }
+    var list=appl.programs.programs||[];
+    // Готовность профиля — общая для всех программ, поэтому одной строкой
+    // над списком: в каждой карточке она читалась бы по три раза подряд.
+    var pf=appl.programs.profile, pfHtml='';
+    if(pf && pf.level!=='ok'){
+      pfHtml='<div class="prg-common '+pf.level+'"><span>'+esc(pf.text)+'</span>'+
+        (pf.fix?'<em>'+esc(pf.fix)+'</em>':'')+
+        '<a class="pick-link" href="#/cabinet/project">Дозаполнить профиль →</a></div>';
+    }
+    if(!list.length){
+      m.innerHTML=head+pfHtml+'<div class="bud-empty">Программы пока не заведены. '+
+        'Их вносит оператор из официальной документации конкурса — '+
+        'придуманные сроки и лимиты выглядели бы достоверно, а решение '+
+        'по ним принимать нельзя.</div>';
+      return;
+    }
+    m.innerHTML=head+pfHtml+'<div class="prg-list">'+list.map(prgCard).join('')+'</div>';
+  }
+
+  function prgCard(p){
+    var v=VERDICT[p.verdict]||VERDICT.warn;
+    var line=function(i,cls){
+      return '<li class="prg-i '+cls+'"><span>'+esc(i.text)+'</span>'+
+        (i.fix?'<em>'+esc(i.fix)+'</em>':'')+'</li>';
+    };
+    return '<div class="prg-card '+v[1]+'">'+
+      '<div class="prg-head">'+
+        '<div><div class="prg-name">'+
+          (p.url?'<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.name)+'</a>'
+                :esc(p.name))+'</div>'+
+          (p.fund?'<div class="prg-fund">'+esc(p.fund)+'</div>':'')+'</div>'+
+        '<div class="prg-verdict">'+esc(v[0])+'</div>'+
+      '</div>'+
+      '<ul class="prg-items">'+
+        p.stop.map(function(i){ return line(i,'stop'); }).join('')+
+        p.warn.map(function(i){ return line(i,'warn'); }).join('')+
+        p.ok.map(function(i){ return line(i,'ok'); }).join('')+
+      '</ul>'+
+      (p.notes?'<div class="prg-notes">'+esc(p.notes)+'</div>':'')+
+    '</div>';
+  }
+
   function cabTabs(active){
     var t=[['#/cabinet','Профиль'],['#/cabinet/project','Проект'],
+           ['#/cabinet/apply','Заявка'],
            ['#/cabinet/orders','Мои заявки'],['#/cabinet/kpi','Показатели']];
     return '<div class="cab-tabs">'+t.map(function(x){
       return '<a href="'+x[0]+'" class="cab-tab'+(x[0]===active?' on':'')+'">'+x[1]+'</a>';
@@ -1867,6 +2110,7 @@
       case 'login': return viewLogin();
       case 'cabinet':
         if(seg[1]==='project') return viewCabProject();
+        if(seg[1]==='apply') return viewCabApply();
         if(seg[1]==='orders') return viewCabOrders();
         if(seg[1]==='kpi') return viewCabKpi();
         return viewCabinet();

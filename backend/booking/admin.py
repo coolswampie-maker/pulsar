@@ -9,8 +9,9 @@ from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
-from .models import (BookingLine, BusySlot, Company, CustomRequest, Kpi, KpiEntry,
-                     Order, Resource)
+from .models import (PROFILE_KEYS, BookingLine, BudgetLine, BusySlot, Company,
+                     CustomRequest, Kpi, KpiEntry, Order, ProjectProfile,
+                     Program, Resource)
 
 # Управление доступом (пока за всё отвечает один администратор) — прячем
 # стандартный блок «Пользователи и группы», чтобы не путал в CRM.
@@ -755,3 +756,71 @@ class BusySlotAdmin(admin.ModelAdmin):
             'ds': ds_h, 'de': de_h, 'hstep': hstep,
         }
         return TemplateResponse(request, 'admin/booking/busyslot/gantt.html', context)
+
+
+@admin.register(Program)
+class ProgramAdmin(admin.ModelAdmin):
+    """Программы поддержки: параметры вносит оператор из официальной
+    документации программы.
+
+    Ни одна программа не заведена в коде намеренно. Придуманный лимит гранта
+    или срок выглядит достоверно — и резидент примет решение по выдумке.
+    Пустой список честнее.
+    """
+    list_display = ('name', 'fund', 'deadline', 'max_grant', 'active')
+    list_filter = ('active', 'fund')
+    list_editable = ('active',)
+    search_fields = ('name', 'fund')
+    fieldsets = (
+        (None, {'fields': ('name', 'fund', 'url', 'active', 'notes')}),
+        ('Сроки приёма', {'fields': ('opens_at', 'deadline')}),
+        ('Деньги', {'fields': ('max_grant', 'cofinancing_pct')}),
+        ('Требования к заявителю', {
+            'description': 'Пустое поле означает «программа этого не '
+                           'ограничивает». Не ставьте 0 вместо пустого.',
+            'fields': ('min_age_months', 'max_age_months', 'max_staff',
+                       'max_revenue', 'okved', 'stages')}),
+    )
+
+
+class BudgetLineInline(admin.TabularInline):
+    """Смета проекта — оператору видно, во что резидент оценивает работы."""
+    model = BudgetLine
+    extra = 0
+    fields = ('resource', 'qty', 'note', 'unit_price', 'line_total')
+    # Наименование и цена берутся из каталога при сохранении: правка их руками
+    # разошлась бы с прайсом и с суммой брони.
+    readonly_fields = ('unit_price', 'line_total')
+
+    @admin.display(description='Сумма, ₽')
+    def line_total(self, obj):
+        return f'{obj.total:,}'.replace(',', ' ') if obj.pk else '—'
+
+
+@admin.register(ProjectProfile)
+class ProjectProfileAdmin(admin.ModelAdmin):
+    """Профиль проекта резидента и смета к нему.
+
+    Текст проекта — только для чтения. Это слова резидента о его разработке;
+    оператор их читает, но не переписывает: незаметная правка чужого описания
+    попала бы потом в заявку от его имени. Менять текст может только сам
+    резидент в кабинете.
+    """
+    list_display = ('company', 'title', 'stage', 'budget_total', 'updated_at')
+    list_filter = ('stage',)
+    search_fields = ('company__name', 'title')
+    inlines = [BudgetLineInline]
+    readonly_fields = tuple(PROFILE_KEYS) + ('company', 'created_at', 'updated_at',
+                                             'budget_total')
+    fields = ('company', 'budget_total', 'created_at', 'updated_at') + tuple(PROFILE_KEYS)
+
+    def has_add_permission(self, request):
+        # Профиль появляется, когда резидент начинает его заполнять.
+        return False
+
+    @admin.display(description='Смета, ₽')
+    def budget_total(self, obj):
+        if not obj.pk:
+            return '—'
+        total = sum(l.total for l in obj.budget.all())
+        return f'{total:,}'.replace(',', ' ') if total else '—'

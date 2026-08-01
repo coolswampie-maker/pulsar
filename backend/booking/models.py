@@ -625,3 +625,153 @@ class ComposeJob(models.Model):
         limit = settings.COMPOSE_TIMEOUT + 30
         return (self.status == 'pending'
                 and (timezone.now() - self.created_at).total_seconds() > limit)
+
+
+# ==========================================================================
+#  СМЕТА ПРОЕКТА — позиции каталога, заложенные в заявку
+# ==========================================================================
+# Замысел: резидент приходит за помощью с заявкой, а уходит с бронированием.
+# Смета — промежуточное звено: список позиций каталога с реальными ценами,
+# который одновременно идёт в заявку как статья расходов и превращается
+# в бронь, когда грант получен.
+
+# Верхняя граница на количество в строке. Смысл не в деньгах — смета ничего
+# не списывает, — а в том, чтобы арифметика оставалась конечной: без предела
+# одна опечатка в поле количества выдаёт в итог заявки триллионы.
+MAX_BUDGET_QTY = 9999
+
+
+class BudgetLine(models.Model):
+    """Строка сметы: позиция каталога, заложенная в заявку на программу."""
+    profile = models.ForeignKey('ProjectProfile', on_delete=models.CASCADE,
+                                related_name='budget', verbose_name='Профиль проекта')
+    # SET_NULL, а не PROTECT и не CASCADE: снятая с каталога позиция не должна
+    # ни блокировать оператору правку каталога, ни молча исчезать из сметы —
+    # исчезнув, она изменила бы итог заявки за спиной у резидента.
+    resource = models.ForeignKey('Resource', null=True, blank=True,
+                                 on_delete=models.SET_NULL,
+                                 related_name='budget_lines', verbose_name='Позиция каталога')
+    # Слепок на случай, если позицию снимут с каталога: строку всё равно надо
+    # чем-то подписать и во что-то оценить.
+    title = models.CharField('Наименование', max_length=200)
+    unit_price = models.PositiveIntegerField('Цена за единицу, ₽', default=0)
+    price_unit = models.CharField('Единица', max_length=20, blank=True)
+
+    qty = models.PositiveIntegerField('Количество', default=1)
+    note = models.CharField('Зачем в проекте', max_length=300, blank=True,
+                            help_text='Одной строкой — попадёт в заявку как обоснование.')
+    created_at = models.DateTimeField('Добавлена', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Строка сметы'
+        verbose_name_plural = 'Смета проекта'
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return f'{self.title} × {self.qty}'
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.qty and self.qty > MAX_BUDGET_QTY:
+            raise ValidationError({'qty': f'Не больше {MAX_BUDGET_QTY} за строку.'})
+
+    def save(self, *args, **kwargs):
+        # Цена берётся из каталога при каждом сохранении: каталог — источник
+        # правды, а не то, что когда-то скопировали в смету. Если позиции
+        # больше нет, остаётся последняя известная цена — иначе строка
+        # обнулилась бы и итог заявки поехал бы вниз незаметно.
+        if self.resource_id:
+            self.title = self.resource.title
+            self.unit_price = self.resource.price_value
+            self.price_unit = self.resource.price_unit
+        super().save(*args, **kwargs)
+
+    @property
+    def total(self):
+        return self.unit_price * (self.qty or 1)
+
+    @property
+    def in_catalog(self):
+        return self.resource_id is not None
+
+
+# ==========================================================================
+#  ПРОГРАММЫ ПОДДЕРЖКИ — проверка на формальные отказы
+# ==========================================================================
+# Большая часть заявок отсеивается не по существу, а по формальным причинам:
+# просрочен срок, не тот ОКВЭД, компания старше или больше, чем допускает
+# программа, смета выше лимита. Всё это проверяется арифметикой, поэтому
+# проверку делает код, а не языковая модель: у правила должен быть один
+# ответ, одинаковый при каждом запуске, и его можно предъявить.
+#
+# Параметры программ вносит оператор в CRM из официальной документации.
+# Ни одна программа не заведена в коде намеренно: выдуманный лимит гранта
+# выглядит достоверно и потому опаснее пустого списка.
+
+class Program(models.Model):
+    """Программа поддержки и её формальные требования.
+
+    Все ограничения необязательны. Пустое поле означает «программа этого не
+    ограничивает», а не «ограничение равно нулю» — поэтому именно null,
+    а не 0 по умолчанию.
+    """
+    name = models.CharField('Программа', max_length=200)
+    fund = models.CharField('Кто проводит', max_length=200, blank=True)
+    url = models.URLField('Страница программы', blank=True)
+    active = models.BooleanField('Показывать резидентам', default=True)
+
+    opens_at = models.DateField('Приём заявок с', null=True, blank=True)
+    deadline = models.DateField('Приём заявок до', null=True, blank=True)
+
+    max_grant = models.BigIntegerField('Предельный размер гранта, ₽', null=True, blank=True)
+    cofinancing_pct = models.PositiveSmallIntegerField(
+        'Требуемое софинансирование, %', null=True, blank=True,
+        help_text='Доля от суммы гранта, которую заявитель вкладывает сам.')
+
+    min_age_months = models.PositiveIntegerField(
+        'Компания не моложе, мес.', null=True, blank=True)
+    max_age_months = models.PositiveIntegerField(
+        'Компания не старше, мес.', null=True, blank=True)
+    max_staff = models.PositiveIntegerField('Численность не более', null=True, blank=True)
+    max_revenue = models.BigIntegerField('Выручка не более, ₽', null=True, blank=True)
+
+    okved = models.CharField(
+        'Допустимые ОКВЭД', max_length=300, blank=True,
+        help_text='Коды или их начала через запятую, напр. «72, 21.20». '
+                  'Пусто — программа не ограничивает.')
+    stages = models.CharField(
+        'Допустимые стадии проекта', max_length=200, blank=True,
+        help_text='Ключи стадий через запятую: '
+                  + ', '.join(k for k, _ in PROFILE_STAGES) + '. Пусто — любые.')
+
+    notes = models.TextField('Примечания для резидента', blank=True,
+                             help_text='Показывается в кабинете как есть.')
+
+    class Meta:
+        verbose_name = 'Программа поддержки'
+        verbose_name_plural = 'Программы поддержки'
+        ordering = ['deadline', 'name']
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        errors = {}
+        if self.opens_at and self.deadline and self.opens_at > self.deadline:
+            errors['deadline'] = 'Срок приёма заканчивается раньше, чем начинается.'
+        if (self.min_age_months is not None and self.max_age_months is not None
+                and self.min_age_months > self.max_age_months):
+            errors['max_age_months'] = 'Верхняя граница возраста меньше нижней.'
+        allowed = {k for k, _ in PROFILE_STAGES}
+        bad = [s for s in self.stage_list() if s not in allowed]
+        if bad:
+            errors['stages'] = 'Неизвестные стадии: ' + ', '.join(bad)
+        if errors:
+            raise ValidationError(errors)
+
+    def stage_list(self):
+        return [s.strip() for s in self.stages.split(',') if s.strip()]
+
+    def okved_list(self):
+        return [s.strip() for s in self.okved.split(',') if s.strip()]

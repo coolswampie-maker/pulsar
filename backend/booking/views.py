@@ -14,14 +14,16 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import querylog
+from . import formal, querylog
 from .assist import assist
 from . import compose as composer
 from .compose import FORMATS, missing_for
-from .models import (KPI_KEYS, PROFILE_LABELS, BusySlot, CustomRequest, Kpi,
+from .models import (KPI_KEYS, MAX_BUDGET_QTY, PROFILE_LABELS, BusySlot,
+                     CustomRequest, Kpi,
                      ComposeJob, KpiEntry, Order, ProjectProfile, Resource,
                      profile_field_spec)
-from .serializers import (CompanySerializer, CustomRequestSerializer,
+from .serializers import (BudgetLineSerializer, CompanySerializer,
+                          CustomRequestSerializer,
                           KpiEntrySerializer, KpiSerializer,
                           OrderCreateSerializer, OrderListSerializer,
                           ProjectProfileSerializer, RegisterSerializer,
@@ -596,3 +598,106 @@ class ComposeFormatsView(APIView):
                 'missing': [PROFILE_LABELS[k] for k in lack],
             })
         return Response(out)
+
+
+# ==========================================================================
+#  СМЕТА ПРОЕКТА (функция 12) и ПРОВЕРКА НА ФОРМАЛЬНЫЕ ОТКАЗЫ (функция 9)
+# ==========================================================================
+
+def _budget_payload(profile):
+    """Смета целиком. Итог считает сервер по сохранённым строкам."""
+    if not profile.pk:
+        return {'lines': [], 'total': 0}
+    lines = list(profile.budget.select_related('resource'))
+    return {
+        'lines': BudgetLineSerializer(lines, many=True).data,
+        'total': sum(l.total for l in lines),
+    }
+
+
+class BudgetView(APIView):
+    """GET/POST /api/profile/budget/ — позиции каталога в смете заявки.
+
+    Замысел функции: резидент приходит за помощью с заявкой, а уходит
+    с бронированием. Смета — то самое звено: список реальных позиций
+    каталога по реальным ценам, который идёт в заявку статьёй расходов,
+    а после гранта превращается в бронь.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        return Response(_budget_payload(profile))
+
+    def post(self, request):
+        if not _profile_for(request):
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        profile = _profile_for(request, create=True)
+        ser = BudgetLineSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        res_id = ser.validated_data['resource_id']
+        # Повторное добавление той же позиции — не вторая строка, а
+        # увеличение количества: две одинаковые строки в смете читаются
+        # как ошибка и их всё равно пришлось бы складывать вручную.
+        line = profile.budget.filter(resource_id=res_id).first()
+        if line:
+            line.qty = min(line.qty + ser.validated_data.get('qty', 1), MAX_BUDGET_QTY)
+            if ser.validated_data.get('note'):
+                line.note = ser.validated_data['note']
+            line.save()
+        else:
+            ser.save(profile=profile)
+        return Response(_budget_payload(profile), status=201)
+
+
+class BudgetLineView(APIView):
+    """PATCH/DELETE /api/profile/budget/<id>/ — количество, пояснение, удаление."""
+    permission_classes = [IsAuthenticated]
+
+    def _line(self, request, line_id):
+        profile = _profile_for(request)
+        if not profile or not profile.pk:
+            return None, None
+        return profile, profile.budget.filter(pk=line_id).first()
+
+    def patch(self, request, line_id):
+        profile, line = self._line(request, line_id)
+        if not line:
+            return Response({'detail': 'Строка не найдена.'}, status=404)
+        ser = BudgetLineSerializer(line, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(_budget_payload(profile))
+
+    def delete(self, request, line_id):
+        profile, line = self._line(request, line_id)
+        if not line:
+            return Response({'detail': 'Строка не найдена.'}, status=404)
+        line.delete()
+        return Response(_budget_payload(profile))
+
+
+class ProgramsView(APIView):
+    """GET /api/programs/ — программы поддержки и проверка на формальные отказы.
+
+    Проверку делает код, а не модель: у формального требования один ответ,
+    одинаковый при каждом запуске, и его нужно уметь предъявить.
+    Подробности — в booking/formal.py.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = _company(request)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        profile = ProjectProfile.objects.filter(company=company).first()
+        total = _budget_payload(profile)['total'] if profile else 0
+        return Response({
+            'budgetTotal': total,
+            # Готовность профиля — про заявителя, а не про конкурс: один пункт
+            # над списком, а не повтор в каждой карточке.
+            'profile': formal.check_profile_ready(profile),
+            'programs': formal.check_all(company, profile, total),
+        })
