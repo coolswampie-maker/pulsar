@@ -1075,3 +1075,14 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .rev-item{flex-direction:column;align-items:flex-start;gap:9px;}
   .rev-item .btn{width:100%;}
 }
+/* Разделы, для которых в профиле не нашлось данных. Отличаются от написанных
+   намеренно: рядом с обычным текстом пометка «[Нужно дополнить: …]» читается
+   как часть документа, и выходит, будто помощник плохо сработал. */
+.proj-block.gap{opacity:.72;}
+.proj-block.gap .proj-block-t{color:var(--ink-soft);font-style:italic;
+  border-left:2px solid var(--line);padding-left:12px;}
+.proj-out-lead{font-size:14px;color:var(--ink-soft);line-height:1.6;
+  margin:2px 0 20px;padding-bottom:16px;border-bottom:1px solid var(--line-2);}
+/* кнопка отдельной строкой: в потоке текста она вставала посередине
+   перечисления и читалась как его часть */
+.proj-gaps-act{margin-top:12px;}

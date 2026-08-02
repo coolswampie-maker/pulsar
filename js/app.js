@@ -1553,15 +1553,32 @@
           '</div>';
         return;
       }
+      // Раздел, который модели нечем было наполнить, она помечает как
+      // [Нужно дополнить: …]. Отличать такие места глазами обязательно:
+      // рядом с обычным текстом они читаются как часть документа, и человек
+      // решает, что помощник просто плохо сработал.
+      var gapBlock=function(t){ t=(t||'').trim(); return t.charAt(0)==='[' && t.slice(-1)===']'; };
+      var written=d.blocks.filter(function(b){ return !gapBlock(b.text); }).length;
+      var empty=d.blocks.length-written;
+
       out.innerHTML='<div class="proj-out">'+
         '<div class="proj-out-head"><h3>'+esc(d.title)+'</h3>'+aiBadge('mini')+'</div>'+
+        '<p class="proj-out-lead">Текст написала языковая модель по вашему профилю. '+
+        (empty
+          ? 'Разделов написано '+written+' из '+d.blocks.length+'; на остальные '+
+            'в профиле нет данных, и они помечены серым — помощник не '+
+            'придумывает факты, а показывает, чего не хватает.'
+          : 'Данных в профиле хватило на все разделы.')+'</p>'+
         d.blocks.map(function(b){
-          return '<div class="proj-block"><h4>'+esc(b.heading)+'</h4>'+
+          var gap=gapBlock(b.text);
+          return '<div class="proj-block'+(gap?' gap':'')+'"><h4>'+esc(b.heading)+'</h4>'+
             '<div class="proj-block-t">'+esc(b.text).replace(/\n/g,'<br>')+'</div></div>';
         }).join('')+
         (d.gaps.length
-          ? '<div class="proj-gaps"><strong>Стоит дополнить в профиле:</strong> '+
-            esc(d.gaps.join('; '))+'</div>' : '')+
+          ? '<div class="proj-gaps"><strong>Чтобы разделы заполнились, добавьте '+
+            'в профиль:</strong> '+esc(d.gaps.join('; '))+
+            '<div class="proj-gaps-act"><a class="btn btn-outline btn-sm" '+
+            'href="#/cabinet/project">Дозаполнить профиль</a></div></div>' : '')+
         '<div class="proj-out-act">'+
           '<button class="btn btn-outline btn-sm" id="pj_copy">Скопировать текст</button>'+
           '<span class="sub">Проверьте факты и цифры перед отправкой куда бы то ни было.</span>'+
