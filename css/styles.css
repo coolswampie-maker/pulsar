@@ -1086,3 +1086,47 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 /* кнопка отдельной строкой: в потоке текста она вставала посередине
    перечисления и читалась как его часть */
 .proj-gaps-act{margin-top:12px;}
+/* переключатель проектов над вкладками «Проект» и «Заявка» */
+.proj-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--paper-2);border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:12px 16px;margin-bottom:22px;}
+.proj-bar-lbl{font-size:13px;font-weight:600;color:var(--ink);}
+.proj-bar select{flex:1;min-width:200px;max-width:460px;padding:8px 11px;
+  border:1px solid var(--line);border-radius:var(--r);background:var(--white);}
+.proj-bar select:focus{outline:none;border-color:var(--brass);}
+.proj-bar #projbarmsg{flex:1 1 100%;}
+@media (max-width:600px){
+  .proj-bar select{max-width:none;flex:1 1 100%;}
+  .proj-bar .btn,.proj-bar .pick-link{flex:1 1 auto;}
+}
+
+/* ============================================ разговор о проекте */
+.chat{border:1px solid var(--line);border-radius:var(--r-lg);background:var(--white);
+  overflow:hidden;}
+.chat-log{max-height:460px;overflow-y:auto;padding:18px;display:flex;
+  flex-direction:column;gap:12px;background:var(--paper-2);}
+.chat-msg{display:flex;}
+.chat-msg.me{justify-content:flex-end;}
+.chat-bubble{max-width:76%;padding:11px 15px;border-radius:14px;font-size:14.5px;
+  line-height:1.55;background:var(--white);border:1px solid var(--line);color:var(--ink);}
+.chat-msg.me .chat-bubble{background:var(--navy);color:#fff;border-color:var(--navy);}
+.chat-dots{color:var(--ink-soft);font-style:italic;}
+.chat-err{color:var(--busy);}
+/* что записано в профиль: человек должен видеть это сразу, а не в заявке */
+.chat-filled{margin-top:9px;padding-top:9px;border-top:1px solid var(--line-2);font-size:13px;}
+.chat-filled>span{color:var(--ink-soft);}
+.chat-filled ul{margin:5px 0 0;padding-left:18px;}
+.chat-filled li{margin-bottom:3px;line-height:1.45;}
+.chat-ask{margin-top:9px;font-weight:600;}
+.chat-input{display:flex;gap:10px;padding:14px;border-top:1px solid var(--line);align-items:flex-end;}
+.chat-input textarea{flex:1;resize:vertical;min-height:44px;padding:10px 12px;
+  border:1px solid var(--line);border-radius:var(--r);background:var(--paper-2);
+  font-family:inherit;font-size:15px;line-height:1.5;}
+.chat-input textarea:focus{outline:none;border-color:var(--brass);background:#fff;}
+.chat-note{margin-top:10px;}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+@media (max-width:600px){
+  .chat-bubble{max-width:88%;}
+  .chat-input{flex-direction:column;align-items:stretch;}
+}

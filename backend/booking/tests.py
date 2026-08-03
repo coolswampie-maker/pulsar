@@ -2435,3 +2435,247 @@ class BudgetReviewTests(TestCase):
 
     def test_requires_auth(self):
         self.assertEqual(self.c.post('/api/profile/budget/review/').status_code, 401)
+
+
+class ProjectsTests(TestCase):
+    """Несколько проектов у одной компании."""
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'pj@p.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Проекты', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        self.co = Company.objects.get(user__email='pj@p.ru')
+
+    def _new(self, title='Второй'):
+        return self.c.post('/api/projects/', content_type='application/json',
+                           data=json.dumps({'title': title}), **self.auth)
+
+    def test_first_project_appears_on_first_save(self):
+        """До первого сохранения строки в базе быть не должно: чтение ничего
+        не пишет."""
+        self.assertEqual(self.co.projects.count(), 0)
+        self.c.get('/api/profile/', **self.auth)
+        self.assertEqual(self.co.projects.count(), 0)
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Первый'}), **self.auth)
+        self.assertEqual(self.co.projects.count(), 1)
+
+    def test_create_and_list(self):
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Первый'}), **self.auth)
+        self.assertEqual(self._new('Второй').status_code, 201)
+        d = json.loads(self.c.get('/api/projects/', **self.auth).content)
+        self.assertEqual([x['title'] for x in d['items']], ['Первый', 'Второй'])
+
+    def test_edits_go_to_the_named_project(self):
+        """Главное здесь: правка второго проекта не должна попасть в первый."""
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Первый', 'summary': 'один'}), **self.auth)
+        second = json.loads(self._new('Второй').content)['id']
+        self.c.patch(f'/api/profile/?project={second}', content_type='application/json',
+                     data=json.dumps({'summary': 'два'}), **self.auth)
+        by_title = {p.title: p.summary for p in self.co.projects.all()}
+        self.assertEqual(by_title['Первый'], 'один')
+        self.assertEqual(by_title['Второй'], 'два')
+
+    def test_foreign_project_not_reachable(self):
+        """Чужой номер не должен молча подменяться своим проектом: человек
+        правил бы не то, что выбрал, и не заметил бы."""
+        u = User.objects.create_user(username='x@x.ru', email='x@x.ru', password='Nauka2026lab')
+        other = Company.objects.create(user=u, name='ООО Чужая')
+        alien = ProjectProfile.objects.create(company=other, title='Чужой')
+        r = self.c.get(f'/api/profile/?project={alien.id}', **self.auth)
+        self.assertEqual(r.status_code, 403)
+        alien.refresh_from_db()
+        self.assertEqual(alien.title, 'Чужой')
+
+    def test_budget_belongs_to_its_project(self):
+        Resource.objects.create(slug='eq-p', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=1000, units_total=1)
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Первый'}), **self.auth)
+        second = json.loads(self._new('Второй').content)['id']
+        self.c.post(f'/api/profile/budget/?project={second}', content_type='application/json',
+                    data=json.dumps({'resourceId': 'eq-p', 'qty': 3}), **self.auth)
+        first = json.loads(self.c.get('/api/profile/budget/', **self.auth).content)
+        self.assertEqual(first['lines'], [], 'смета попала не в тот проект')
+        d2 = json.loads(self.c.get(f'/api/profile/budget/?project={second}', **self.auth).content)
+        self.assertEqual(d2['total'], 3000)
+
+    def test_delete_removes_budget_too(self):
+        Resource.objects.create(slug='eq-d', type='equipment', book_mode='hour',
+                                title='Прибор', price_value=500, units_total=1)
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Первый'}), **self.auth)
+        second = json.loads(self._new('Второй').content)['id']
+        self.c.post(f'/api/profile/budget/?project={second}', content_type='application/json',
+                    data=json.dumps({'resourceId': 'eq-d', 'qty': 1}), **self.auth)
+        from booking.models import BudgetLine
+        self.assertEqual(BudgetLine.objects.count(), 1)
+        self.assertEqual(self.c.delete(f'/api/projects/{second}/', **self.auth).status_code, 200)
+        self.assertEqual(BudgetLine.objects.count(), 0)
+
+    def test_last_project_cannot_be_deleted(self):
+        """Кабинет без единого проекта — пустая вкладка без объяснения."""
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Единственный'}), **self.auth)
+        only = self.co.projects.first()
+        r = self.c.delete(f'/api/projects/{only.id}/', **self.auth)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.co.projects.count(), 1)
+
+    def test_foreign_project_not_deletable(self):
+        u = User.objects.create_user(username='y@y.ru', email='y@y.ru', password='Nauka2026lab')
+        other = Company.objects.create(user=u, name='ООО Чужая2')
+        alien = ProjectProfile.objects.create(company=other, title='Чужой')
+        self.assertEqual(self.c.delete(f'/api/projects/{alien.id}/', **self.auth).status_code, 404)
+        self.assertTrue(ProjectProfile.objects.filter(pk=alien.id).exists())
+
+    def test_limit(self):
+        from booking.views import MAX_PROJECTS
+        for i in range(MAX_PROJECTS):
+            ProjectProfile.objects.create(company=self.co, title=f'П{i}')
+        self.assertEqual(self._new('Лишний').status_code, 400)
+
+
+class ProfileChatTests(TestCase):
+    """Разговорное заполнение профиля.
+
+    Проверяем не качество ответов модели — этого тестом не проверить, — а
+    то, что через разбор её ответа не проходит лишнее.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'ch@c.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Разговор', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        self.co = Company.objects.get(user__email='ch@c.ru')
+
+    def _say(self, answer, message='Делаем покрытие для подшипников.'):
+        from unittest import mock
+        with mock.patch('booking.chat.ask_model', return_value=answer):
+            r = self.c.post('/api/profile/chat/', content_type='application/json',
+                            data=json.dumps({'message': message}), **self.auth)
+        return r, json.loads(r.content)
+
+    def test_fills_named_fields(self):
+        _, d = self._say(json.dumps({
+            'fill': {'summary': 'Износостойкое покрытие для подшипников.', 'stage': 'lab'},
+            'reply': 'Записал суть и стадию.', 'ask': 'problem',
+            'question': 'Какую задачу это решает?'}))
+        p = self.co.projects.first()
+        self.assertEqual(p.summary, 'Износостойкое покрытие для подшипников.')
+        self.assertEqual(p.stage, 'lab')
+        self.assertEqual({x['key'] for x in d['filled']}, {'summary', 'stage'})
+        self.assertEqual(d['ask']['field'], 'problem')
+
+    def test_unknown_field_is_dropped(self):
+        """Придуманный ключ не должен ничего создавать."""
+        _, d = self._say(json.dumps({
+            'fill': {'summary': 'Покрытие.', 'выдуманное_поле': 'что-то'},
+            'reply': 'ок'}))
+        self.assertEqual([x['key'] for x in d['filled']], ['summary'])
+
+    def test_bad_stage_is_dropped(self):
+        """Чужое значение в поле выбора сломало бы и форму, и проверку заявок."""
+        _, d = self._say(json.dumps({'fill': {'stage': 'почти готово'}, 'reply': 'ок'}))
+        self.assertEqual(d['filled'], [])
+        self.assertEqual(self.co.projects.first().stage, '')
+
+    def test_stage_by_label_is_understood(self):
+        """Модель часто пишет подпись вместо ключа — это поправимо."""
+        self._say(json.dumps({'fill': {'stage': 'Лабораторный образец'}, 'reply': 'ок'}))
+        self.assertEqual(self.co.projects.first().stage, 'lab')
+
+    def test_untouched_fields_stay(self):
+        """Поля, о которых речи не было, переписывать нельзя: человек не
+        заметит, что его текст подменили."""
+        self._say(json.dumps({'fill': {'summary': 'Первое описание.'}, 'reply': 'ок'}))
+        self._say(json.dumps({'fill': {'problem': 'Подшипники изнашиваются.'}, 'reply': 'ок'}))
+        p = self.co.projects.first()
+        self.assertEqual(p.summary, 'Первое описание.')
+        self.assertEqual(p.problem, 'Подшипники изнашиваются.')
+
+    def test_correction_overwrites(self):
+        self._say(json.dumps({'fill': {'stage': 'idea'}, 'reply': 'ок'}))
+        self._say(json.dumps({'fill': {'stage': 'proto'}, 'reply': 'поправил'}))
+        self.assertEqual(self.co.projects.first().stage, 'proto')
+
+    def test_same_value_is_not_reported_as_change(self):
+        self._say(json.dumps({'fill': {'summary': 'Покрытие.'}, 'reply': 'ок'}))
+        _, d = self._say(json.dumps({'fill': {'summary': 'Покрытие.'}, 'reply': 'ок'}))
+        self.assertEqual(d['filled'], [], 'то же значение показано как изменение')
+
+    def test_model_silent_says_so(self):
+        _, d = self._say(None)
+        self.assertEqual(d['mode'], 'off')
+        self.assertEqual(d['filled'], [])
+
+    def test_garbage_does_not_crash(self):
+        _, d = self._say('извините, не могу')
+        self.assertEqual(d['mode'], 'off')
+
+    def test_empty_message_rejected(self):
+        r = self.c.post('/api/profile/chat/', content_type='application/json',
+                        data=json.dumps({'message': '   '}), **self.auth)
+        self.assertEqual(r.status_code, 400)
+
+    def test_requires_auth(self):
+        self.assertEqual(self.c.post('/api/profile/chat/').status_code, 401)
+
+    def test_goes_into_the_named_project(self):
+        self.c.patch('/api/profile/', content_type='application/json',
+                     data=json.dumps({'title': 'Первый'}), **self.auth)
+        second = ProjectProfile.objects.create(company=self.co, title='Второй')
+        from unittest import mock
+        with mock.patch('booking.chat.ask_model',
+                        return_value=json.dumps({'fill': {'summary': 'для второго'},
+                                                 'reply': 'ок'})):
+            self.c.post(f'/api/profile/chat/?project={second.id}',
+                        content_type='application/json',
+                        data=json.dumps({'message': 'текст'}), **self.auth)
+        second.refresh_from_db()
+        self.assertEqual(second.summary, 'для второго')
+        self.assertEqual(self.co.projects.get(title='Первый').summary, '')
+
+
+class ComposeSpecTests(TestCase):
+    """Задания на сборку: что уходит модели.
+
+    Качество ответа тестом не проверить, а вот полноту задания — можно.
+    Раздел, выпавший из списка, обнаружился бы только в готовой заявке.
+    """
+
+    def test_every_section_has_purpose_and_size(self):
+        from booking.compose import SECTIONS
+        for fmt, rows in SECTIONS.items():
+            for name, what, size in rows:
+                self.assertTrue(name.strip(), fmt)
+                self.assertGreater(len(what), 40,
+                                   f'{fmt}/{name}: пояснение слишком общее')
+                self.assertTrue(size.strip(), f'{fmt}/{name}: не задан объём')
+
+    def test_section_names_reach_the_task(self):
+        from booking.compose import FORMATS, SECTIONS
+        for key in ('sections', 'onepager'):
+            task = FORMATS[key]['about']
+            for name, _, _ in SECTIONS[key]:
+                self.assertIn(name, task, f'{key}: раздел «{name}» выпал из задания')
+
+    def test_task_forbids_invention(self):
+        """Правило «не придумывать» должно быть и в общей инструкции,
+        и в разделах, где соблазн выдумать сильнее всего."""
+        from booking.compose import FORMATS, SYSTEM_PROMPT
+        self.assertIn('НИЧЕГО НЕ ПРИДУМЫВАТЬ', SYSTEM_PROMPT)
+        task = FORMATS['sections']['about']
+        self.assertIn('не выдумывайте', task.lower())
+
+    def test_no_format_lost_its_needs(self):
+        from booking.compose import FORMATS
+        for key, spec in FORMATS.items():
+            self.assertTrue(spec['needs'], f'{key}: не заданы обязательные поля')
+            self.assertTrue(spec['title'], key)

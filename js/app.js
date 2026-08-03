@@ -1324,17 +1324,100 @@
      удобнее печатать сразу в поля, тот не должен проходить интервью. */
   var proj={ data:null, formats:[], mode:'chat', doc:null };
 
+  /* ---------- переключатель проектов ----------
+     Проектов у компании несколько: разработки идут параллельно, заявки
+     подаются в разные программы. Список общий для вкладок «Проект»
+     и «Заявка» — там и там работают с одним выбранным проектом. */
+  var projects = { items: [], max: 20 };
+
+  function loadProjects(){
+    return P.projectsApi.list().then(function(r){
+      if(!r.ok) return false;
+      projects = r.data;
+      var cur = P.getProject();
+      var has = projects.items.some(function(x){ return x.id===cur; });
+      // Выбранного проекта нет (удалили в другой вкладке, первый заход) —
+      // берём первый, иначе все запросы уйдут с несуществующим номером.
+      if(!has) P.setProject(projects.items.length ? projects.items[0].id : null);
+      return true;
+    });
+  }
+
+  function projectBarHtml(){
+    if(!projects.items.length) return '';
+    var cur = P.getProject();
+    var many = projects.items.length > 1;
+    return '<div class="proj-bar">'+
+      '<label class="proj-bar-lbl" for="projsel">Проект</label>'+
+      '<select id="projsel">'+projects.items.map(function(x){
+        return '<option value="'+x.id+'"'+(x.id===cur?' selected':'')+'>'+
+          esc(x.title)+' — заполнен на '+x.completeness+'%</option>';
+      }).join('')+'</select>'+
+      '<button class="btn btn-outline btn-sm" id="projnew">Новый проект</button>'+
+      (many ? '<button class="pick-link" id="projdel">Удалить этот</button>' : '')+
+      '<div id="projbarmsg"></div>'+
+    '</div>';
+  }
+
+  function bindProjectBar(redraw){
+    var sel = el('projsel'); if(!sel) return;
+    sel.onchange = function(){
+      P.setProject(parseInt(sel.value, 10));
+      redraw();
+    };
+    el('projnew').onclick = function(){
+      var t = prompt('Название нового проекта (можно оставить пустым):');
+      if(t === null) return;                 // нажали «Отмена»
+      var btn = this; btn.disabled = true;
+      P.projectsApi.create(t.trim()).then(function(r){
+        btn.disabled = false;
+        if(!r.ok){ el('projbarmsg').innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
+        projects = {items:r.data.items, max:r.data.max};
+        P.setProject(r.data.id);
+        toast('Проект создан');
+        redraw();
+      });
+    };
+    if(el('projdel')) el('projdel').onclick = function(){
+      var cur = projects.items.filter(function(x){ return x.id===P.getProject(); })[0];
+      if(!cur) return;
+      // Вместе с проектом уходят смета и собранные черновики. Про это надо
+      // сказать до удаления, а не после.
+      if(!confirm('Удалить проект «'+cur.title+'»?\n\nВместе с ним удалятся '+
+                  'его смета и все собранные черновики. Отменить будет нельзя.')) return;
+      this.disabled = true;
+      P.projectsApi.remove(cur.id).then(function(r){
+        if(!r.ok){ el('projbarmsg').innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
+        projects = r.data;
+        P.setProject(projects.items.length ? projects.items[0].id : null);
+        toast('Проект удалён');
+        redraw();
+      });
+    };
+  }
+
   function viewCabProject(){
     if(!P.isLogged()) return viewLogin();
     render('<section class="section"><div class="wrap">'+cabTabs('#/cabinet/project')+
-      '<div id="projbox"><div class="cline-meta">Загружаем профиль…</div></div>'+
-    '</div></section>', function(){
+      '<div id="projbox"><div class="cline-meta">Загружаем проект…</div></div>'+
+    '</div></section>', function(){ loadCabProject(); });
+  }
+
+  function loadCabProject(){
+    // Список проектов первым: без него неизвестно, какой номер подставлять
+    // в запрос профиля, и сервер вернул бы первый попавшийся.
+    loadProjects().then(function(){
       // один запрос: сервер отдаёт профиль, описание полей, следующий вопрос
       // и готовность форматов сразу — всё это считается из одного объекта
-      P.profileApi.get().then(function(r){
-        if(!r.ok){ el('projbox').innerHTML='<div class="empty"><h3>Профиль недоступен</h3></div>'; return; }
-        setProfile(r.data); drawProject();
-      });
+      return P.profileApi.get();
+    }).then(function(r){
+      var box=el('projbox'); if(!box) return;
+      if(!r || !r.ok){
+        box.innerHTML='<div class="empty"><h3>Проект недоступен</h3>'+
+          '<p>Обновите страницу или выберите другой проект.</p></div>';
+        return;
+      }
+      setProfile(r.data); drawProject();
     });
   }
 
@@ -1342,9 +1425,10 @@
     var box=el('projbox'); if(!box) return;
     var d=proj.data;
     box.innerHTML=
+      projectBarHtml()+
       '<div class="proj-head">'+
         '<div><div class="eyebrow">Помощник резидента</div>'+
-          '<h1 class="h-lg">'+(d.title?esc(d.title):'Профиль проекта')+'</h1>'+
+          '<h1 class="h-lg">'+(d.title?esc(d.title):'Проект без названия')+'</h1>'+
           '<p class="sub">Расскажите о проекте один раз — дальше помощник соберёт '+
           'из этого черновики разделов заявки, тизер и презентацию.</p></div>'+
         progressHtml(d.completeness)+
@@ -1355,6 +1439,7 @@
       '</div>'+
       '<div id="projmain"></div>'+
       '<div id="projdocs"></div>';
+    bindProjectBar(loadCabProject);
     qsAll('.proj-switch .tab').forEach(function(b){
       b.onclick=function(){ proj.mode=b.getAttribute('data-mode'); drawProject(); };
     });
@@ -1368,49 +1453,116 @@
       '<div class="proj-prog-c">профиль заполнен</div></div>';
   }
 
+  /* ---------- разговор, заполняющий профиль ----------
+     Анкету на тринадцать полей не заполняет никто: человек видит стену
+     полей и уходит. Про свой проект он при этом рассказывает связно, только
+     не по полям, а как получится — в одной фразе и суть, и стадия.
+
+     Поэтому переписка. Человек пишет как умеет, модель раскладывает
+     сказанное по полям и спрашивает про недостающее. Дописать можно в любой
+     момент: следующая реплика либо уточняет, либо добавляет.
+
+     Записанное показывается под ответом списком. Это не украшение:
+     заставить модель не выдумывать нельзя, можно только сделать выдумку
+     заметной сразу, а не в готовой заявке. */
+  var chat = { msgs: [], busy: false };
+
   function drawInterview(){
     var m=el('projmain'); if(!m) return;
-    // вопрос уже пришёл вместе с профилем — за ним не ходим
+    if(!chat.msgs.length) chat.msgs = firstTurn();
+
+    m.innerHTML='<div class="chat">'+
+      '<div class="chat-log" id="chatlog">'+chat.msgs.map(msgHtml).join('')+
+        (chat.busy?'<div class="chat-msg bot"><div class="chat-bubble">'+
+          '<span class="chat-dots">думаю…</span></div></div>':'')+
+      '</div>'+
+      '<div class="chat-input">'+
+        '<label class="sr-only" for="chatmsg">Ваше сообщение</label>'+
+        '<textarea id="chatmsg" rows="2" placeholder="Расскажите про проект своими словами"'+
+          (chat.busy?' disabled':'')+'></textarea>'+
+        '<button class="btn btn-brass" id="chatsend"'+(chat.busy?' disabled':'')+'>Отправить</button>'+
+      '</div>'+
+      '<p class="sub chat-note">Пишите как есть, можно сразу про несколько вещей. '+
+      'Что попало в профиль — видно под каждым ответом, поправить можно '+
+      '<button type="button" class="pick-link" id="chat2form">в форме</button>.</p>'+
+    '</div>';
+
+    var log=el('chatlog'); if(log) log.scrollTop=log.scrollHeight;
+    var send=function(){
+      var t=(el('chatmsg').value||'').trim();
+      if(!t) return;
+      chat.msgs.push({who:'me', text:t});
+      chat.busy=true; drawInterview();
+      P.profileApi.chat(t).then(function(r){
+        chat.busy=false;
+        if(!r.ok){
+          chat.msgs.push({who:'bot', text:'', error:r.msg||'Не получилось отправить'});
+          drawInterview(); return;
+        }
+        var d=r.data;
+        if(d.mode==='off'){
+          // Молчание модели нельзя выдавать за разговор: человек решит,
+          // что его записали, и не станет проверять.
+          chat.msgs.push({who:'bot', text:'',
+            error:'Помощник сейчас не отвечает. Попробуйте позже или заполните форму.'});
+        } else {
+          chat.msgs.push({who:'bot', text:d.reply,
+                          filled:d.filled||[], ask:d.ask});
+          if(d.profile) setProfile(d.profile);
+        }
+        drawInterview();
+        // заполненность и список готовых документов меняются после каждой реплики
+        var head=qsAll('.proj-prog')[0];
+        if(head && proj.data) head.outerHTML=progressHtml(proj.data.completeness);
+        drawDocs();
+      });
+    };
+    el('chatsend').onclick=send;
+    el('chatmsg').onkeydown=function(e){
+      // Enter отправляет, Shift+Enter переносит строку — как в мессенджере
+      if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+    };
+    el('chat2form').onclick=function(){ proj.mode='form'; drawProject(); };
+    if(!chat.busy && el('chatmsg')) el('chatmsg').focus();
+  }
+
+  function firstTurn(){
+    var d=proj.data||{};
     var q=proj.next;
-    if(!q){ m.innerHTML=''; return; }
-    (function(){
-      if(!q.field){
-        m.innerHTML='<div class="proj-done">'+icon('check',20)+
-          '<div><strong>Профиль заполнен полностью.</strong> Можно собирать документы — '+
-          'или поправить что-нибудь через форму.</div></div>';
-        return;
-      }
-      var input=fieldControl('pj_val', q.kind, '', q.options, 4);
-      m.innerHTML='<div class="proj-q">'+
-        '<div class="proj-q-label" id="pj_cap">'+esc(q.label)+'</div>'+
-        // вопрос виден глазами, но программе чтения с экрана поле без подписи
-        // безымянное — связываем явным label
-        '<label class="proj-q-text" for="pj_val">'+esc(q.question)+'</label>'+
-        input+
-        '<div class="proj-q-act">'+
-          '<button class="btn btn-brass" id="pj_save">Сохранить и дальше</button>'+
-          '<button class="pick-link" id="pj_skip">Пропустить пока</button>'+
-        '</div>'+
-        '<div id="pj_msg"></div>'+
-      '</div>';
-      el('pj_val').focus();
-      el('pj_save').onclick=function(){
-        var v=el('pj_val').value.trim();
-        if(!v){ el('pj_msg').innerHTML='<div class="form-msg err">Напишите ответ или нажмите «Пропустить пока».</div>'; return; }
-        var patch={}, btn=this; patch[q.field]=v;
-        btn.disabled=true;
-        P.profileApi.save(patch).then(function(r){
-          // без этого кнопка оставалась мёртвой до перезагрузки страницы
-          btn.disabled=false;
-          if(!r.ok){ el('pj_msg').innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
-          setProfile(r.data);
-          drawProject();
-        });
-      };
-      // «пропустить» не портит профиль: просто перескакиваем к форме, где
-      // видно все поля сразу и можно вернуться к пропущенному
-      el('pj_skip').onclick=function(){ proj.mode='form'; drawProject(); };
-    })();
+    if(q && !q.field)
+      return [{who:'bot', text:'Профиль заполнен полностью. Если что-то изменилось — '+
+               'напишите, я поправлю.'}];
+    var hello = d.completeness
+      ? 'Продолжим. Заполнено '+d.completeness+'% профиля.'
+      : 'Расскажите о проекте своими словами — я разложу сказанное по разделам '+
+        'и спрошу про то, чего не хватит.';
+    var out=[{who:'bot', text:hello}];
+    if(q && q.question) out.push({who:'bot', text:q.question});
+    return out;
+  }
+
+  function msgHtml(m){
+    if(m.who==='me')
+      return '<div class="chat-msg me"><div class="chat-bubble">'+
+        esc(m.text).replace(/\n/g,'<br>')+'</div></div>';
+    var inner='';
+    if(m.error) inner='<div class="chat-err">'+esc(m.error)+'</div>';
+    else {
+      inner=esc(m.text||'').replace(/\n/g,'<br>');
+      if(m.filled && m.filled.length)
+        inner+='<div class="chat-filled"><span>Записал в профиль:</span><ul>'+
+          m.filled.map(function(f){
+            return '<li><b>'+esc(f.label)+'</b> — '+esc(shortVal(f.value))+'</li>';
+          }).join('')+'</ul></div>';
+      if(m.ask && m.ask.question)
+        inner+='<div class="chat-ask">'+esc(m.ask.question)+'</div>';
+    }
+    return '<div class="chat-msg bot"><div class="chat-bubble">'+inner+'</div></div>';
+  }
+
+  function shortVal(v){
+    v=String(v||'');
+    return v.length>160 ? v.slice(0,159)+'…' : v;
   }
 
   /* Один построитель поля для интервью и для формы. Раньше их было два, с
@@ -1461,6 +1613,32 @@
      старым списком «не хватает», потом со свежим — блок заметно мигал. */
   function setProfile(d){
     proj.data=d; proj.formats=d.formats||[]; proj.next=d.next||null;
+    // Название и заполненность в переключателе стареют после каждой правки:
+    // в заголовке уже 23%, а в списке всё ещё 15%. Два разных числа про одно
+    // и то же на одном экране — повод не верить ни одному.
+    var cur=projects.items.filter(function(x){ return x.id===d.id; })[0];
+    if(cur){
+      var changed = cur.completeness!==d.completeness || cur.title!==(d.title||'');
+      cur.completeness=d.completeness;
+      cur.title=d.title || 'Проект без названия';
+      var bar=qsAll('.proj-bar')[0];
+      if(changed && bar){ bar.outerHTML=projectBarHtml(); bindProjectBar(loadCabProject); }
+    }
+    // Проект мог только что появиться в базе — до первого сохранения его
+    // там нет, и переключатель пуст. Подхватываем список, иначе полоса
+    // с выбором проекта не покажется до перезагрузки страницы.
+    if(d.id && !projects.items.some(function(x){ return x.id===d.id; })){
+      P.setProject(d.id);
+      loadProjects().then(function(){
+        var bar=qsAll('.proj-bar')[0];
+        if(bar && projects.items.length){
+          bar.outerHTML=projectBarHtml();
+          bindProjectBar(loadCabProject);
+        } else if(!bar && projects.items.length){
+          drawProject();
+        }
+      });
+    }
   }
 
   /* Кнопки честные: если документ сейчас собрать нельзя, это видно ДО
@@ -1607,7 +1785,7 @@
     render('<section class="section"><div class="wrap">'+cabTabs('#/cabinet/apply')+
       '<div id="applbox"><div class="cline-meta">Загружаем смету…</div></div>'+
     '</div></section>', function(){
-      loadApply();
+      loadProjects().then(loadApply);
     });
   }
 
@@ -1630,6 +1808,7 @@
   function drawApply(){
     var box=el('applbox'); if(!box) return;
     box.innerHTML=
+      projectBarHtml()+
       '<div class="proj-head"><div>'+
         '<div class="eyebrow">Помощник резидента</div>'+
         '<h1 class="h-lg">Заявка на грант</h1>'+
@@ -1639,6 +1818,7 @@
       '</div></div>'+
       '<div id="applbudget"></div>'+
       '<div id="applcheck"></div>';
+    bindProjectBar(function(){ reviewState={items:null,mode:null,busy:false}; loadApply(); });
     drawBudget();
     drawCheck();
   }

@@ -14,7 +14,7 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import formal, querylog
+from . import chat, formal, querylog
 from . import review as reviewer
 from .assist import assist
 from . import compose as composer
@@ -423,22 +423,83 @@ class KpiExtractView(APIView):
         return Response(KpiEntrySerializer(entry).data, status=201)
 
 
-# ---------- помощник резидента: профиль проекта и сборка документов ----------
+# ---------- помощник резидента: проекты и сборка документов ----------
+def _project_id(request):
+    """Какой проект имеется в виду. Ищем и в адресе, и в теле запроса."""
+    v = request.query_params.get('project') if hasattr(request, 'query_params') else None
+    if not v and isinstance(getattr(request, 'data', None), dict):
+        v = request.data.get('project')
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _profile_for(request, create=False):
-    """Профиль своей компании.
+    """Проект своей компании.
+
+    Проектов может быть несколько, нужный называет клиент параметром
+    «project». Если не назвал — берём первый: так продолжают работать
+    и старые обращения, и кабинет сразу после регистрации, когда проект
+    один и выбирать не из чего.
+
+    Чужой проект по номеру не откроется: выборка всегда ограничена своей
+    компанией, и подставленный чужой номер просто ничего не найдёт.
 
     По умолчанию НЕ создаёт строку: читающий запрос не должен ничего писать
-    в базу. Пустой профиль отдаётся несохранённым объектом, а появляется в
+    в базу. Пустой проект отдаётся несохранённым объектом, а появляется в
     базе при первом сохранении.
     """
     company = getattr(getattr(request, 'user', None), 'company', None)
     if not company:
         return None
+    mine = ProjectProfile.objects.filter(company=company)
+    pid = _project_id(request)
+    if pid:
+        found = mine.filter(pk=pid).first()
+        if found:
+            return found
+        # Назвали номер, которого нет или он чужой. Молча подсунуть другой
+        # проект нельзя: человек будет править и собирать документы, думая,
+        # что работает с тем, который выбрал.
+        return None
+    first = mine.first()
+    if first:
+        return first
     if create:
-        profile, _ = ProjectProfile.objects.get_or_create(company=company)
-        return profile
-    return (ProjectProfile.objects.filter(company=company).first()
-            or ProjectProfile(company=company))
+        return ProjectProfile.objects.create(company=company)
+    return ProjectProfile(company=company)
+
+
+# Потолок на число проектов. Не техническое ограничение, а защита от
+# случайного нажатия «создать» два десятка раз: каждый проект добавляет
+# строку в переключатель, и список из полусотни пунктов нечитаем.
+MAX_PROJECTS = 20
+
+
+def _field_display(key, value):
+    """Значение поля так, как его прочтёт человек.
+
+    В поле выбора хранится ключ («lab»), и показывать его в переписке
+    нельзя: «Стадия готовности — lab» человек не проверит, а проверить
+    записанное — весь смысл этого списка.
+    """
+    spec = next((f for f in profile_field_spec() if f['key'] == key), None)
+    for o in (spec or {}).get('options') or []:
+        if o.get('value') == value:
+            return o.get('label', value)
+    return value
+
+
+def _projects_payload(company):
+    """Список проектов для переключателя. Заполненность нужна прямо здесь:
+    по ней видно, какой проект брошен на половине."""
+    items = [{'id': p.id,
+              'title': p.title or 'Проект без названия',
+              'completeness': p.completeness,
+              'updated': p.updated_at.isoformat() if p.updated_at else None}
+             for p in company.projects.all()]
+    return {'items': items, 'max': MAX_PROJECTS}
 
 
 def _profile_payload(profile):
@@ -452,6 +513,7 @@ def _profile_payload(profile):
     field, question = profile.next_question()
     spec = next((f for f in profile_field_spec() if f['key'] == field), None)
     return {
+        'id': profile.pk,
         **ProjectProfileSerializer(profile).data,
         'fields': profile_field_spec(),
         'next': {'field': field, 'question': question,
@@ -551,7 +613,8 @@ class ComposeView(APIView):
             # несохранённым объектом — чтобы ответ собирался тем же _job_payload
             # и не разъехался с настоящим при следующей правке
             return Response(_job_payload(ComposeJob(
-                company=profile.company, fmt=fmt, status='done', mode='need',
+                company=profile.company, profile=profile, fmt=fmt,
+                status='done', mode='need',
                 gaps=[PROFILE_LABELS[k] for k in lack])))
 
         # заодно подчищаем старые: задание читают один раз, через минуту после
@@ -559,7 +622,7 @@ class ComposeView(APIView):
         # проекте нет, и заводить его ради этого незачем.
         ComposeJob.objects.filter(
             created_at__lt=timezone.now() - timedelta(days=1)).delete()
-        job = ComposeJob.objects.create(company=profile.company, fmt=fmt)
+        job = ComposeJob.objects.create(company=profile.company, profile=profile, fmt=fmt)
         # через модуль, а не по имени: связанное при импорте имя нельзя
         # подменить в тестах, и поток запускался бы по-настоящему
         threading.Thread(target=composer.run_job, args=(job.pk,), daemon=True).start()
@@ -769,3 +832,102 @@ class BudgetReviewView(APIView):
         lines = list(profile.budget.select_related('resource')) if profile.pk else []
         items, mode = reviewer.review(profile, lines)
         return Response({'mode': mode, 'items': items})
+
+
+class ProjectsView(APIView):
+    """GET/POST /api/projects/ — список проектов компании и создание нового.
+
+    Проектов у компании бывает несколько: разработки идут параллельно,
+    заявки подаются в разные программы. Смешивать их в одном описании
+    нельзя — из мешанины собирается черновик, не годный никуда.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company = _company(request)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        return Response(_projects_payload(company))
+
+    def post(self, request):
+        company = _company(request)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        if company.projects.count() >= MAX_PROJECTS:
+            return Response({'detail': f'Больше {MAX_PROJECTS} проектов в одном '
+                                       'кабинете не заводится. Удалите ненужный.'},
+                            status=400)
+        title = ''
+        if isinstance(request.data, dict):
+            title = str(request.data.get('title') or '').strip()[:250]
+        p = ProjectProfile.objects.create(company=company, title=title)
+        return Response({'id': p.id, **_projects_payload(company)}, status=201)
+
+
+class ProjectView(APIView):
+    """DELETE /api/projects/<id>/ — удалить проект вместе со сметой.
+
+    Последний проект удалить нельзя: кабинет без единого проекта — это
+    пустая вкладка без объяснения, откуда она такая. Пусть лучше остаётся
+    один, пусть и пустой.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, project_id):
+        company = _company(request)
+        if not company:
+            return Response({'detail': 'Нет профиля компании.'}, status=403)
+        p = ProjectProfile.objects.filter(company=company, pk=project_id).first()
+        if not p:
+            return Response({'detail': 'Проект не найден.'}, status=404)
+        if company.projects.count() <= 1:
+            return Response({'detail': 'Это единственный проект — его нельзя '
+                                       'удалить. Очистите поля или заведите '
+                                       'новый и удалите этот.'}, status=400)
+        p.delete()          # смета и задания на сборку уходят каскадом
+        return Response(_projects_payload(company))
+
+
+class ChatThrottle(UserRateThrottle):
+    """Разговорное заполнение: реплик в диалоге много, каждая платная."""
+    scope = 'chat'
+
+
+class ProfileChatView(APIView):
+    """POST /api/profile/chat/ — реплика разговора, заполняющего профиль.
+
+    Принимает {"project": 1, "message": "делаем покрытие для подшипников"}.
+    Возвращает, что записано в профиль, ответ человеку и следующий вопрос.
+
+    Записанное отдаётся списком нарочно: кабинет показывает его человеку.
+    Заставить модель не выдумывать нельзя, можно только сделать выдумку
+    заметной сразу, а не в готовой заявке. Подробности — в booking/chat.py.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ChatThrottle]
+
+    def post(self, request):
+        if not _profile_for(request):
+            return Response({'detail': 'Проект не найден.'}, status=403)
+        message = ''
+        if isinstance(request.data, dict):
+            message = str(request.data.get('message') or '')
+        if not message.strip():
+            return Response({'detail': 'Напишите что-нибудь о проекте.'}, status=400)
+
+        profile = _profile_for(request, create=True)
+        fill, reply, ask, mode = chat.talk(profile, message)
+        if fill:
+            for k, v in fill.items():
+                setattr(profile, k, v)
+            profile.save(update_fields=list(fill) + ['updated_at'])
+        return Response({
+            'mode': mode,
+            'reply': reply,
+            'ask': ask,
+            # какие поля изменились и на что — кабинет показывает это человеку
+            'filled': [{'key': k, 'label': PROFILE_LABELS[k],
+                        'value': _field_display(k, v)}
+                       for k, v in fill.items()],
+            'profile': _profile_payload(profile),
+        })

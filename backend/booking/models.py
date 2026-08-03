@@ -520,13 +520,14 @@ def profile_field_spec():
 
 
 class ProjectProfile(models.Model):
-    """Единый рассказ резидента о проекте.
+    """Единый рассказ резидента об одном проекте.
 
-    Одна компания — один профиль. Если проектов станет несколько, добавится
-    внешний ключ и выбор; пока это усложнило бы интерфейс без пользы.
+    Проектов у компании может быть несколько: разработки идут параллельно,
+    заявки подаются в разные программы, и смешивать их в одном описании
+    нельзя — собранный из мешанины черновик заявки не годится никуда.
     """
-    company = models.OneToOneField('Company', on_delete=models.CASCADE,
-                                   related_name='profile', verbose_name='Компания')
+    company = models.ForeignKey('Company', on_delete=models.CASCADE,
+                                related_name='projects', verbose_name='Компания')
     created_at = models.DateTimeField('Создан', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлён', auto_now=True)
 
@@ -547,8 +548,9 @@ class ProjectProfile(models.Model):
     needs = models.TextField(PROFILE_LABELS['needs'], blank=True)
 
     class Meta:
-        verbose_name = 'Профиль проекта'
-        verbose_name_plural = 'Профили проектов'
+        verbose_name = 'Проект'
+        verbose_name_plural = 'Проекты резидентов'
+        ordering = ['created_at', 'id']
 
     def __str__(self):
         return self.title or f'Профиль {self.company.name}'
@@ -607,6 +609,12 @@ class ComposeJob(models.Model):
     ]
     company = models.ForeignKey('Company', on_delete=models.CASCADE,
                                 related_name='compose_jobs', verbose_name='Компания')
+    # Задание привязано к проекту: у компании их несколько, и результат
+    # одного проекта не должен подставляться в другой. Допускает пустоту
+    # ради заданий, заведённых до появления нескольких проектов.
+    profile = models.ForeignKey('ProjectProfile', on_delete=models.CASCADE,
+                                null=True, blank=True,
+                                related_name='compose_jobs', verbose_name='Проект')
     fmt = models.CharField('Формат', max_length=32)
     status = models.CharField('Статус', max_length=10, choices=STATUS, default='pending')
     mode = models.CharField('Режим', max_length=10, blank=True)

@@ -157,28 +157,54 @@
     requestChange:function(id,message){ return postJson('/orders/'+id+'/request-change/', {message:message}); }
   };
 
+  /* ---------- проекты резидента ----------
+     Проектов у компании несколько. Номер выбранного подставляется во все
+     обращения к профилю: без него сервер взял бы первый, и правки уходили
+     бы не в тот проект. */
+  var curProject = null;
+  P.setProject = function(id){ curProject = id || null; };
+  P.getProject = function(){ return curProject; };
+  function withProject(path){
+    if(!curProject) return path;
+    return path + (path.indexOf('?')>=0 ? '&' : '?') + 'project=' + curProject;
+  }
+  function bodyWithProject(d){
+    d = d || {};
+    if(curProject) d.project = curProject;
+    return d;
+  }
+
+  P.projectsApi = {
+    list:function(){ return P.apiFetch('/projects/').then(parse); },
+    create:function(title){ return postJson('/projects/', {title:title||''}); },
+    remove:function(id){
+      return P.apiFetch('/projects/'+id+'/', {method:'DELETE'}).then(parse);
+    }
+  };
+
   /* ---------- помощник резидента: профиль проекта ---------- */
   P.profileApi = {
-    get:function(){ return P.apiFetch('/profile/').then(parse); },
-    save:function(d){ return sendJson('PATCH', '/profile/', d); },
-    next:function(){ return P.apiFetch('/profile/next/').then(parse); },
-    formats:function(){ return P.apiFetch('/profile/formats/').then(parse); },
-    compose:function(fmt){ return postJson('/profile/compose/', {format:fmt}); },
+    get:function(){ return P.apiFetch(withProject('/profile/')).then(parse); },
+    save:function(d){ return sendJson('PATCH', withProject('/profile/'), d); },
+    next:function(){ return P.apiFetch(withProject('/profile/next/')).then(parse); },
+    chat:function(message){ return postJson('/profile/chat/', bodyWithProject({message:message})); },
+    formats:function(){ return P.apiFetch(withProject('/profile/formats/')).then(parse); },
+    compose:function(fmt){ return postJson('/profile/compose/', bodyWithProject({format:fmt})); },
     composeJob:function(id){ return P.apiFetch('/profile/compose/'+id+'/').then(parse); },
     // Смета: каждый ответ возвращает смету целиком, а не одну строку —
     // итог считает сервер, и клиенту нечего досчитывать самому.
-    budget:function(){ return P.apiFetch('/profile/budget/').then(parse); },
-    budgetAdd:function(d){ return postJson('/profile/budget/', d); },
-    budgetSet:function(id,d){ return sendJson('PATCH', '/profile/budget/'+id+'/', d); },
+    budget:function(){ return P.apiFetch(withProject('/profile/budget/')).then(parse); },
+    budgetAdd:function(d){ return postJson('/profile/budget/', bodyWithProject(d)); },
+    budgetSet:function(id,d){ return sendJson('PATCH', withProject('/profile/budget/'+id+'/'), d); },
     budgetDel:function(id){
-      return P.apiFetch('/profile/budget/'+id+'/', {method:'DELETE'}).then(parse);
+      return P.apiFetch(withProject('/profile/budget/'+id+'/'), {method:'DELETE'}).then(parse);
     },
-    budgetReview:function(){ return postJson('/profile/budget/review/', {}); }
+    budgetReview:function(){ return postJson('/profile/budget/review/', bodyWithProject({})); }
   };
 
   /* ---------- программы поддержки и проверка на формальные отказы ---------- */
   P.programsApi = {
-    list:function(){ return P.apiFetch('/programs/').then(parse); }
+    list:function(){ return P.apiFetch(withProject('/programs/')).then(parse); }
   };
 
   /* ---------- показатели (KPI по методологии ИНТЦ) ---------- */
