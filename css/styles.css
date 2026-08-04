@@ -29,11 +29,14 @@
   --r-lg:8px;
   --maxw:1200px;
 
-  --display:'Onest',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --serif:'Onest',-apple-system,BlinkMacSystemFont,sans-serif; /* legacy alias → display */
-  --sans:'Onest',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  /* Один шрифт на весь текст: заголовки, тело, кнопки, логотип. Раньше их
+     было три — Onest, Unbounded и Oswald, — и разница между ними читалась
+     как разнобой, а не как система. */
+  --display:'TT Firs Neue',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --serif:var(--display); /* старое имя, оставлено ради существующих правил */
+  --sans:var(--display);
   --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
-  --cond:'Oswald',var(--display);
+  --cond:var(--display);
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -115,7 +118,8 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:21px;color:var(--navy);letter-spacing:.04em;}
 .nav .brand{color:#fff;}
 .brand-ic{width:27px;height:27px;flex-shrink:0;}
-.brand-word{font-family:'Unbounded',var(--display);font-weight:700;letter-spacing:0;font-size:.9em;}
+/* логотип набран тем же шрифтом, что и всё остальное */
+.brand-word{font-family:var(--display);font-weight:800;letter-spacing:.01em;font-size:.95em;}
 .brand-mark{width:15px;height:15px;position:relative;flex-shrink:0;}
 .brand-mark::before,.brand-mark::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--brass);}
 .brand-mark::after{inset:4px;background:var(--brass);border:none;}
