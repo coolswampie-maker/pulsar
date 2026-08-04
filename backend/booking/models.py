@@ -25,6 +25,10 @@ CATEGORIES = [
     ('vacuum', 'Вакуум и испытания'), ('genetics', 'Молекулярная генетика'),
     ('materials', 'Новые материалы'), ('food', 'Функциональное питание'), ('analytics', 'Аналитика'),
 ]
+# У компании свой список: направление компании и направление прибора — разные
+# вещи. Компания может заниматься чем угодно, а «Другое» у прибора означало бы
+# позицию каталога, которую невозможно найти фильтром.
+COMPANY_CATEGORIES = CATEGORIES + [('other', 'Другое')]
 # --- проверка загружаемых документов ---
 # Живёт в модели, а не в сериализаторе: проверка в API не защищает кабинет
 # оператора, где файл кладут через админку в обход сериализатора. Правило
@@ -72,7 +76,7 @@ class Company(models.Model):
                                 related_name='company', verbose_name='Учётная запись')
     name = models.CharField('Организация', max_length=200)
     inn = models.CharField('ИНН', max_length=12, blank=True)
-    category = models.CharField('Направление', max_length=12, choices=CATEGORIES, blank=True)
+    category = models.CharField('Направление', max_length=12, choices=COMPANY_CATEGORIES, blank=True)
     resident = models.BooleanField('Резидент ИНТЦ', default=False)
     confirmed = models.BooleanField('Подтверждена оператором', default=False)
     contact_name = models.CharField('Контактное лицо', max_length=200, blank=True)

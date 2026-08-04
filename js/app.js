@@ -289,41 +289,43 @@
     var featured = P.getResources().filter(function(r){
       return ['eq-massspec','eq-sem','eq-vk1000','eq-nmr','room-cleanroom-a','srv-sem'].indexOf(r.id)>=0;
     });
-    var typeChip=function(t,label){ return '<a class="chip-link" href="#/catalog?type='+t+'">'+label+' <span class="n">'+P.getByType(t).length+'</span></a>'; };
 
     return render(''+
     /* ---- ПОИСКОВЫЙ HERO ---- */
     '<section class="hero2"><div class="wrap"><div class="hero2-grid">'+
       '<div class="hero2-copy">'+
-        '<div class="hero2-cobrand">'+
-          '<svg class="mgu-mark" viewBox="0 0 64 58" aria-hidden="true"><g fill="currentColor">'+
-          '<rect x="5" y="42" width="12" height="15"/><rect x="47" y="42" width="12" height="15"/>'+
-          '<rect x="17" y="36" width="8" height="21"/><rect x="39" y="36" width="8" height="21"/>'+
-          '<rect x="26" y="21" width="12" height="36"/><rect x="29.5" y="13" width="5" height="9"/>'+
-          '<polygon points="32,3 29.5,13 34.5,13"/><circle cx="32" cy="4" r="1.7"/></g></svg>'+
-          '<span>МГУ имени М.В. Ломоносова · ИНТЦ МГУ «Воробьёвы&nbsp;горы»</span></div>'+
-        '<div class="eyebrow">Платформа лабораторной инфраструктуры</div>'+
+        /* Первый экран отвечает на «что это и для меня ли», а не на «чьё это».
+           Раньше принадлежность к МГУ повторялась трижды: служебная полоса,
+           логотип, герб с той же строкой в баннере. Осталось одно упоминание —
+           в заголовке, где оно работает частью предложения, а не регалией. */
         '<h1>Аренда <em>приборов и лабораторий</em> МГУ</h1>'+
-        '<p class="lead">Приборы, чистые комнаты, специалисты и аналитические услуги ИНТЦ МГУ «Воробьёвы горы» — в аренду по заявке.</p>'+
-        '<div class="hs-cap">'+aiBadge()+
-          '<span>Найдите прибор по названию — или опишите задачу</span></div>'+
+        /* Одно предложение, и оно про читателя, а не про товар: человек должен
+           узнать себя раньше, чем начнёт разбираться, что тут сдаётся.
+           Перечень идёт ниже плитками — дублировать его словами незачем. */
+        '<p class="lead">Компании и научные группы берут приборы и помещения '+
+        'под конкретную задачу и не покупают их в собственность.</p>'+
+        /* Строка объясняет, что в поле можно писать не только название из
+           каталога. Значок AI стоит в самом поле, поэтому здесь достаточно
+           слова «помощник» — повторять аббревиатуру дважды подряд незачем. */
+        '<label class="search-cap" for="hq">Опишите задачу или назовите '+
+        'прибор — помощник подберёт подходящее из каталога</label>'+
         '<form class="searchbar ai-bar" id="hsearch" onsubmit="return false">'+
+          /* Значок стоит внутри поля: он объясняет само поле — сюда можно
+             писать не только название прибора, но и задачу словами. */
+          aiBadge()+
           '<input id="hq" aria-label="Поиск по каталогу или описание задачи" '+
-            'placeholder="Напишите запрос или опишите задачу">'+
+            'placeholder="Например: микроскоп">'+
           '<button id="hgo" type="submit"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Найти</button>'+
         '</form>'+
-        '<div class="chips">'+
-          typeChip('room','Лаборатории')+typeChip('equipment','Оборудование')+
-          typeChip('specialist','Специалисты')+typeChip('service','Услуги под ключ')+
-        '</div>'+
+        /* Здесь были ссылки-плитки на четыре раздела с числами. Ровно то же
+           самое, с теми же числами, стоит следующей секцией — только там ещё
+           и с фотографиями. Первый экран остаётся из трёх вещей: заголовок,
+           одно предложение, поиск. */
       '</div>'+
       '<div class="hero2-media">'+
         '<span class="hero2-frame"></span>'+
         img({img:'hero-media',title:'Лаборатория ИНТЦ МГУ'},'','Лаборатория ИНТЦ МГУ «Воробьёвы горы»')+
-        '<div class="hero2-card">'+
-          '<svg class="hero2-card-ic" viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-28 20 20)"><ellipse cx="20" cy="20" rx="11.5" ry="4.6" fill="none" stroke="#CBA968" stroke-width="1.7" opacity="0.5"/><path d="M20 16.4 L17.6 3 L22.4 3 Z" fill="#CBA968"/><path d="M20 23.6 L17.6 37 L22.4 37 Z" fill="#CBA968"/><circle cx="20" cy="20" r="3.6" fill="#fff"/></g></svg>'+
-          '<div><b>Единый оператор</b><span>научной инфраструктуры МГУ</span></div>'+
-        '</div>'+
+
       '</div>'+
       // ответ — отдельная ячейка сетки во всю ширину: иначе диалог ютился бы
       // в левой колонке рядом с картинкой и выглядел приложением к форме
@@ -349,8 +351,10 @@
       '<div>'+
         '<div class="eyebrow">Где мы находимся</div>'+
         '<h2 class="h-lg" style="margin-bottom:16px">Кластер «Ломоносов»</h2>'+
-        '<p class="prose"><p>Инфраструктура ПУЛЬСАР расположена на территории ИНТЦ МГУ «Воробьёвы горы» в кластере «Ломоносов» — научно-технологической долине МГУ имени М.В. Ломоносова.</p><p>Через ПУЛЬСАР доступны лаборатории, чистые комнаты и опытные производства факультетов МГУ и центров коллективного пользования.</p></p>'+
-        '<a class="btn btn-primary" href="#/catalog" style="margin-top:6px">Открыть каталог</a>'+
+        /* Второй абзац перечислял то же, что уже перечислено плитками выше,
+           а кнопка вела в каталог третий раз на одной странице. Секция
+           отвечает на один вопрос — где это находится, — и на нём и остаётся. */
+        '<p class="prose">Инфраструктура ПУЛЬСАР расположена на территории ИНТЦ МГУ «Воробьёвы горы» в кластере «Ломоносов» — научно-технологической долине МГУ имени М.В. Ломоносова. Помещения и приборы принадлежат факультетам МГУ и центрам коллективного пользования.</p>'+
       '</div>'+
       '<div class="figure">'+img({img:'hero',title:'Кластер «Ломоносов»'},'','Кластер «Ломоносов» · ИНТЦ МГУ «Воробьёвы горы»')+
         '<div class="figure-cap">Кластер «Ломоносов» · ИНТЦ МГУ «Воробьёвы горы»</div></div>'+
@@ -358,7 +362,8 @@
 
     /* ---- КАК РАБОТАЕМ (компактно) ---- */
     '<section class="section section-invert"><div class="wrap">'+
-      '<div class="eyebrow">Как работаем</div><h2 class="h-lg" style="margin-bottom:34px">Как проходит бронирование</h2>'+
+      // надзаголовок «Как работаем» говорил ровно то же, что заголовок под ним
+      '<h2 class="h-lg" style="margin-bottom:34px">Как проходит бронирование</h2>'+
       '<div class="steps">'+[
         ['Найдите нужное','Каталог приборов, помещений, специалистов и услуг'],
         ['Соберите заявку','Выберите дату и время — специалист добавится сам, если он нужен'],
@@ -371,7 +376,9 @@
     '<section class="section" style="padding:44px 0 72px"><div class="wrap"><div class="promo">'+
       '<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">'+
         '<div class="promo-badge">−25%</div>'+
-        '<div><h3>Резидентам ИНТЦ МГУ</h3><p>Скидка 25% на бронирование лабораторий, оборудования и услуг. Плюс помощь юристов ИНТЦ и выход на партнёров университета.</p></div>'+
+        // «Плюс помощь юристов и выход на партнёров» — это пересказ того, что
+        // разобрано по пунктам на странице о платформе, куда и ведёт кнопка
+        '<div><h3>Резидентам ИНТЦ МГУ</h3><p>Скидка 25% на бронирование лабораторий, оборудования и услуг.</p></div>'+
       '</div>'+
       '<a class="btn btn-primary" href="#/about">Условия резидентства</a>'+
     '</div></div></section>'
@@ -427,7 +434,8 @@
     '<section class="page-head"><div class="wrap">'+
       '<div class="eyebrow">Каталог инфраструктуры</div>'+
       '<h1 class="h-lg">Аренда и бронирование</h1>'+
-      '<p>Лаборатории, оборудование, специалисты и услуги «под ключ». Приборы с пометкой «с оператором» бронируются вместе со специалистом автоматически.</p>'+
+      // перечень разделов был ровно тот же, что во вкладках строкой ниже
+      '<p>Приборы с пометкой «с оператором» бронируются вместе со специалистом автоматически.</p>'+
     '</div></section>'+
     '<section class="section-sm"><div class="wrap">'+
       assistBoxHtml()+
@@ -467,10 +475,14 @@
   function assistBoxHtml(){
     return '<div class="assist" id="assistbox">'+
       '<div class="assist-in">'+
-        '<label class="assist-cap" for="aq">'+aiBadge()+
-          'Найдите прибор по названию — или опишите задачу своими словами</label>'+
+        '<label class="search-cap" for="aq">Опишите задачу или назовите '+
+        'прибор — помощник подберёт подходящее из каталога</label>'+
         '<div class="assist-row">'+
-          '<input id="aq" placeholder="Напишите запрос или опишите задачу">'+
+          // значок внутри поля, как на главной: он про поле, а не про раздел
+          '<div class="ai-field">'+aiBadge()+
+            '<input id="aq" aria-label="Поиск по каталогу или описание задачи" '+
+              'placeholder="Например: микроскоп">'+
+          '</div>'+
           '<button class="btn btn-brass" id="aqgo">Подобрать</button>'+
         '</div>'+
         '<div id="aqres"></div>'+
@@ -905,7 +917,7 @@
       b.disabled=false; b.textContent='В смету проекта';
       if(!r.ok){ msg.innerHTML='<div class="form-msg err">'+esc(r.msg)+'</div>'; return; }
       msg.innerHTML='<div class="form-msg ok">Добавлено. '+
-        '<a href="#/cabinet/apply">Смета проекта →</a></div>';
+        '<a href="#/cabinet/project">Смета проекта →</a></div>';
     });
   }
   /* Сколько тарифных единиц заложить в смету. Правила берём из тех же
@@ -1306,6 +1318,13 @@
      Данные — только с бэкенда, по токену компании.
      ========================================================== */
   var CATS = P.categories || {};
+  /* У компании список направлений на один пункт длиннее, чем у прибора.
+     Компания может заниматься чем угодно, а «Другое» у позиции каталога
+     означало бы прибор, который не найти фильтром. Тот же раскол на бэкенде:
+     CATEGORIES для ресурса, COMPANY_CATEGORIES для компании. */
+  var COMPANY_CATS = {};
+  Object.keys(CATS).forEach(function(k){ COMPANY_CATS[k]=CATS[k]; });
+  COMPANY_CATS.other = 'Другое';
 
   function needAuth(){
     if(P.isLogged()) return false;
@@ -1349,9 +1368,11 @@
     var many = projects.items.length > 1;
     return '<div class="proj-bar">'+
       '<label class="proj-bar-lbl" for="projsel">Проект</label>'+
+      // процента заполненности здесь тоже нет: он мерил длину анкеты,
+      // а не готовность заявки, и в списке проектов только шумел
       '<select id="projsel">'+projects.items.map(function(x){
         return '<option value="'+x.id+'"'+(x.id===cur?' selected':'')+'>'+
-          esc(x.title)+' — заполнен на '+x.completeness+'%</option>';
+          esc(x.title)+'</option>';
       }).join('')+'</select>'+
       '<button class="btn btn-outline btn-sm" id="projnew">Новый проект</button>'+
       (many ? '<button class="pick-link" id="projdel">Удалить этот</button>' : '')+
@@ -1431,26 +1452,26 @@
           '<h1 class="h-lg">'+(d.title?esc(d.title):'Проект без названия')+'</h1>'+
           '<p class="sub">Расскажите о проекте один раз — дальше помощник соберёт '+
           'из этого черновики разделов заявки, тизер и презентацию.</p></div>'+
-        progressHtml(d.completeness)+
+        /* Шкалы «профиль заполнен на N%» здесь больше нет. Процент считался
+           по числу непустых полей, то есть мерил длину анкеты, а не готовность
+           заявки: набор коротких отписок давал 100%. Чего не хватает, честнее
+           говорит сам черновик — там пропуски помечены прямо в тексте. */
       '</div>'+
       '<div class="proj-switch">'+
         '<button class="tab'+(proj.mode==='chat'?' on':'')+'" data-mode="chat">Рассказать в диалоге</button>'+
         '<button class="tab'+(proj.mode==='form'?' on':'')+'" data-mode="form">Заполнить формой</button>'+
       '</div>'+
       '<div id="projmain"></div>'+
-      '<div id="projdocs"></div>';
+      '<div id="projdocs"></div>'+
+      // смета того же проекта: раньше жила отдельной вкладкой «Заявка»
+      '<div id="applbudget"></div>';
     bindProjectBar(loadCabProject);
     qsAll('.proj-switch .tab').forEach(function(b){
       b.onclick=function(){ proj.mode=b.getAttribute('data-mode'); drawProject(); };
     });
     if(proj.mode==='chat') drawInterview(); else drawProjectForm();
     drawDocs();
-  }
-
-  function progressHtml(pct){
-    return '<div class="proj-prog"><div class="proj-prog-n">'+pct+'%</div>'+
-      '<div class="proj-prog-bar"><i style="width:'+pct+'%"></i></div>'+
-      '<div class="proj-prog-c">профиль заполнен</div></div>';
+    loadBudget();
   }
 
   /* ---------- разговор, заполняющий профиль ----------
@@ -1511,9 +1532,7 @@
           if(d.profile) setProfile(d.profile);
         }
         drawInterview();
-        // заполненность и список готовых документов меняются после каждой реплики
-        var head=qsAll('.proj-prog')[0];
-        if(head && proj.data) head.outerHTML=progressHtml(proj.data.completeness);
+        // список готовых документов меняется после каждой реплики
         drawDocs();
       });
     };
@@ -1600,8 +1619,6 @@
         btn.disabled=false;
         if(!r.ok){ el('pf_msg').innerHTML='<span class="form-msg err">'+esc(r.msg)+'</span>'; return; }
         setProfile(r.data);
-        var head=qsAll('.proj-prog')[0];
-        if(head) head.outerHTML=progressHtml(r.data.completeness);
         drawDocs();
         el('pf_msg').innerHTML='<span class="form-msg ok">Сохранено</span>';
       });
@@ -1778,49 +1795,22 @@
      с настоящими ценами, которые идут в заявку статьёй расходов. Проверка
      сравнивает эту же сумму с пределом гранта. Разнеси их по разным
      вкладкам — и «смета превышает лимит» пришлось бы искать. */
-  var appl={ budget:null, programs:null, pick:[] };
+  var appl={ budget:null, pick:[] };
 
-  function viewCabApply(){
-    if(!P.isLogged()) return viewLogin();
-    render('<section class="section"><div class="wrap">'+cabTabs('#/cabinet/apply')+
-      '<div id="applbox"><div class="cline-meta">Загружаем смету…</div></div>'+
-    '</div></section>', function(){
-      loadProjects().then(loadApply);
-    });
-  }
-
-  function loadApply(){
-    return Promise.all([P.profileApi.budget(), P.programsApi.list()]).then(function(r){
-      var box=el('applbox'); if(!box) return;
-      if(!r[0].ok){
-        box.innerHTML='<div class="empty"><h3>Смета недоступна</h3>'+
-          '<p>'+esc(r[0].msg||'Попробуйте обновить страницу.')+'</p></div>';
+  /* Страницы «Заявка на грант» больше нет — смета рисуется внутри проекта.
+     Здесь остался только её загрузчик. */
+  function loadBudget(){
+    return P.profileApi.budget().then(function(r){
+      var m=el('applbudget'); if(!m) return;
+      if(!r.ok){
+        m.innerHTML='<h2 class="h-md" style="margin:36px 0 4px">Смета проекта</h2>'+
+          '<div class="form-msg err">'+esc(r.msg||'Смета сейчас недоступна, обновите страницу.')+'</div>';
         return;
       }
-      appl.budget=r[0].data;
-      // Проверка может не ответить, а смета — ответить: показываем то, что
-      // есть, вместо пустой страницы. Молчаливый ноль хуже честного пробела.
-      appl.programs=r[1].ok ? r[1].data : null;
-      drawApply();
+      appl.budget=r.data;
+      reviewState={items:null,mode:null,busy:false};
+      drawBudget();
     });
-  }
-
-  function drawApply(){
-    var box=el('applbox'); if(!box) return;
-    box.innerHTML=
-      projectBarHtml()+
-      '<div class="proj-head"><div>'+
-        '<div class="eyebrow">Помощник резидента</div>'+
-        '<h1 class="h-lg">Заявка на грант</h1>'+
-        '<p class="sub">Здесь готовят заявку на грант или другую меру '+
-        'поддержки: считают смету работ в лабораториях и проверяют, '+
-        'не отсеют ли заявку по формальным причинам.</p>'+
-      '</div></div>'+
-      '<div id="applbudget"></div>'+
-      '<div id="applcheck"></div>';
-    bindProjectBar(function(){ reviewState={items:null,mode:null,busy:false}; loadApply(); });
-    drawBudget();
-    drawCheck();
   }
 
   /* ---------- смета ---------- */
@@ -1987,80 +1977,21 @@
     if(!r.ok){ toast(r.msg||'Не получилось сохранить смету'); drawBudget(); return; }
     appl.budget=r.data;
     drawBudget();
-    // Сумма сметы — вход проверки: не перечитав программы, мы оставили бы
-    // на экране вывод, посчитанный по старой смете.
-    P.programsApi.list().then(function(p){
-      appl.programs=p.ok?p.data:null; drawCheck();
-    });
   }
 
-  /* ---------- проверка на формальные отказы ---------- */
-  var VERDICT={ ok:['Формальных препятствий не видно','ok'],
-                warn:['Стоит посмотреть','warn'],
-                stop:['Заявку отклонят','stop'] };
+  /* Блок «Условия программ» отсюда убран: он сверял профиль и смету с
+     условиями конкурсов, а конкурсов оператор пока ни одного не завёл — на
+     экране висел серый прямоугольник с обещанием. Серверная часть цела:
+     модель Program, /api/programs/ и формальная проверка в formal.py
+     работают и покрыты тестами. Разметку вернём вместе с разбором
+     приложенного положения о конкурсе. */
 
-  function drawCheck(){
-    var m=el('applcheck'); if(!m) return;
-    var h2='<h2 class="h-md" style="margin:36px 0 4px">Условия программ</h2>';
-    var head=h2+'<p class="sub" style="margin-bottom:14px">У каждого конкурса '+
-      'свои требования к заявителю — по ним отсеивают ещё до того, как '+
-      'прочитают суть проекта. Сверяем ваши данные: сроки подачи, размер '+
-      'гранта, возраст и численность компании, ОКВЭД, стадия проекта.</p>';
-    if(appl.programs===null){
-      m.innerHTML=head+'<div class="form-msg err">Проверка сейчас недоступна. '+
-        'Смета сохранена — вернитесь к проверке позже.</div>';
-      return;
-    }
-    var list=appl.programs.programs||[];
-    // Готовность профиля — общая для всех программ, поэтому одной строкой
-    // над списком: в каждой карточке она читалась бы по три раза подряд.
-    var pf=appl.programs.profile, pfHtml='';
-    if(pf && pf.level!=='ok'){
-      pfHtml='<div class="prg-common '+pf.level+'"><span>'+esc(pf.text)+'</span>'+
-        (pf.fix?'<em>'+esc(pf.fix)+'</em>':'')+
-        '<a class="pick-link" href="#/cabinet/project">Дозаполнить профиль →</a></div>';
-    }
-    if(!list.length){
-      // Ни слова про профиль: проверять пока не с чем, и предупреждение
-      // о незаполненном профиле было бы третьим серым блоком подряд
-      // на странице, где и так ничего нет.
-      // Без описания того, что мы сверяем: сверять пока не с чем, и абзац
-      // обещал бы работу, которой на странице ещё нет.
-      m.innerHTML=h2+'<div class="bud-empty" style="margin-top:10px">Оператор '+
-        'пока не добавил ни одного конкурса. Когда добавит, здесь будет '+
-        'видно, под какие вы подходите, а где заявку отклонят по формальным '+
-        'причинам — из-за срока, размера компании или ОКВЭД.</div>';
-      return;
-    }
-    m.innerHTML=head+pfHtml+'<div class="prg-list">'+list.map(prgCard).join('')+'</div>';
-  }
-
-  function prgCard(p){
-    var v=VERDICT[p.verdict]||VERDICT.warn;
-    var line=function(i,cls){
-      return '<li class="prg-i '+cls+'"><span>'+esc(i.text)+'</span>'+
-        (i.fix?'<em>'+esc(i.fix)+'</em>':'')+'</li>';
-    };
-    return '<div class="prg-card '+v[1]+'">'+
-      '<div class="prg-head">'+
-        '<div><div class="prg-name">'+
-          (p.url?'<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.name)+'</a>'
-                :esc(p.name))+'</div>'+
-          (p.fund?'<div class="prg-fund">'+esc(p.fund)+'</div>':'')+'</div>'+
-        '<div class="prg-verdict">'+esc(v[0])+'</div>'+
-      '</div>'+
-      '<ul class="prg-items">'+
-        p.stop.map(function(i){ return line(i,'stop'); }).join('')+
-        p.warn.map(function(i){ return line(i,'warn'); }).join('')+
-        p.ok.map(function(i){ return line(i,'ok'); }).join('')+
-      '</ul>'+
-      (p.notes?'<div class="prg-notes">'+esc(p.notes)+'</div>':'')+
-    '</div>';
-  }
 
   function cabTabs(active){
+    /* Вкладки «Заявка» здесь больше нет. Она читалась повтором «Проекта»:
+       та же шапка «Помощник резидента», тот же выбор проекта, а из своего —
+       только смета. Смета переехала внутрь «Проекта», к которому и относится. */
     var t=[['#/cabinet','Профиль'],['#/cabinet/project','Проект'],
-           ['#/cabinet/apply','Заявка'],
            ['#/cabinet/orders','Мои заявки'],['#/cabinet/kpi','Показатели']];
     return '<div class="cab-tabs">'+t.map(function(x){
       return '<a href="'+x[0]+'" class="cab-tab'+(x[0]===active?' on':'')+'">'+x[1]+'</a>';
@@ -2166,8 +2097,8 @@
     var box=el('cabbody'); if(!box) return;
     var c=P.company();
     if(!c){ location.hash='#/login'; return; }
-    var opts=Object.keys(CATS).map(function(k){
-      return '<option value="'+k+'"'+(c.category===k?' selected':'')+'>'+esc(CATS[k])+'</option>';
+    var opts=Object.keys(COMPANY_CATS).map(function(k){
+      return '<option value="'+k+'"'+(c.category===k?' selected':'')+'>'+esc(COMPANY_CATS[k])+'</option>';
     }).join('');
     box.innerHTML=statusNote(c)+
       '<div class="checkout-form"><h3>Данные организации</h3>'+
@@ -2526,7 +2457,9 @@
       case 'login': return viewLogin();
       case 'cabinet':
         if(seg[1]==='project') return viewCabProject();
-        if(seg[1]==='apply') return viewCabApply();
+        // Старый адрес сметы. Оставлен рабочим: ссылка могла быть в закладках
+        // или в письме, и упереться в пустую страницу человеку неоткуда понять.
+        if(seg[1]==='apply'){ location.replace('#/cabinet/project'); return; }
         if(seg[1]==='orders') return viewCabOrders();
         if(seg[1]==='kpi') return viewCabKpi();
         return viewCabinet();
@@ -2585,7 +2518,10 @@
   })();
   qsAll('#navlinks a').forEach(function(a){ a.addEventListener('click',function(){ setNavOpen(false); }); });
 
-  // ссылки «Кабинет оператора» ведут в Django-админку
+  /* Здесь проставлялся адрес админки ссылкам с data-admin. Таких ссылок на
+     публичных страницах больше нет: оператор заходит на /admin/ напрямую.
+     Обработчик оставлен на случай, если ссылка понадобится во внутренней
+     странице, — он ничего не делает, пока data-admin нигде не стоит. */
   qsAll('a[data-admin]').forEach(function(a){ a.setAttribute('href', window.PULSAR_ADMIN_URL || '/admin/'); a.setAttribute('target','_blank'); });
 
   // Старт: подтягиваем из бэкенда каталог и занятость, затем рисуем страницу.

@@ -2314,6 +2314,78 @@ class AdminLanguageTests(TestCase):
         self.assertIn('Добавить компанию', html)
 
 
+class AdminDateWidgetTests(TestCase):
+    """Дата регистрации компании — нативное поле браузера, а не календарик.
+
+    Стандартный виджет Django листается только по месяцам: до 2019 года это
+    восемьдесят нажатий стрелки. У <input type="date"> год выбирается сразу.
+    Цена ошибки здесь тихая: если значение отдать не в ISO, браузер покажет
+    пустое поле, оператор решит, что дата не заполнена, и впишет заново.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        User.objects.create_superuser('op', 'op@x.ru', 'Nauka2026lab')
+        self.c.login(username='op', password='Nauka2026lab')
+        u = User.objects.create_user('firm@x.ru', 'firm@x.ru', 'Nauka2026lab')
+        self.company = Company.objects.create(
+            user=u, name='ООО «Дата»', founded=date(2019, 2, 19))
+
+    def test_field_is_native_date_input(self):
+        html = self.c.get(f'/admin/booking/company/{self.company.pk}/change/').content.decode()
+        self.assertIn('type="date"', html, 'поле даты не нативное')
+
+    def test_saved_date_is_rendered_in_iso(self):
+        """Точечный формат браузер не понимает и покажет пустое поле."""
+        html = self.c.get(f'/admin/booking/company/{self.company.pk}/change/').content.decode()
+        self.assertIn('value="2019-02-19"', html)
+        self.assertNotIn('value="19.02.2019"', html)
+
+    def test_iso_date_from_browser_is_accepted(self):
+        """Обратный путь: то, что отправляет <input type="date">, должно сохраниться."""
+        from booking.models import COMPANY_CATEGORIES
+        r = self.c.post(f'/admin/booking/company/{self.company.pk}/change/', {
+            'user': self.company.user_id, 'name': 'ООО «Дата»', 'inn': '',
+            'category': '', 'contact_name': '', 'phone': '',
+            'ogrn': '', 'okved': '', 'founded': '2016-11-03',
+            '_continue': 'Сохранить и продолжить',
+        })
+        self.assertIn(r.status_code, (200, 302))
+        self.company.refresh_from_db()
+        self.assertEqual(self.company.founded, date(2016, 11, 3))
+        self.assertIn(('other', 'Другое'), COMPANY_CATEGORIES)
+
+
+class CompanyCategoryTests(TestCase):
+    """«Другое» есть у компании и не должно появиться у позиции каталога.
+
+    Списки общие только по началу: направление компании и направление прибора
+    разные. «Другое» на ресурсе означало бы позицию, которую не найти
+    фильтром в каталоге.
+    """
+
+    def test_company_has_other(self):
+        keys = dict(Company._meta.get_field('category').choices)
+        self.assertIn('other', keys)
+        self.assertEqual(keys['other'], 'Другое')
+
+    def test_resource_has_no_other(self):
+        keys = dict(Resource._meta.get_field('category').choices)
+        self.assertNotIn('other', keys)
+
+    def test_company_accepts_other_through_api(self):
+        """Список в модели ничего не стоит, если сериализатор значение отвергнет."""
+        c = Client()
+        r = c.post('/api/auth/register/', content_type='application/json',
+                   data=json.dumps({'email': 'oth@r.ru', 'password': 'Nauka2026lab',
+                                    'name': 'ООО «Прочее»', 'consent': True}))
+        auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        r = c.patch('/api/auth/me/', data=json.dumps({'category': 'other'}),
+                    content_type='application/json', **auth)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(Company.objects.get(name='ООО «Прочее»').category, 'other')
+
+
 class HealthTests(TestCase):
     """Точка проверки живости для внешнего монитора."""
 

@@ -19,35 +19,25 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://pulsar.jaglionrus.ru/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%230E2A47'/%3E%3Cg transform='rotate(-28 20 20)'%3E%3Cellipse cx='20' cy='20' rx='11.5' ry='4.6' fill='none' stroke='%23CBA968' stroke-width='2'/%3E%3Cpath d='M20 16.4 L17.6 5 L22.4 5 Z' fill='%23CBA968'/%3E%3Cpath d='M20 23.6 L17.6 35 L22.4 35 Z' fill='%23CBA968'/%3E%3Ccircle cx='20' cy='20' r='3.6' fill='%23fff'/%3E%3C/g%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/fonts.css?v=40">
-<link rel="stylesheet" href="css/styles.css?v=40">
+<link rel="stylesheet" href="css/fonts.css?v=42">
+<link rel="stylesheet" href="css/styles.css?v=42">
 </head>
 <body>
 
 <a class="skip-link" href="#app">Перейти к содержимому</a>
 
-<!-- TOPBAR -->
-<div class="topbar">
-  <div class="wrap topbar-in">
-    <span class="topbar-mgu">
-      <svg class="mgu-mark" viewBox="0 0 64 58" aria-hidden="true"><g fill="currentColor">
-        <rect x="5" y="42" width="12" height="15"/><rect x="47" y="42" width="12" height="15"/>
-        <rect x="17" y="36" width="8" height="21"/><rect x="39" y="36" width="8" height="21"/>
-        <rect x="26" y="21" width="12" height="36"/><rect x="29.5" y="13" width="5" height="9"/>
-        <polygon points="32,3 29.5,13 34.5,13"/><circle cx="32" cy="4" r="1.7"/></g></svg>
-      МГУ имени М.В. Ломоносова · ИНТЦ МГУ «Воробьёвы горы» · кластер «Ломоносов»
-    </span>
-    <span class="topbar-right">
-      <a href="mailto:info@pulsar-mgu.ru">info@pulsar-mgu.ru</a>
-      <a data-admin href="/admin/">Кабинет оператора</a>
-    </span>
-  </div>
-</div>
+<!-- Верхней служебной полосы здесь больше нет.
+     Она давала вторую полосу меню и первое из трёх упоминаний МГУ подряд:
+     полоса, логотип в шапке, герб в баннере. Посетитель успевал трижды
+     прочитать, чьё это, раньше, чем что это. Почта и вход для оператора
+     остались в подвале — там их и ищут. -->
 
 <!-- NAV -->
 <header class="nav">
   <div class="wrap nav-inner">
-    <a href="#/" class="brand"><svg class="brand-ic" viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-28 20 20)"><ellipse cx="20" cy="20" rx="11.5" ry="4.6" fill="none" stroke="#0E2A47" stroke-width="1.7" opacity="0.45"/><path d="M20 16.4 L17.6 3 L22.4 3 Z" fill="#9C7638"/><path d="M20 23.6 L17.6 37 L22.4 37 Z" fill="#9C7638"/><circle cx="20" cy="20" r="3.6" fill="#0E2A47"/></g></svg><span class="brand-word">ПУЛЬСАР</span></a>
+    <!-- Знак в шапке отрисован белым и латунью: фон шапки тёмно-синий,
+         прежняя тёмно-синяя заливка на нём была бы не видна. -->
+    <a href="#/" class="brand"><svg class="brand-ic" viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-28 20 20)"><ellipse cx="20" cy="20" rx="11.5" ry="4.6" fill="none" stroke="#ffffff" stroke-width="1.7" opacity="0.4"/><path d="M20 16.4 L17.6 3 L22.4 3 Z" fill="#CBA968"/><path d="M20 23.6 L17.6 37 L22.4 37 Z" fill="#CBA968"/><circle cx="20" cy="20" r="3.6" fill="#ffffff"/></g></svg><span class="brand-word">ПУЛЬСАР</span></a>
     <nav class="nav-links" id="navlinks">
       <a href="#/" data-nav="/">Главная</a>
       <a href="#/catalog" data-nav="/catalog">Каталог</a>
@@ -113,7 +103,10 @@
           <li><a href="#/about">О платформе</a></li>
           <li><a href="#/about">Резидентам ИНТЦ</a></li>
           <li><a href="#/contacts">Контакты</a></li>
-          <li><a data-admin href="/admin/">Кабинет оператора</a></li>
+          <!-- Ссылки «Кабинет оператора» здесь больше нет. Это вход в
+               админку, и посетителю сайта он не нужен: оператор заходит
+               по прямому адресу /admin/. Публичная ссылка только
+               показывает посторонним, куда стучаться. -->
         </ul>
       </div>
       <div>
@@ -144,13 +137,13 @@
   window.PULSAR_ADMIN_URL = window.PULSAR_ADMIN_URL || '/admin/';
 </script>
 <!-- данные (классические скрипты → работают и с file://, и с GitHub Pages) -->
-<script src="data/resources.js?v=40"></script>
-<script src="data/images.js?v=40"></script>
-<script src="data/synonyms.js?v=40"></script>
+<script src="data/resources.js?v=42"></script>
+<script src="data/images.js?v=42"></script>
+<script src="data/synonyms.js?v=42"></script>
 <!-- логика -->
-<script src="js/images.js?v=40"></script>
-<script src="js/api.js?v=40"></script>
-<script src="js/store.js?v=40"></script>
-<script src="js/app.js?v=40"></script>
+<script src="js/images.js?v=42"></script>
+<script src="js/api.js?v=42"></script>
+<script src="js/store.js?v=42"></script>
+<script src="js/app.js?v=42"></script>
 </body>
 </html>

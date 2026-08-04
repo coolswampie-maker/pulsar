@@ -4,9 +4,11 @@
  • Заявки — мини-CRM: статусы, состав, контакты, массовые действия.
  • Календарь занятости.
 """
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
+from django.db import models as djmodels
 from django.forms.models import BaseInlineFormSet
 
 from .models import (PROFILE_KEYS, BookingLine, BudgetLine, BusySlot, Company,
@@ -142,6 +144,17 @@ class BookingLineInline(admin.TabularInline):
 
 @admin.register(Company)
 class CompanyAdmin(RuTitlesMixin, admin.ModelAdmin):
+    # Дата регистрации компании — это часто позапрошлый год, а календарик
+    # Django листается только по месяцам: до 2019 года пришлось бы нажать
+    # стрелку восемьдесят раз. Нативное поле браузера даёт выбор года сразу
+    # и позволяет просто набрать дату с клавиатуры.
+    # Формат ISO обязателен: <input type="date"> не понимает «19.02.2024» и
+    # молча покажет пустое поле, потеряв уже сохранённое значение из виду.
+    # На ввод Django принимает и ISO, и точечный формат (DATE_INPUT_FORMATS ru).
+    formfield_overrides = {
+        djmodels.DateField: {
+            'widget': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d')},
+    }
     list_display = ('name', 'inn', 'confirmed', 'resident', 'contact_name', 'phone', 'created_at')
     list_filter = ('confirmed', 'resident', 'category')
     list_editable = ('confirmed', 'resident')

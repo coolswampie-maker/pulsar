@@ -105,11 +105,15 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 @media(max-width:680px){ .topbar{display:none;} }
 
 /* ============================================================ NAV */
-.nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+/* Шапка тёмно-синяя: она отделяет служебный слой от содержимого страницы и
+   держит фирменный цвет наверху, а не только в подвале. Всё внутри — белым;
+   рамки и подложки берём полупрозрачным белым, чтобы не заводить второй синий. */
+.nav{position:sticky;top:0;z-index:100;background:rgba(14,42,71,.96);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.1);}
 .nav-inner{display:flex;align-items:center;height:68px;gap:36px;}
-.nav-search{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);border-radius:var(--r);color:var(--navy);transition:.15s;flex-shrink:0;}
-.nav-search:hover{border-color:var(--navy);background:var(--paper-2);}
+.nav-search{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.26);border-radius:var(--r);color:#fff;transition:.15s;flex-shrink:0;}
+.nav-search:hover{border-color:#fff;background:rgba(255,255,255,.1);}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:21px;color:var(--navy);letter-spacing:.04em;}
+.nav .brand{color:#fff;}
 .brand-ic{width:27px;height:27px;flex-shrink:0;}
 .brand-word{font-family:'Unbounded',var(--display);font-weight:700;letter-spacing:0;font-size:.9em;}
 .brand-mark{width:15px;height:15px;position:relative;flex-shrink:0;}
@@ -117,17 +121,33 @@ h1,h2,h3,h4{font-family:var(--display);font-weight:700;line-height:1.13;color:va
 .brand-mark::after{inset:4px;background:var(--brass);border:none;}
 .brand small{display:block;font-family:var(--sans);font-size:9.5px;letter-spacing:.22em;color:var(--ink-soft);font-weight:600;margin-top:-2px;}
 .nav-links{display:flex;gap:4px;flex:1;justify-content:center;}
-.nav-links a{font-size:15px;color:var(--ink-soft);padding:8px 14px;border-radius:var(--r);transition:.16s;font-weight:600;white-space:nowrap;}
-.nav-links a:hover{color:var(--navy);background:var(--paper-2);}
-.nav-links a.active{color:var(--navy);}
-.nav-links a.active::after{content:"";display:block;height:2px;background:var(--brass);border-radius:2px;margin-top:5px;}
-.nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
-.cart-btn{position:relative;display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border:1px solid var(--line);border-radius:var(--r);background:var(--white);font-weight:600;font-size:14px;transition:.16s;}
-.cart-btn:hover{border-color:var(--navy);}
+.nav-links a{font-size:15px;color:rgba(255,255,255,.78);padding:8px 14px;border-radius:var(--r);transition:.16s;font-weight:600;white-space:nowrap;}
+.nav-links a:hover{color:#fff;background:rgba(255,255,255,.1);}
+.nav-links a.active{color:#fff;}
+.nav-links a.active::after{content:"";display:block;height:2px;background:var(--brass-soft);border-radius:2px;margin-top:5px;}
+/* min-width:0 обязателен: без него flex-элемент не сжимается уже своего
+   содержимого, и длинное название компании распирало шапку за край экрана. */
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;min-width:0;}
+.nav-links{min-width:0;}
+/* Кнопка входа живёт в шапке, поэтому и описана здесь: раньше её правила
+   стояли ниже медиазапросов и перебивали их — телефонные отступы не работали. */
+.cab-link{padding:9px 14px;border:1px solid rgba(255,255,255,.26);border-radius:var(--r);color:#fff;
+  font-weight:600;font-size:14px;white-space:nowrap;transition:.16s;}
+.cab-link:hover{border-color:#fff;background:rgba(255,255,255,.1);}
+/* вошёл — латунная заливка: на синем это единственное цветное пятно в шапке */
+.cab-link.on{border-color:var(--brass-soft);background:var(--brass-soft);color:var(--navy-deep);}
+/* После входа здесь стоит название компании. Длинное («ООО НПО …») раньше
+   растягивало шапку за правый край экрана — на любой ширине, от телефона до
+   ноутбука. Поэтому только эта кнопка ужимается и обрезается многоточием:
+   слово «Войти» так резать нельзя, а название компании узнаётся по началу. */
+.cab-link.on{flex:0 1 auto;min-width:4em;max-width:230px;overflow:hidden;text-overflow:ellipsis;}
+.cart-btn{position:relative;display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border:1px solid rgba(255,255,255,.26);border-radius:var(--r);background:transparent;color:#fff;font-weight:600;font-size:14px;transition:.16s;}
+.cart-btn:hover{border-color:#fff;background:rgba(255,255,255,.1);}
 .cart-count{background:var(--brass);color:#fff;font-size:12px;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px;}
 .cart-ic{display:none;}
-.cart-count[data-empty="1"]{background:var(--line);color:var(--ink-soft);}
-.nav-toggle{display:none;}
+/* пустая корзина на синем: серая подложка сливалась бы с фоном шапки */
+.cart-count[data-empty="1"]{background:rgba(255,255,255,.2);color:rgba(255,255,255,.85);}
+.nav-toggle{display:none;color:#fff;}
 
 /* ============================================================ HERO */
 .hero{position:relative;background:var(--navy-deep);color:#fff;overflow:hidden;}
@@ -497,10 +517,6 @@ a.val:hover{color:var(--brass);}
 .searchbar button{background:var(--navy);color:#fff;font-weight:700;font-size:15px;padding:13px 26px;border-radius:8px;display:inline-flex;align-items:center;gap:8px;transition:.15s;}
 .searchbar button:hover{background:var(--navy-deep);}
 .searchbar button:disabled{opacity:.62;cursor:default;}
-.chips{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:20px;}
-.chip-link{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:22px;padding:7px 15px;font-size:13.5px;font-weight:600;color:var(--navy);transition:.15s;}
-.chip-link:hover{border-color:var(--navy);}
-.chip-link .n{color:var(--brass);font-weight:700;}
 
 /* плитки категорий (marketplace) */
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;}
@@ -508,7 +524,12 @@ a.val:hover{color:var(--brass);}
 .tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:.4s;}
 .tile::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,30,51,.15) 30%,rgba(10,30,51,.9) 100%);}
 .tile:hover img{transform:scale(1.05);}
-.tile-body{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:22px;color:#fff;}
+/* Затемнение под подписью держится на самой подписи, а не на доле высоты
+   плитки. Раньше градиент шёл от низа картинки, и на узком экране описание
+   в четыре строки выталкивало текст туда, где затемнения ещё почти не было:
+   латунное «6 позиций» ложилось на светлую стену и не читалось. */
+.tile-body{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:46px 22px 22px;color:#fff;
+  background:linear-gradient(180deg,rgba(10,30,51,0) 0%,rgba(10,30,51,.86) 34%,rgba(10,30,51,.94) 100%);}
 .tile-count{font-family:var(--display);font-weight:800;font-size:15px;color:var(--brass-soft);margin-bottom:4px;letter-spacing:.02em;}
 .tile-name{font-family:var(--display);font-weight:700;font-size:19px;line-height:1.15;margin-bottom:6px;}
 .tile-desc{font-size:12.5px;color:rgba(255,255,255,.75);line-height:1.45;}
@@ -526,6 +547,10 @@ a.val:hover{color:var(--brass);}
   .searchbar{flex-wrap:wrap;gap:8px;box-shadow:none;border:none;background:transparent;padding:0;}
   .searchbar select,.searchbar input{border:1px solid var(--line);border-radius:8px;padding:12px 14px;width:100%;background:#fff;}
   .searchbar button{width:100%;justify-content:center;}
+  /* на узком экране рамка строки пропадает, и значок встаёт над полем —
+     там он читается как подпись к нему, поэтому отступ слева не нужен */
+  .searchbar>.ai-badge{margin-left:0;}
+  .searchbar>.ai-badge+input{padding-left:14px;border-color:#cfd9ee;}
   .tiles{grid-template-columns:1fr 1fr;gap:12px;}
 }
 
@@ -613,24 +638,26 @@ a.val:hover{color:var(--brass);}
 .promo p{color:#fff;}
 
 /* ── HERO (сплит: копия + поиск слева, фото справа) ── */
+/* Синей полоски сверху здесь больше нет: шапка сама тёмно-синяя,
+   и ещё одна линия того же цвета просто утолщала её. */
 .hero2{background:#fff;border-bottom:1px solid var(--line);position:relative;overflow:hidden;}
-.hero2::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--navy);}
 .hero2-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;padding:50px 0 56px;}
-.hero2-cobrand{display:flex;align-items:center;gap:11px;margin-bottom:20px;}
-.hero2-cobrand .mgu-mark{width:30px;height:33px;color:var(--navy);flex-shrink:0;}
-.hero2-cobrand span{font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.3;}
 .hero2 .eyebrow{color:var(--brass);}
 .hero2 .eyebrow::before{background:var(--brass);}
 .hero2 h1{font-size:clamp(34px,4.3vw,54px);font-weight:800;letter-spacing:-.035em;line-height:1.05;margin-bottom:16px;color:var(--navy);}
 .hero2 h1 em{font-style:normal;color:var(--brass);}
 .hero2 .lead{font-size:17.5px;color:var(--ink-soft);max-width:48ch;margin-bottom:24px;}
 .hero2 .searchbar{margin:0 0 12px;max-width:600px;}
-.hero2 .chips{justify-content:flex-start;margin-top:0;}
 /* ---- ИИ-поиск в hero ---- */
-.hs-cap{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;
-  font-size:13.5px;font-weight:600;color:var(--ink-soft);}
+/* подпись над строкой поиска: это <label>, поэтому клик по ней ставит курсор в поле */
+.search-cap{display:block;margin-bottom:10px;font-size:14px;font-weight:600;
+  color:var(--ink-soft);cursor:text;max-width:78ch;}
 /* поле с ИИ — тонкая цветная рамка, чтобы читалось как «умное», но не пёстрое */
 .ai-bar{border-color:#cfd9ee;}
+/* значок живёт внутри строки поиска: align-items у .searchbar — stretch,
+   поэтому плашку центрируем отдельно, иначе она растянется во всю высоту */
+.searchbar>.ai-badge{align-self:center;flex:none;margin-left:9px;}
+.searchbar>.ai-badge+input{padding-left:10px;}
 .ai-bar:focus-within{border-color:#7C5CE0;box-shadow:0 0 0 3px rgba(124,92,224,.13),var(--shadow-md);}
 /* Ответ — отдельная ячейка во всю ширину сетки hero, под обеими колонками. */
 .hs-res{grid-column:1/-1;}
@@ -642,19 +669,20 @@ a.val:hover{color:var(--brass);}
 .hero2-grid.answering .hero2-media{display:none;}
 @media(max-width:1024px){ .hero2 .searchbar{max-width:none;} }
 .hero2-media{position:relative;}
-.hero2-media img{position:relative;z-index:1;width:100%;aspect-ratio:4/4.5;object-fit:cover;border-radius:14px;box-shadow:var(--shadow-lg);}
+/* Фото было вытянуто по вертикали (4:4.5) и в одиночку задавало высоту всего
+   первого экрана. После того как слева осталось три элемента вместо пяти,
+   из-за него внизу висела пустота, а каталог уезжал за нижний край. */
+.hero2-media img{position:relative;z-index:1;width:100%;aspect-ratio:4/3.4;object-fit:cover;border-radius:14px;box-shadow:var(--shadow-lg);}
 .hero2-frame{position:absolute;inset:18px -16px -16px 18px;border:1px solid var(--brass);border-radius:14px;z-index:0;}
-.hero2-card{position:absolute;z-index:2;left:-22px;bottom:30px;background:var(--navy-deep);color:#fff;border-radius:10px;padding:15px 20px;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:13px;}
-.hero2-card-ic{width:30px;height:30px;flex-shrink:0;}
-.hero2-card b{display:block;font-size:15px;color:#fff;line-height:1.2;}
-.hero2-card>div span{font-size:12px;color:rgba(255,255,255,.62);}
 @media(max-width:1024px){
   .hero2-grid{grid-template-columns:1fr;gap:36px;}
-  .hero2-media{max-width:520px;}
-}
-@media(max-width:680px){
-  .hero2-media .hero2-frame{display:none;}
-  .hero2-card{left:0;}
+  /* Ниже 1024 px колонки складываются в одну, и фото уезжает под строку
+     поиска. Там оно только отодвигает каталог вниз: рядом с текстом оно
+     работало как вторая половина разворота, а под ним — нет. Убираем; сразу
+     под первым экраном идут плитки каталога, и там фотографии настоящие.
+     Картинка помечена loading="lazy", поэтому скрытую браузер не тянет. */
+  .hero2-media{display:none;}
+  .hero2-grid{padding:44px 0 46px;}
 }
 
 /* ============================================================ RESPONSIVE */
@@ -671,17 +699,34 @@ a.val:hover{color:var(--brass);}
   .footer-top{grid-template-columns:1fr 1fr;}
   .booking,.summary{position:static;}
 }
+/* Меню прячется под бургер уже на планшете. Раньше порог стоял на 680 px, и в
+   промежутке 681–1023 px горизонтальные пункты вместе с кнопками не помещались
+   в ширину экрана: правый край шапки уезжал за границу окна. */
+@media(max-width:1023px){
+  .nav-links{display:none;}
+  .nav-links.open{display:flex;position:absolute;top:68px;left:0;right:0;background:var(--navy);flex-direction:column;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.1);box-shadow:var(--shadow-md);}
+  .nav-toggle{display:inline-flex;padding:8px;border:1px solid rgba(255,255,255,.26);border-radius:var(--r);}
+}
 @media(max-width:680px){
   .wrap{padding:0 20px;}
   .nav-inner{gap:12px;}
-  .nav-links{display:none;}
-  .nav-links.open{display:flex;position:absolute;top:68px;left:0;right:0;background:#fff;flex-direction:column;padding:12px 20px;border-bottom:1px solid var(--line);box-shadow:var(--shadow-md);}
-  .nav-toggle{display:inline-flex;padding:8px;border:1px solid var(--line);border-radius:var(--r);}
   .nav-search{display:none;}
   .nav-right{gap:8px;}
+  /* Кнопка «Войти» не сжимается: раньше flex резал её текст до «В…».
+     Место под неё освобождаем за счёт логотипа и внутренних отступов. */
+  .cab-link{flex:none;padding:9px 10px;}
+  .cab-link.on{max-width:36vw;}
+  .brand{font-size:18px;gap:8px;}
+  .nav .brand-ic{width:23px;height:23px;}
   .cart-btn{padding:8px 11px;gap:6px;}
   .cart-ic{display:inline-block;}
   .cart-label{display:none;}
+  /* поле с ИИ ужимаем по краям, иначе подсказка внутри обрезается */
+  .ai-field{padding:0 9px;gap:6px;}
+  /* На плитке шириной ~170 px описание ложится в четыре строки, и затемнение
+     под ним закрывает почти всю фотографию. Названия и числа достаточно —
+     подробности всё равно на следующем экране, в каталоге. */
+  .tile-desc{display:none;}
   .res-grid,.cards-3{grid-template-columns:1fr;}
   .dir-grid{grid-template-columns:1fr;}
   .form-grid,.field-row{grid-template-columns:1fr;}
@@ -691,13 +736,19 @@ a.val:hover{color:var(--brass);}
   .section{padding:52px 0;}
   .hero-inner{padding:64px 0 56px;}
 }
+/* Самые узкие телефоны (320 px): даже ужатая шапка вылезала за правый край. */
+@media(max-width:400px){
+  .wrap{padding:0 13px;}
+  .nav-inner{gap:8px;}
+  .nav-right{gap:5px;}
+  .brand{font-size:16px;gap:6px;}
+  .cab-link{padding:9px 7px;}
+  .cab-link.on{max-width:30vw;}
+  .cart-btn{padding:8px 8px;}
+  .nav-toggle{padding:6px;}
+}
 
 /* ============================================================ ЛИЧНЫЙ КАБИНЕТ */
-.cab-link{padding:9px 14px;border:1px solid var(--line);border-radius:var(--r);font-weight:600;font-size:14px;
-  white-space:nowrap;transition:.16s;}
-.cab-link:hover{border-color:var(--navy);}
-.cab-link.on{border-color:var(--brass-soft);background:var(--brass-tint);color:var(--brass);}
-
 .cab-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--line);}
 .cab-tab{padding:10px 16px;font-weight:600;font-size:14px;color:var(--ink-soft);border-bottom:2px solid transparent;
   margin-bottom:-1px;transition:.16s;}
@@ -787,13 +838,13 @@ a.val:hover{color:var(--brass);}
 /* ============================================================ ПОДБОР ПО ЗАДАЧЕ */
 .assist{background:var(--paper-2);border:1px solid var(--line);border-radius:12px;
   padding:20px 22px;margin-bottom:22px;}
-.assist-cap{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
-  font-weight:600;font-size:14px;color:var(--navy);margin-bottom:10px;}
 .assist-row{display:flex;gap:10px;flex-wrap:wrap;}
-.assist-row input{flex:1;min-width:220px;border:1px solid var(--line);border-radius:var(--r);
-  padding:11px 14px;font-size:15px;background:#fff;}
-.assist-row input:focus{outline:none;border-color:var(--brass);}
-.assist-row input:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+/* поле со значком ИИ внутри: рамка на обёртке, сам input без рамки */
+.ai-field{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;
+  background:#fff;border:1px solid #cfd9ee;border-radius:var(--r);padding:0 12px;}
+.ai-field input{flex:1;min-width:0;border:none;background:transparent;
+  padding:11px 0;font-size:15px;outline:none;}
+.ai-field:focus-within{border-color:#7C5CE0;box-shadow:0 0 0 3px rgba(124,92,224,.13);}
 .assist-row .btn{white-space:nowrap;}
 /* ============================================================ ПЛАШКА AI */
 /* Маленькая, как значок в мессенджере: должна читаться как пометка «здесь
@@ -895,12 +946,6 @@ a.val:hover{color:var(--brass);}
 .proj-head{display:flex;align-items:flex-start;justify-content:space-between;gap:28px;
   flex-wrap:wrap;margin-bottom:18px;}
 .proj-head .sub{max-width:58ch;margin-top:8px;}
-.proj-prog{flex:none;text-align:center;min-width:150px;}
-.proj-prog-n{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--navy);}
-.proj-prog-bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:6px 0 5px;}
-.proj-prog-bar i{display:block;height:100%;background:linear-gradient(90deg,#7C5CE0,#3E7BD6 55%,#2AA6A0);
-  transition:width .3s;}
-.proj-prog-c{font-size:12px;color:var(--ink-soft);}
 .proj-switch{display:flex;gap:8px;margin:18px 0 16px;flex-wrap:wrap;}  /* контейнер вкладок */
 /* --- интервью --- */
 .proj-q{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;}
@@ -940,7 +985,6 @@ a.val:hover{color:var(--brass);}
   border-top:1px solid var(--line);}
 @media(max-width:640px){
   .proj-head{flex-direction:column;}
-  .proj-prog{min-width:0;text-align:left;}
   .proj-q,.proj-form,.proj-out{padding:17px 15px;}
   .proj-docs{grid-template-columns:1fr;}
 }
@@ -979,32 +1023,6 @@ a.val:hover{color:var(--brass);}
 .bud-hit{display:flex;justify-content:space-between;align-items:center;gap:12px;
   border:1px solid var(--line);border-radius:var(--r);padding:11px 14px;margin-top:9px;background:var(--white);}
 
-/* карточки программ: слева цветная полоса — вывод виден до чтения пунктов */
-.prg-card{background:var(--white);border:1px solid var(--line);border-left:4px solid var(--line);
-  border-radius:var(--r-lg);padding:18px 20px;margin-bottom:14px;}
-.prg-card.ok{border-left-color:var(--ok);}
-.prg-card.warn{border-left-color:var(--brass-soft);}
-.prg-card.stop{border-left-color:var(--busy);}
-.prg-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px;}
-.prg-name{font-weight:700;font-size:16px;color:var(--ink);line-height:1.3;}
-.prg-name a{color:var(--navy);}
-.prg-fund{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
-.prg-verdict{font-size:12px;font-weight:700;padding:5px 11px;border-radius:20px;white-space:nowrap;
-  background:var(--paper-2);color:var(--ink-soft);}
-.prg-card.ok .prg-verdict{background:var(--ok-bg);color:var(--ok);}
-.prg-card.warn .prg-verdict{background:var(--brass-tint);color:var(--brass);}
-.prg-card.stop .prg-verdict{background:var(--busy-bg);color:var(--busy);}
-.prg-items{list-style:none;margin:0;padding:0;}
-.prg-i{display:flex;flex-direction:column;gap:2px;padding:8px 0 8px 22px;position:relative;
-  font-size:14px;line-height:1.5;color:var(--ink);border-top:1px solid var(--line-2);}
-.prg-items .prg-i:first-child{border-top:0;}
-.prg-i::before{position:absolute;left:0;top:8px;font-size:13px;font-weight:700;}
-.prg-i.ok::before{content:'✓';color:var(--ok);}
-.prg-i.warn::before{content:'!';color:var(--brass);}
-.prg-i.stop::before{content:'✕';color:var(--busy);}
-.prg-i em{font-style:normal;font-size:13px;color:var(--ink-soft);line-height:1.5;}
-.prg-notes{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2);
-  font-size:13px;color:var(--ink-soft);line-height:1.6;}
 
 @media (max-width:760px){
   /* на телефоне строка сметы становится в две полосы: название сверху,
@@ -1018,14 +1036,8 @@ a.val:hover{color:var(--brass);}
      не раздвигая при этом саму строку сметы */
   .bud-act .bud-del,.bud-act .pick-link{padding:10px 0;}
   .bud-qty input{height:40px;}
-  .prg-head{flex-direction:column;gap:8px;}
 }
 /* общий для всех программ пункт (готовность профиля) — над списком карточек */
-.prg-common{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;
-  border-radius:var(--r-lg);padding:14px 16px;margin-bottom:16px;font-size:14px;line-height:1.55;}
-.prg-common.warn{background:var(--brass-tint);color:var(--ink);}
-.prg-common.stop{background:var(--busy-bg);color:var(--busy);}
-.prg-common em{font-style:normal;font-size:13px;color:var(--ink-soft);flex:1 1 100%;}
 /* реквизиты в кабинете — свёрнутый блок, чтобы форма не выглядела анкетой */
 .req-block{border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px;margin:6px 0 16px;
   background:var(--paper-2);}
@@ -1045,7 +1057,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 [tabindex]:focus-visible,.tab:focus-visible,.slot:focus-visible,.cal-cell:focus-visible{
   outline:2px solid var(--brass);outline-offset:2px;transition:none;}
 .topbar a:focus-visible,.footer a:focus-visible,.hero a:focus-visible,
-.hero button:focus-visible{outline-color:var(--brass-soft);}
+.hero button:focus-visible,.nav a:focus-visible,.nav button:focus-visible{outline-color:var(--brass-soft);}
 
 /* Ссылка «Перейти к содержимому». Без неё человек с клавиатуры на каждой
    странице проходит табом всю шапку: почта, кабинет оператора, логотип,
