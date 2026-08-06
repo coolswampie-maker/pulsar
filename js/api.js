@@ -196,9 +196,6 @@
     // Смета: каждый ответ возвращает смету целиком, а не одну строку —
     // итог считает сервер, и клиенту нечего досчитывать самому.
     budget:function(){ return P.apiFetch(withProject('/profile/budget/')).then(parse); },
-    // разбор рынка: длинный ответ модели, поэтому свой таймаут не ставим —
-    // сервер сам ограничивает ожидание, а браузер ждёт столько, сколько нужно
-    market:function(){ return postJson('/profile/market/', bodyWithProject({})); },
     budgetAdd:function(d){ return postJson('/profile/budget/', bodyWithProject(d)); },
     budgetSet:function(id,d){ return sendJson('PATCH', withProject('/profile/budget/'+id+'/'), d); },
     budgetDel:function(id){

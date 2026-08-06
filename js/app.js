@@ -1463,7 +1463,6 @@
       '</div>'+
       '<div id="projmain"></div>'+
       '<div id="projdocs"></div>'+
-      '<div id="projmarket"></div>'+
       // смета того же проекта: раньше жила отдельной вкладкой «Заявка»
       '<div id="applbudget"></div>';
     bindProjectBar(loadCabProject);
@@ -1472,65 +1471,18 @@
     });
     if(proj.mode==='chat') drawInterview(); else drawProjectForm();
     drawDocs();
-    drawMarket();
     loadBudget();
   }
 
-  /* ---------- разбор рынка ----------
-     Кнопка, а не автоматический запуск: обращение к модели платное, а
-     профиль между заходами на страницу обычно тот же. Результат держим
-     в памяти на время сеанса — повторное нажатие человек сделает сам,
-     если действительно что-то поменял. */
-  var marketState = { data:null, mode:null, busy:false };
+  /* Разбор рынка убран с экрана до доработки. Сейчас модель получала
+     только профиль проекта и рассуждала на общих знаниях — про любой похожий
+     проект вышло бы примерно то же. Возвращать вместе с тем, что обсуждали:
+     данные из CRM на входе, пометка основания у каждого абзаца и вопросы
+     человеку до разбора, а не вместо него.
 
-  function drawMarket(){
-    var box=el('projmarket'); if(!box) return;
-    var head='<h2 class="h-md" style="margin:34px 0 6px">Рынок проекта</h2>'+
-      '<p class="sub" style="margin-bottom:14px">Помощник разбирает, кому нужен '+
-      'результат и чем задачу решают сейчас. Интернета у него нет: цифр, долей '+
-      'и названий компаний в разборе не будет, вместо них — список того, что '+
-      'проверить самостоятельно.</p>';
-    var body;
-    if(marketState.busy){
-      body='<div class="ai-wait">'+aiBadge()+'Разбираем, это занимает до минуты…</div>';
-    } else if(marketState.mode==='need'){
-      body='<div class="bud-empty">Сначала расскажите о проекте выше — '+
-           'по пустому профилю разбирать нечего.</div>';
-    } else if(marketState.mode==='off'){
-      body='<div class="form-msg err">Помощник сейчас не отвечает. Попробуйте позже.</div>';
-    } else if(marketState.data){
-      var d=marketState.data;
-      body='<div class="proj-out">'+
-        '<div class="proj-out-head"><h3>Разбор рынка</h3>'+aiBadge('mini')+'</div>'+
-        d.blocks.map(function(b){
-          return '<div class="proj-block"><h4>'+esc(b.heading)+'</h4>'+
-            '<div class="proj-block-t">'+esc(b.text).replace(/\n/g,'<br>')+'</div></div>';
-        }).join('')+
-        (d.checks && d.checks.length
-          ? '<div class="proj-gaps"><b>Что проверить самостоятельно</b><ul>'+
-            d.checks.map(function(c){ return '<li>'+esc(c)+'</li>'; }).join('')+
-            '</ul></div>'
-          : '')+
-      '</div>';
-    } else {
-      body='';
-    }
-    box.innerHTML=head+
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'+
-        '<button class="btn btn-outline btn-sm" id="mk_go"'+(marketState.busy?' disabled':'')+'>'+
-        (marketState.data?'Разобрать заново':'Разобрать рынок')+'</button>'+aiBadge('mini')+
-      '</div>'+body;
-    el('mk_go').onclick=function(){
-      marketState.busy=true; drawMarket();
-      P.profileApi.market().then(function(r){
-        marketState.busy=false;
-        if(!r.ok){ marketState.mode='off'; drawMarket(); return; }
-        marketState.mode=r.data.mode;
-        marketState.data=(r.data.mode==='ai') ? r.data : null;
-        drawMarket();
-      });
-    };
-  }
+     Серверная часть цела и покрыта тестами: booking/market.py и
+     /api/profile/market/. Разметку берите из истории — коммит 7f6c387. */
+
 
   /* ---------- разговор, заполняющий профиль ----------
      Анкету на тринадцать полей не заполняет никто: человек видит стену
