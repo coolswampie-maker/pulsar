@@ -4,6 +4,17 @@
 
 {% block extrahead %}{{ block.super }}
 <script>
+// Тёмная тема Django здесь только мешала: наши цвета в extrastyle заданы
+// светлыми и не переключаются, поэтому при системной тёмной теме часть
+// экрана темнела, а часть оставалась светлой. Ставим светлую до отрисовки,
+// иначе успевает мигнуть тёмный фон. Переключатель прячем — выбирать не из
+// чего, пока тёмная тема не сделана целиком.
+(function () {
+  try { localStorage.setItem('theme', 'light'); } catch (e) {}
+  document.documentElement.dataset.theme = 'light';
+})();
+</script>
+<script>
 // Инлайн-кнопки Django строит через JS в именительном падеже
 // («Добавить ещё один Позиция заявки») — правим на нормальный вид.
 window.addEventListener('load', function () {
@@ -54,6 +65,13 @@ html[data-theme="light"], html[data-theme="dark"], :root{
   --object-tools-hover-bg:#9C7638;
   --selected-row:#f3ecdf; --selected-bg:#f6f8fa;
   --message-success-bg:#e7f0ea;
+}
+/* Переключатель темы убран: тёмная тема в CRM не доделана, см. extrahead */
+button.theme-toggle{display:none!important}
+/* Подстраховка на случай, если скрипт не отработал: системная тёмная тема
+   не должна перекрашивать половину экрана, оставляя вторую светлой. */
+@media (prefers-color-scheme: dark){
+  html[data-theme="auto"]{color-scheme:light}
 }
 /* Django ставит шрифт не только через переменную, но и напрямую в body */
 body,input,select,textarea,button,.button,th,td{font-family:var(--font-family-primary)}

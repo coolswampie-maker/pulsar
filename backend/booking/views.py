@@ -14,7 +14,7 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import chat, formal, querylog
+from . import chat, formal, market, querylog
 from . import review as reviewer
 from .assist import assist
 from . import compose as composer
@@ -888,9 +888,32 @@ class ProjectView(APIView):
         return Response(_projects_payload(company))
 
 
+class MarketThrottle(UserRateThrottle):
+    """Разбор рынка: ответ длинный, а нажимают редко."""
+    scope = 'market'
+
+
 class ChatThrottle(UserRateThrottle):
     """Разговорное заполнение: реплик в диалоге много, каждая платная."""
     scope = 'chat'
+
+
+class MarketView(APIView):
+    """POST /api/profile/market/ — разбор рынка по профилю проекта.
+
+    Возвращает разделы и список того, что человеку нужно проверить самому.
+    Цифр в ответе нет намеренно: интернета у модели нет, и любой объём
+    рынка был бы сочинён. Подробности — в booking/market.py.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [MarketThrottle]
+
+    def post(self, request):
+        profile = _profile_for(request)
+        if not profile:
+            return Response({'detail': 'Проект не найден.'}, status=403)
+        blocks, checks, mode = market.analyse(profile)
+        return Response({'mode': mode, 'blocks': blocks, 'checks': checks})
 
 
 class ProfileChatView(APIView):
@@ -916,7 +939,12 @@ class ProfileChatView(APIView):
             return Response({'detail': 'Напишите что-нибудь о проекте.'}, status=400)
 
         profile = _profile_for(request, create=True)
-        fill, reply, ask, mode = chat.talk(profile, message)
+        # Поле, про которое помощник спросил в прошлый раз. Кабинет присылает
+        # его обратно: без этого ответ человека не связывался с вопросом.
+        pending = ''
+        if isinstance(request.data, dict):
+            pending = str(request.data.get('pending') or '')
+        fill, reply, ask, mode = chat.talk(profile, message, pending=pending)
         if fill:
             for k, v in fill.items():
                 setattr(profile, k, v)

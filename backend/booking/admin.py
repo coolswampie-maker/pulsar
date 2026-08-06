@@ -144,6 +144,9 @@ class BookingLineInline(admin.TabularInline):
 
 @admin.register(Company)
 class CompanyAdmin(RuTitlesMixin, admin.ModelAdmin):
+    ru_plural = 'Компании'
+    ru_add = 'Добавление компании'
+    ru_change = 'Карточка компании'
     # Дата регистрации компании — это часто позапрошлый год, а календарик
     # Django листается только по месяцам: до 2019 года пришлось бы нажать
     # стрелку восемьдесят раз. Нативное поле браузера даёт выбор года сразу
@@ -209,6 +212,9 @@ class KpiEntryInline(DocAcceptMixin, admin.TabularInline):
 
 @admin.register(Kpi)
 class KpiAdmin(RuTitlesMixin, DocAcceptMixin, admin.ModelAdmin):
+    ru_plural = 'Показатели'
+    ru_add = 'Добавление показателя'
+    ru_change = 'Изменение показателя'
     list_display = ('company', 'year', 'key', 'plan', 'fact', 'status_col', 'updated_at')
     list_editable = ('plan',)          # оператор задаёт план (из календарного плана)
     list_filter = ('year', 'key', 'company')
@@ -509,6 +515,9 @@ class CustomRequestAdmin(RuTitlesMixin, admin.ModelAdmin):
 
 @admin.register(BusySlot)
 class BusySlotAdmin(RuTitlesMixin, admin.ModelAdmin):
+    ru_plural = 'Календарь занятости'
+    ru_add = 'Добавление занятости'
+    ru_change = 'Изменение занятости'
     date_hierarchy = 'date'
     list_display = ('date', 'slot_start', 'slot_end', 'resource', 'note')
     list_filter = ('date', 'resource__type', 'resource')
@@ -797,6 +806,9 @@ class BusySlotAdmin(RuTitlesMixin, admin.ModelAdmin):
 
 @admin.register(Program)
 class ProgramAdmin(RuTitlesMixin, admin.ModelAdmin):
+    ru_plural = 'Программы поддержки'
+    ru_add = 'Добавление программы'
+    ru_change = 'Изменение программы'
     """Программы поддержки: параметры вносит оператор из официальной
     документации программы.
 
@@ -836,6 +848,9 @@ class BudgetLineInline(admin.TabularInline):
 
 @admin.register(ProjectProfile)
 class ProjectProfileAdmin(RuTitlesMixin, admin.ModelAdmin):
+    ru_plural = 'Проекты резидентов'
+    ru_add = 'Добавление проекта'
+    ru_change = 'Проект резидента'
     """Профиль проекта резидента и смета к нему.
 
     Текст проекта — только для чтения. Это слова резидента о его разработке;

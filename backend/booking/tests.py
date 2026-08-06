@@ -2751,3 +2751,151 @@ class ComposeSpecTests(TestCase):
         for key, spec in FORMATS.items():
             self.assertTrue(spec['needs'], f'{key}: не заданы обязательные поля')
             self.assertTrue(spec['title'], key)
+
+
+class ChatPendingTests(TestCase):
+    """Ответ человека должен попадать в поле, про которое спросили.
+
+    До этого связи не было: помощник спрашивал про задачу, человек отвечал,
+    модель возвращала пустой fill — и в кабинете это выглядело как
+    «записывается через раз». Потерять сказанное хуже, чем записать
+    неудачно: записанное видно в списке изменений и правится в форме.
+    """
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'pd@c.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Вопрос', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+
+    def _say(self, answer, message, pending=None):
+        from unittest import mock
+        body = {'message': message}
+        if pending:
+            body['pending'] = pending
+        with mock.patch('booking.chat.ask_model', return_value=answer):
+            r = self.c.post('/api/profile/chat/', content_type='application/json',
+                            data=json.dumps(body), **self.auth)
+        return json.loads(r.content)
+
+    def test_empty_fill_falls_back_to_asked_field(self):
+        silent = json.dumps({'fill': {}, 'reply': 'Понял.', 'ask': '', 'question': ''})
+        text = 'Подшипники выкрашиваются через полгода работы на морской воде.'
+        d = self._say(silent, text, pending='problem')
+        keys = [f['key'] for f in d['filled']]
+        self.assertIn('problem', keys, 'ответ на вопрос никуда не записался')
+        self.assertEqual(ProjectProfile.objects.get().problem, text)
+
+    def test_short_answer_is_not_written(self):
+        """«да», «ок», «не знаю» — это реплика, а не содержание поля."""
+        silent = json.dumps({'fill': {}, 'reply': 'Понял.', 'ask': '', 'question': ''})
+        d = self._say(silent, 'не знаю', pending='problem')
+        self.assertEqual(d['filled'], [])
+        self.assertEqual(ProjectProfile.objects.get().problem, '')
+
+    def test_fallback_does_not_overwrite_filled_field(self):
+        """Заполненное поле молча переписывать нельзя — человек не заметит."""
+        p = ProjectProfile.objects.create(
+            company=Company.objects.get(user__email='pd@c.ru'), problem='Старое описание')
+        silent = json.dumps({'fill': {}, 'reply': 'Понял.', 'ask': '', 'question': ''})
+        self._say(silent, 'Совсем про другое, длинная фраза.', pending='problem')
+        p.refresh_from_db()
+        self.assertEqual(p.problem, 'Старое описание')
+
+    def test_unknown_pending_key_is_ignored(self):
+        silent = json.dumps({'fill': {}, 'reply': 'Понял.', 'ask': '', 'question': ''})
+        d = self._say(silent, 'Довольно длинная фраза про проект.', pending='выдуманное')
+        self.assertEqual(d['filled'], [])
+
+    def test_model_answer_wins_over_fallback(self):
+        """Если модель разобрала сообщение сама, запасной путь не мешает."""
+        good = json.dumps({'fill': {'problem': 'Износ подшипников'},
+                           'reply': 'Записал.', 'ask': '', 'question': ''})
+        d = self._say(good, 'Подшипники быстро изнашиваются на морской воде.',
+                      pending='problem')
+        self.assertEqual(ProjectProfile.objects.get().problem, 'Износ подшипников')
+        self.assertEqual(len(d['filled']), 1)
+
+
+class MarketTests(TestCase):
+    """Разбор рынка. Интернета у модели нет, поэтому проверяем не качество
+    текста, а то, что через разбор ответа не проходит лишнее и что молчание
+    модели не выдаётся за результат."""
+
+    def setUp(self):
+        self.c = Client()
+        r = self.c.post('/api/auth/register/', content_type='application/json',
+                        data=json.dumps({'email': 'mk@c.ru', 'password': 'Nauka2026lab',
+                                         'name': 'ООО Рынок', 'consent': True}))
+        self.auth = {'HTTP_AUTHORIZATION': 'Token ' + json.loads(r.content)['token']}
+        self.co = Company.objects.get(user__email='mk@c.ru')
+
+    def _ask(self, answer, profile_kwargs=None):
+        from unittest import mock
+        ProjectProfile.objects.create(
+            company=self.co,
+            **(profile_kwargs or {'summary': 'Износостойкое покрытие для подшипников '
+                                             'судовых механизмов, работающих в морской воде.'}))
+        with mock.patch('booking.market.ask_model', return_value=answer):
+            r = self.c.post('/api/profile/market/', content_type='application/json',
+                            data=json.dumps({}), **self.auth)
+        return r, json.loads(r.content)
+
+    def test_blocks_and_checks_pass_through(self):
+        answer = json.dumps({
+            'blocks': [{'key': 'who', 'text': 'Судоремонтные предприятия.'},
+                       {'key': 'now', 'text': 'Меняют узлы целиком.'}],
+            'checks': ['Сколько стоит замена узла у типового заказчика']})
+        r, d = self._ask(answer)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(d['mode'], 'ai')
+        self.assertEqual([b['key'] for b in d['blocks']], ['who', 'now'])
+        self.assertEqual(d['blocks'][0]['heading'], 'Кому это нужно')
+        self.assertEqual(len(d['checks']), 1)
+
+    def test_invented_section_is_dropped(self):
+        answer = json.dumps({
+            'blocks': [{'key': 'who', 'text': 'Судоремонт.'},
+                       {'key': 'объём_рынка', 'text': '4,2 млрд рублей в год.'}],
+            'checks': []})
+        r, d = self._ask(answer)
+        self.assertEqual([b['key'] for b in d['blocks']], ['who'])
+
+    def test_silence_is_not_shown_as_result(self):
+        from unittest import mock
+        ProjectProfile.objects.create(company=self.co, summary='Покрытие для подшипников судов.')
+        with mock.patch('booking.market.ask_model', return_value=''):
+            r = self.c.post('/api/profile/market/', content_type='application/json',
+                            data=json.dumps({}), **self.auth)
+        d = json.loads(r.content)
+        self.assertEqual(d['mode'], 'off')
+        self.assertEqual(d['blocks'], [])
+
+    def test_empty_profile_asks_to_fill_it(self):
+        from unittest import mock
+        ProjectProfile.objects.create(company=self.co)
+        with mock.patch('booking.market.ask_model') as m:
+            r = self.c.post('/api/profile/market/', content_type='application/json',
+                            data=json.dumps({}), **self.auth)
+            self.assertFalse(m.called, 'модель звали по пустому профилю — это платно')
+        self.assertEqual(json.loads(r.content)['mode'], 'need')
+
+    def test_checks_are_capped(self):
+        from booking.market import MAX_CHECKS
+        answer = json.dumps({
+            'blocks': [{'key': 'who', 'text': 'Судоремонт.'}],
+            'checks': [f'Пункт {i}' for i in range(MAX_CHECKS + 6)]})
+        r, d = self._ask(answer)
+        self.assertEqual(len(d['checks']), MAX_CHECKS)
+
+    def test_requires_login(self):
+        c = Client()
+        r = c.post('/api/profile/market/', content_type='application/json', data='{}')
+        self.assertIn(r.status_code, (401, 403))
+
+    def test_prompt_forbids_numbers(self):
+        """Запрет на цифры — суть этой функции, он не должен потеряться."""
+        from booking.market import SYSTEM_PROMPT
+        self.assertIn('НЕТ доступа к интернету', SYSTEM_PROMPT)
+        self.assertIn('объёмы рынка', SYSTEM_PROMPT)

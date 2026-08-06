@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (AllBusyView, AssistView, BudgetLineView, BudgetView,
-                    ComposeFormatsView, ComposeJobView, ComposeView,
+                    ComposeFormatsView, ComposeJobView, ComposeView, MarketView,
                     BudgetReviewView, HealthView, ProfileChatView,
                     ProjectView, ProjectsView,
                     CustomRequestView, KpiEntriesView, KpiEntryView,
@@ -30,6 +30,7 @@ urlpatterns = [
     path('profile/formats/', ComposeFormatsView.as_view(), name='profile-formats'),
     path('profile/compose/', ComposeView.as_view(), name='profile-compose'),
     path('profile/compose/<int:job_id>/', ComposeJobView.as_view(), name='profile-compose-job'),
+    path('profile/market/', MarketView.as_view(), name='profile-market'),
     path('profile/budget/', BudgetView.as_view(), name='profile-budget'),
     path('profile/budget/<int:line_id>/', BudgetLineView.as_view(), name='profile-budget-line'),
     path('profile/budget/review/', BudgetReviewView.as_view(), name='profile-budget-review'),

@@ -1375,7 +1375,7 @@
           esc(x.title)+'</option>';
       }).join('')+'</select>'+
       '<button class="btn btn-outline btn-sm" id="projnew">Новый проект</button>'+
-      (many ? '<button class="pick-link" id="projdel">Удалить этот</button>' : '')+
+      (many ? '<button class="pick-link" id="projdel">Удалить проект</button>' : '')+
       '<div id="projbarmsg"></div>'+
     '</div>';
   }
@@ -1463,6 +1463,7 @@
       '</div>'+
       '<div id="projmain"></div>'+
       '<div id="projdocs"></div>'+
+      '<div id="projmarket"></div>'+
       // смета того же проекта: раньше жила отдельной вкладкой «Заявка»
       '<div id="applbudget"></div>';
     bindProjectBar(loadCabProject);
@@ -1471,7 +1472,64 @@
     });
     if(proj.mode==='chat') drawInterview(); else drawProjectForm();
     drawDocs();
+    drawMarket();
     loadBudget();
+  }
+
+  /* ---------- разбор рынка ----------
+     Кнопка, а не автоматический запуск: обращение к модели платное, а
+     профиль между заходами на страницу обычно тот же. Результат держим
+     в памяти на время сеанса — повторное нажатие человек сделает сам,
+     если действительно что-то поменял. */
+  var marketState = { data:null, mode:null, busy:false };
+
+  function drawMarket(){
+    var box=el('projmarket'); if(!box) return;
+    var head='<h2 class="h-md" style="margin:34px 0 6px">Рынок проекта</h2>'+
+      '<p class="sub" style="margin-bottom:14px">Помощник разбирает, кому нужен '+
+      'результат и чем задачу решают сейчас. Интернета у него нет: цифр, долей '+
+      'и названий компаний в разборе не будет, вместо них — список того, что '+
+      'проверить самостоятельно.</p>';
+    var body;
+    if(marketState.busy){
+      body='<div class="ai-wait">'+aiBadge()+'Разбираем, это занимает до минуты…</div>';
+    } else if(marketState.mode==='need'){
+      body='<div class="bud-empty">Сначала расскажите о проекте выше — '+
+           'по пустому профилю разбирать нечего.</div>';
+    } else if(marketState.mode==='off'){
+      body='<div class="form-msg err">Помощник сейчас не отвечает. Попробуйте позже.</div>';
+    } else if(marketState.data){
+      var d=marketState.data;
+      body='<div class="proj-out">'+
+        '<div class="proj-out-head"><h3>Разбор рынка</h3>'+aiBadge('mini')+'</div>'+
+        d.blocks.map(function(b){
+          return '<div class="proj-block"><h4>'+esc(b.heading)+'</h4>'+
+            '<div class="proj-block-t">'+esc(b.text).replace(/\n/g,'<br>')+'</div></div>';
+        }).join('')+
+        (d.checks && d.checks.length
+          ? '<div class="proj-gaps"><b>Что проверить самостоятельно</b><ul>'+
+            d.checks.map(function(c){ return '<li>'+esc(c)+'</li>'; }).join('')+
+            '</ul></div>'
+          : '')+
+      '</div>';
+    } else {
+      body='';
+    }
+    box.innerHTML=head+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'+
+        '<button class="btn btn-outline btn-sm" id="mk_go"'+(marketState.busy?' disabled':'')+'>'+
+        (marketState.data?'Разобрать заново':'Разобрать рынок')+'</button>'+aiBadge('mini')+
+      '</div>'+body;
+    el('mk_go').onclick=function(){
+      marketState.busy=true; drawMarket();
+      P.profileApi.market().then(function(r){
+        marketState.busy=false;
+        if(!r.ok){ marketState.mode='off'; drawMarket(); return; }
+        marketState.mode=r.data.mode;
+        marketState.data=(r.data.mode==='ai') ? r.data : null;
+        drawMarket();
+      });
+    };
   }
 
   /* ---------- разговор, заполняющий профиль ----------
@@ -1486,10 +1544,39 @@
      Записанное показывается под ответом списком. Это не украшение:
      заставить модель не выдумывать нельзя, можно только сделать выдумку
      заметной сразу, а не в готовой заявке. */
-  var chat = { msgs: [], busy: false };
+  /* Переписка держится в браузере и переживает перезагрузку страницы.
+     Раньше она жила только в памяти: обновил вкладку — и разговора нет,
+     хотя записанное в профиль осталось. Человек при этом не понимал,
+     дошло его сообщение или нет, и начинал заново.
+
+     Хранится отдельно по проектам: у каждого свой разговор, и при
+     переключении не должно показываться чужое.
+
+     В браузере, а не на сервере: это черновик разговора, а не документ.
+     Содержательное из него уже лежит в профиле на сервере. Если понадобится
+     видеть переписку с другого устройства — переносить в базу. */
+  var CHAT_KEEP = 60;   // сколько последних реплик храним
+  var chat = { msgs: [], busy: false, pid: null };
+
+  function chatKey(){ return 'pulsar.chat.' + (P.getProject() || '0'); }
+
+  function chatLoad(){
+    var pid = String(P.getProject() || '0');
+    if(chat.pid === pid) return;
+    chat.pid = pid; chat.busy = false;
+    try { chat.msgs = JSON.parse(localStorage.getItem(chatKey()) || '[]') || []; }
+    catch(e){ chat.msgs = []; }
+    if(!Array.isArray(chat.msgs)) chat.msgs = [];
+  }
+
+  function chatSave(){
+    try { localStorage.setItem(chatKey(), JSON.stringify(chat.msgs.slice(-CHAT_KEEP))); }
+    catch(e){}   // приватный режим или переполнение — переписка не важнее работы страницы
+  }
 
   function drawInterview(){
     var m=el('projmain'); if(!m) return;
+    chatLoad();
     if(!chat.msgs.length) chat.msgs = firstTurn();
 
     m.innerHTML='<div class="chat">'+
@@ -1503,21 +1590,24 @@
           (chat.busy?' disabled':'')+'></textarea>'+
         '<button class="btn btn-brass" id="chatsend"'+(chat.busy?' disabled':'')+'>Отправить</button>'+
       '</div>'+
-      '<p class="sub chat-note">Что попало в профиль — видно под каждым ответом, поправить можно '+
-      '<button type="button" class="pick-link" id="chat2form">в форме</button>.</p>'+
     '</div>';
 
     var log=el('chatlog'); if(log) log.scrollTop=log.scrollHeight;
     var send=function(){
       var t=(el('chatmsg').value||'').trim();
       if(!t) return;
+      // поле последнего заданного вопроса — уходит на сервер вместе с ответом
+      var pending='';
+      for(var i=chat.msgs.length-1;i>=0;i--){
+        if(chat.msgs[i].ask && chat.msgs[i].ask.field){ pending=chat.msgs[i].ask.field; break; }
+      }
       chat.msgs.push({who:'me', text:t});
       chat.busy=true; drawInterview();
-      P.profileApi.chat(t).then(function(r){
+      P.profileApi.chat(t, pending).then(function(r){
         chat.busy=false;
         if(!r.ok){
           chat.msgs.push({who:'bot', text:'', error:r.msg||'Не получилось отправить'});
-          drawInterview(); return;
+          chatSave(); drawInterview(); return;
         }
         var d=r.data;
         if(d.mode==='off'){
@@ -1530,6 +1620,7 @@
                           filled:d.filled||[], ask:d.ask});
           if(d.profile) setProfile(d.profile);
         }
+        chatSave();
         drawInterview();
         // список готовых документов меняется после каждой реплики
         drawDocs();
@@ -1540,7 +1631,7 @@
       // Enter отправляет, Shift+Enter переносит строку — как в мессенджере
       if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
     };
-    el('chat2form').onclick=function(){ proj.mode='form'; drawProject(); };
+    // кнопки «в форме» под полем больше нет — переключатель режимов стоит выше
     if(!chat.busy && el('chatmsg')) el('chatmsg').focus();
   }
 
@@ -1776,7 +1867,7 @@
             'href="#/cabinet/project">Дозаполнить профиль</a></div></div>' : '')+
         '<div class="proj-out-act">'+
           '<button class="btn btn-outline btn-sm" id="pj_copy">Скопировать текст</button>'+
-          '<span class="sub">Проверьте факты и цифры перед отправкой куда бы то ни было.</span>'+
+          '<span class="sub">Проверьте данные перед подачей заявки.</span>'+
         '</div>'+
       '</div>';
       el('pj_copy').onclick=function(){

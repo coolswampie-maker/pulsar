@@ -187,13 +187,18 @@
     get:function(){ return P.apiFetch(withProject('/profile/')).then(parse); },
     save:function(d){ return sendJson('PATCH', withProject('/profile/'), d); },
     next:function(){ return P.apiFetch(withProject('/profile/next/')).then(parse); },
-    chat:function(message){ return postJson('/profile/chat/', bodyWithProject({message:message})); },
+    // pending — поле, про которое помощник спросил в прошлый раз: сервер
+    // без него не связывает ответ человека с вопросом
+    chat:function(message, pending){ return postJson('/profile/chat/', bodyWithProject({message:message, pending:pending||''})); },
     formats:function(){ return P.apiFetch(withProject('/profile/formats/')).then(parse); },
     compose:function(fmt){ return postJson('/profile/compose/', bodyWithProject({format:fmt})); },
     composeJob:function(id){ return P.apiFetch('/profile/compose/'+id+'/').then(parse); },
     // Смета: каждый ответ возвращает смету целиком, а не одну строку —
     // итог считает сервер, и клиенту нечего досчитывать самому.
     budget:function(){ return P.apiFetch(withProject('/profile/budget/')).then(parse); },
+    // разбор рынка: длинный ответ модели, поэтому свой таймаут не ставим —
+    // сервер сам ограничивает ожидание, а браузер ждёт столько, сколько нужно
+    market:function(){ return postJson('/profile/market/', bodyWithProject({})); },
     budgetAdd:function(d){ return postJson('/profile/budget/', bodyWithProject(d)); },
     budgetSet:function(id,d){ return sendJson('PATCH', withProject('/profile/budget/'+id+'/'), d); },
     budgetDel:function(id){
