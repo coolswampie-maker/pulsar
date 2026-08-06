@@ -4,6 +4,7 @@
 рендер страниц админки. Демо-данные не трогаются — тесты идут в отдельной БД.
 """
 import json
+import re
 import os
 from datetime import date, time, timedelta
 
@@ -2312,6 +2313,32 @@ class AdminLanguageTests(TestCase):
         """Отрицательной проверки мало: она пройдёт и если кнопки нет вовсе."""
         html = self.c.get('/admin/booking/company/').content.decode()
         self.assertIn('Добавить компанию', html)
+
+    def test_no_template_comments_on_screen(self):
+        """Комментарий в шаблоне не должен попадать на экран.
+
+        Так уже случилось: многострочный комментарий был написан решёткой
+        {# … #}, а она закрывает только одну строку — и оператор видел на
+        странице «Индивидуальные заявки» абзац про verbose_name и ADD_LABELS.
+        Проверяем текст страницы, а не исходник шаблона: ошибка была именно
+        в том, что исходник выглядел правильно.
+        """
+        from django.contrib import admin as dj_admin
+        marks = ('{#', '#}', 'verbose_name', 'ADD_LABELS', '{% comment', '{% block')
+        for model in dj_admin.site._registry:
+            opts = model._meta
+            if opts.app_label != 'booking':
+                continue
+            html = self.c.get(f'/admin/booking/{opts.model_name}/').content.decode()
+            # только видимый текст: в атрибутах и скриптах фигурные скобки законны
+            body = re.sub(r'<script.*?</script>', ' ', html, flags=re.S)
+            body = re.sub(r'<[^>]+>', ' ', body)
+            for m in marks:
+                if m in body:
+                    # сообщение короткое: иначе в отчёт вываливается вся страница
+                    around = body[max(0, body.index(m) - 40):body.index(m) + 120]
+                    self.fail(f'{opts.model_name}: на странице виден кусок шаблона '
+                              f'«{m}» — ...{" ".join(around.split())}...')
 
 
 class AdminDateWidgetTests(TestCase):
