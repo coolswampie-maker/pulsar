@@ -1115,6 +1115,10 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   background:var(--paper-2);border:1px solid var(--line);border-radius:var(--r-lg);
   padding:12px 16px;margin-bottom:22px;}
 .proj-bar-lbl{font-size:13px;font-weight:600;color:var(--ink);}
+/* «Удалить проект» — ссылка с font:inherit, то есть 15.5px от body, а рядом
+   стоит кнопка .btn-sm на 13.5px. Вторая по важности надпись оказывалась
+   крупнее первой. Приводим к размеру соседней кнопки. */
+.proj-bar .pick-link{font-size:13.5px;padding:8px 0;}
 .proj-bar select{flex:1;min-width:200px;max-width:460px;padding:8px 11px;
   border:1px solid var(--line);border-radius:var(--r);background:var(--white);}
 .proj-bar select:focus{outline:none;border-color:var(--brass);}
