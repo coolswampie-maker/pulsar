@@ -298,7 +298,7 @@
     room:{label:'Лаборатории', single:'Лаборатория', icon:'building'},
     equipment:{label:'Оборудование', single:'Оборудование', icon:'device'},
     specialist:{label:'Специалисты', single:'Специалист', icon:'user'},
-    service:{label:'Услуги под ключ', single:'Услуга', icon:'doc'}
+    service:{label:'Готовые исследования', single:'Исследование', icon:'doc'}
   };
   P.unitShort = { 'смена':'смена','сутки':'сут','час':'ч','образец':'образец','партия':'партия' };
 

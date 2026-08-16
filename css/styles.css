@@ -1158,3 +1158,310 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .chat-bubble{max-width:88%;}
   .chat-input{flex-direction:column;align-items:stretch;}
 }
+
+/* ==========================================================
+   РАЗДЕЛ НИОКР
+   Меню из четырёх маршрутов, каталог работ с тремя разбивками,
+   подбор под задачу и форма заявки. Имена классов проверены на
+   пересечение с остальным файлом — совпадений нет.
+   ========================================================== */
+/* Только то, чего нет в боевых стилях. Если раздел примут — переедет в styles.css */
+
+/* карточка компетенции: та же сетка, что у каталога, но без фотографии —
+   у лаборатории нет «внешнего вида», её описывают задачи и методы */
+.cmp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px;}
+.cmp-card{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);
+  padding:22px 22px 18px;display:flex;flex-direction:column;transition:.16s;}
+.cmp-card:hover{border-color:var(--navy);box-shadow:var(--shadow-md);}
+.cmp-dir{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--brass);margin-bottom:7px;}
+.cmp-name{font-family:var(--display);font-weight:700;font-size:18px;line-height:1.25;
+  color:var(--navy);margin-bottom:6px;}
+.cmp-unit{font-size:13px;color:var(--ink-soft);margin-bottom:14px;}
+.cmp-h{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-soft);margin:0 0 7px;}
+.cmp-tasks{list-style:none;margin:0 0 15px;padding:0;font-size:14px;line-height:1.55;}
+.cmp-tasks li{padding-left:15px;position:relative;color:var(--ink);}
+.cmp-tasks li::before{content:"—";position:absolute;left:0;color:var(--brass);}
+.cmp-eq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+.cmp-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;border-top:1px solid var(--line-2);padding-top:14px;flex-wrap:wrap;}
+.cmp-open{font-size:13.5px;font-weight:600;color:var(--navy);white-space:nowrap;}
+
+/* ответ помощника */
+.rnd-out{border:1px solid #cfd9ee;border-radius:12px;padding:20px 22px;margin-top:16px;background:#fff;}
+.rnd-out-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.rnd-out-head h3{font-size:17px;margin:0;}
+/* Результат подбора. Помощник не пишет документ — он выбирает работы
+   из каталога и объясняет, зачем каждая. Нумерованный список, потому что
+   порядок осмысленный: сначала выяснить причину, потом проверять замену. */
+.ph-list{list-style:none;counter-reset:ph;margin:0 0 20px;padding:0;}
+.ph-list li{counter-increment:ph;position:relative;padding:14px 0 14px 40px;
+  border-top:1px solid var(--line-2);}
+.ph-list li:first-child{border-top:none;padding-top:4px;}
+.ph-list li::before{content:counter(ph);position:absolute;left:0;top:14px;
+  width:25px;height:25px;border-radius:50%;background:var(--brass-tint);color:var(--brass);
+  font-family:var(--mono);font-size:12.5px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;}
+.ph-list li:first-child::before{top:4px;}
+.ph-top{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:4px;}
+.ph-top b{font-family:var(--display);font-weight:700;font-size:16px;color:var(--navy);}
+.ph-org{flex:none;font-size:12px;color:var(--ink-soft);white-space:nowrap;}
+.ph-why{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink);}
+.ph-meta{margin-top:5px;font-size:12.5px;color:var(--ink-soft);}
+
+/* Вопросы оператора. Прежний блок косил: маркеры списка висели в отрыве
+   от текста из-за браузерного padding-left. Тире вместо точек и свой отступ. */
+.ph-gaps{background:var(--brass-tint);border-radius:var(--r);padding:16px 20px;
+  margin-bottom:18px;}
+.ph-gaps b{display:block;font-size:14.5px;color:var(--ink);margin-bottom:9px;}
+.ph-gaps ul{list-style:none;margin:0;padding:0;font-size:13.5px;line-height:1.6;}
+.ph-gaps li{position:relative;padding-left:16px;color:var(--ink);}
+.ph-gaps li::before{content:"—";position:absolute;left:0;color:var(--brass);}
+
+/* То, ради чего убрали золотую плашку сверху: про заявку человек читает
+   там, где собирается заказывать, а не на входе в раздел. */
+.ph-order{border-top:1px solid var(--line);padding-top:16px;}
+.ph-order b{display:block;font-size:14.5px;color:var(--ink);margin-bottom:5px;}
+.ph-order p{margin:0 0 14px;font-size:13.5px;line-height:1.6;color:var(--ink-soft);
+  max-width:74ch;}
+/* Служебные строки не нумеруются: «6» напротив дисклеймера читалось бы
+   как шестая подобранная работа. Селектор обязательно с .ph-list —
+   иначе правило для li::before перебивает по специфичности. */
+.ph-list li.ph-none,.ph-list li.ph-demo{counter-increment:none;padding-left:0;
+  font-size:13px;line-height:1.55;color:var(--ink-soft);}
+.ph-list li.ph-none::before,.ph-list li.ph-demo::before{content:none;}
+.ph-list li.ph-none{color:var(--ink);}
+@media(max-width:640px){ .ph-list li{padding-left:34px;} }
+/* КАТАЛОГ РАБОТ.
+   Один список на всё, потому что человек не знает заранее, чья это услуга.
+   Он знает, что ему нужно измерить. Делить каталог по исполнителю — значит
+   заставлять его искать дважды.
+   Цен здесь нет ни у одной строки: НИОКР считают под задачу. Поэтому
+   и действие одно на весь список — заявка. */
+.cat-tools{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+.cat-search{flex:1;min-width:260px;display:flex;align-items:center;gap:9px;background:#fff;
+  border:1px solid var(--line);border-radius:var(--r);padding:0 14px;}
+.cat-search svg{flex:none;color:var(--ink-soft);}
+.cat-search input{flex:1;min-width:0;border:none;background:transparent;padding:12px 0;
+  font-family:var(--sans);font-size:15px;outline:none;color:var(--ink);appearance:none;}
+/* type=search нужен ради клавиатуры на телефоне (кнопка «Найти» вместо
+   «Ввод»), но Chromium рисует к нему свой крестик — и рядом с нашим
+   получается два. Родной убираем. */
+.cat-search input::-webkit-search-cancel-button,
+.cat-search input::-webkit-search-decoration{-webkit-appearance:none;appearance:none;}
+.cat-search:focus-within{border-color:var(--navy);box-shadow:0 0 0 3px rgba(14,42,71,.09);}
+.cat-clear{flex:none;border:none;background:none;cursor:pointer;color:var(--ink-soft);
+  font-size:19px;line-height:1;padding:4px;display:none;}
+.cat-tools.has-q .cat-clear{display:block;}
+
+/* Экран выбора. Он показывается вместо списка, а не над ним: девятнадцать
+   строк подряд человек не читает, он их листает мимо. Сначала короткий
+   выбор из шести названий, и только потом — работы по теме. */
+.cpick-h{font-size:14.5px;font-weight:700;color:var(--ink);margin:0 0 3px;}
+.cpick-labs{display:flex;flex-wrap:wrap;gap:9px;}
+.cpick-lab{border:1px solid var(--line);background:#fff;border-radius:22px;padding:9px 16px;
+  font-family:inherit;font-size:14px;font-weight:600;color:var(--ink);
+  cursor:pointer;transition:.14s;}
+.cpick-lab:hover{border-color:var(--navy);color:var(--navy);background:var(--paper-2);}
+.cpick-lab i{font-style:normal;opacity:.5;margin-left:7px;font-variant-numeric:tabular-nums;}
+/* Отрасль без перечня работ: пунктир и никакой реакции на курсор —
+   видно, что она есть, и видно, что открывать нечего. */
+.cpick-lab.off{border-style:dashed;color:var(--ink-soft);cursor:default;}
+.cpick-lab.off:hover{border-color:var(--line);color:var(--ink-soft);background:#fff;}
+.cpick-lab.off i{opacity:.75;font-size:12.5px;}
+.cpick-labs{margin-bottom:26px;}
+.cpick-labs:last-child{margin-bottom:0;}
+.cat-acc{font-size:12.5px;font-weight:600;color:var(--ok);}
+
+/* Парк оборудования: свёрнутый справочник под каталогом */
+.eqp{margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);}
+.eqp summary{display:flex;align-items:baseline;gap:12px;padding:15px 20px;cursor:pointer;
+  list-style:none;}
+.eqp summary::-webkit-details-marker{display:none;}
+.eqp summary b{font-family:var(--display);font-size:16.5px;color:var(--navy);}
+.eqp summary em{font-style:normal;font-size:13px;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;}
+.eqp[open] .cat-ar{transform:rotate(90deg);color:var(--navy);}
+.eqp .cat-ar{align-self:center;}
+.eqp-body{padding:2px 20px 20px 46px;border-top:1px solid var(--line-2);}
+.eqp-h{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--brass);margin:18px 0 8px;}
+.eqp-list{list-style:none;margin:0;padding:0;columns:2;column-gap:34px;
+  font-size:13.5px;line-height:1.55;}
+.eqp-list li{break-inside:avoid;padding-left:14px;position:relative;
+  color:var(--ink);margin-bottom:5px;}
+.eqp-list li::before{content:"—";position:absolute;left:0;color:var(--line);}
+@media(max-width:760px){ .eqp-body{padding:2px 16px 18px 16px;} .eqp-list{columns:1;} }
+
+.cat-crumb{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+.cat-back{flex:none;border:none;background:none;padding:0;cursor:pointer;font-family:inherit;
+  font-size:13.5px;font-weight:600;color:var(--navy);}
+.cat-back::before{content:"← ";color:var(--brass);}
+.cat-back:hover{color:var(--brass);}
+.cat-crumb b{font-family:var(--display);font-size:19px;color:var(--navy);}
+.cat-crumb em{font-style:normal;font-size:13px;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;}
+
+.cat-list{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;}
+.cat-h{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--brass);padding:15px 20px 8px;background:var(--paper-2);
+  border-top:1px solid var(--line);}
+.cat-h:first-child{border-top:none;}
+.cat-it{border-top:1px solid var(--line-2);}
+.cat-it:first-child,.cat-h+.cat-it{border-top:none;}
+.cat-it[open]{background:var(--paper-2);}
+.cat-it summary{display:flex;align-items:center;gap:14px;padding:15px 20px;cursor:pointer;
+  list-style:none;transition:.14s;}
+.cat-it summary::-webkit-details-marker{display:none;}
+.cat-it summary:hover{background:var(--paper-2);}
+.cat-it[open] summary{background:transparent;}
+.cat-ar{flex:none;color:var(--ink-soft);transition:transform .16s;}
+.cat-it[open] .cat-ar{transform:rotate(90deg);color:var(--navy);}
+.cat-n{flex:1;min-width:0;font-weight:600;font-size:15px;line-height:1.35;color:var(--ink);}
+.cat-n em{font-style:normal;background:var(--brass-tint);border-radius:3px;padding:0 2px;}
+/* Объект испытания. «Определение рН» без продукции — это не строка
+   каталога, а половина строки. */
+.cat-obj{display:block;margin-top:2px;font-weight:400;font-size:12.5px;
+  line-height:1.4;color:var(--ink-soft);}
+.cat-cond{flex:none;font-size:13px;font-weight:600;color:var(--navy);
+  font-variant-numeric:tabular-nums;white-space:nowrap;}
+/* Исполнитель подписан приглушённо и без рамки. Это справка, а не призыв:
+   действие у всех строк теперь одно, а вот договор у МГУ и у партнёра
+   разный, и человеку из закупок это надо видеть до клика. */
+.cat-org{flex:none;width:88px;text-align:right;font-size:12px;color:var(--ink-soft);
+  white-space:nowrap;}
+
+.cat-body{padding:2px 20px 20px 52px;border-top:1px solid var(--line-2);}
+.cat-body dl{display:grid;grid-template-columns:132px 1fr;gap:9px 16px;margin:14px 0 0;
+  font-size:13.5px;line-height:1.55;}
+.cat-body dt{color:var(--ink-soft);}
+.cat-body dd{margin:0;color:var(--ink);}
+.cat-act{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px;}
+.cat-act .hint{font-size:12.5px;color:var(--ink-soft);}
+.cat-alt{margin:12px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-soft);}
+.cat-alt a{color:var(--navy);font-weight:600;border-bottom:1px solid var(--brass-soft);}
+
+.cat-none{padding:34px 20px;text-align:center;color:var(--ink-soft);font-size:14.5px;}
+.cat-none b{display:block;color:var(--ink);font-size:16px;margin-bottom:6px;}
+
+.cat-note{margin-top:18px;padding:16px 18px;border-left:3px solid var(--brass-soft);
+  background:var(--brass-tint);border-radius:0 var(--r) var(--r) 0;
+  font-size:13.5px;line-height:1.6;color:var(--ink);max-width:76ch;}
+
+@media(max-width:760px){
+  .cat-it summary{flex-wrap:wrap;gap:7px 10px;padding:14px 16px;}
+  .cat-n{flex:1 0 calc(100% - 30px);}
+  .cat-cond{margin-left:30px;}
+  /* на телефоне исполнитель встаёт в ту же строку, что и диапазон,
+     фиксированная колонка тут только рвала бы разметку */
+  /* Разделителя между диапазоном и исполнителем не ставим: в самом
+     диапазоне уже есть точка («−70…300 °C · 0…50 кН»), вторая читалась бы
+     как продолжение условий. Хватает пробела. */
+  .cat-org{width:auto;text-align:left;}
+  /* если диапазона нет, исполнитель идёт третьим и отступ нужен ему */
+  summary>.cat-org:nth-child(3){margin-left:30px;}
+  .cat-body{padding:2px 16px 18px 46px;}
+  .cat-body dl{grid-template-columns:1fr;gap:2px 0;}
+  .cat-body dt{margin-top:9px;}
+}
+
+/* якорь не должен уезжать под две липкие полосы */
+
+@media(max-width:680px){
+}
+/* МЕНЮ РАЗДЕЛА И ПАНЕЛИ.
+   Разделы больше не идут лентой: открыт всегда ровно один, остальные
+   скрыты. Меню и панель — взаимоисключающие состояния одной страницы. */
+/* Ровно две колонки: четыре пункта в auto-fit давали 3 + 1 сироту
+   в нижнем ряду. Сетка 2×2 читается как меню, а не как остаток. */
+.rm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:940px;}
+@media(max-width:1023px){ .rm-grid{grid-template-columns:1fr;max-width:620px;} }
+.rm{display:block;text-align:left;background:#fff;border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:24px 24px 22px;font-family:inherit;
+  cursor:pointer;transition:.16s;}
+.rm:hover{border-color:var(--navy);box-shadow:var(--shadow-md);}
+.rm-ic{display:flex;align-items:center;justify-content:center;width:40px;height:40px;
+  border-radius:11px;background:var(--brass-tint);color:var(--brass);margin-bottom:15px;}
+.rm-ic svg{width:21px;height:21px;}
+.rm b{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+  font-family:var(--display);font-weight:700;font-size:18px;line-height:1.25;
+  color:var(--navy);margin-bottom:7px;}
+.rm b i{font-style:normal;font-family:var(--sans);font-size:12.5px;font-weight:600;
+  color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.rm>span:not(.rm-ic){display:block;font-size:13.5px;line-height:1.55;color:var(--ink-soft);}
+
+.pane{scroll-margin-top:88px;}
+.pane-back{display:inline-block;margin-bottom:18px;border:none;background:none;padding:0;
+  cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--navy);}
+.pane-back::before{content:"← ";color:var(--brass);}
+.pane-back:hover{color:var(--brass);}
+.cmp-chip{display:inline-block;border:1px solid var(--line);border-radius:20px;
+  padding:5px 11px;font-size:12.5px;color:var(--ink);background:#fff;}
+.cmp-chip.more{border-style:dashed;color:var(--ink-soft);}
+.cmp-h i{font-style:normal;font-weight:600;opacity:.6;font-variant-numeric:tabular-nums;}
+.cmp-empty{margin:0 0 15px;font-size:13.5px;color:var(--ink-soft);}
+/* Раскрывающийся состав направления */
+.cmp-more{margin-bottom:14px;}
+.cmp-more summary{display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  list-style:none;font-size:13.5px;font-weight:600;color:var(--navy);}
+.cmp-more summary::-webkit-details-marker{display:none;}
+.cmp-more summary::before{content:"";width:0;height:0;border:5px solid transparent;
+  border-left-color:var(--brass);transition:transform .16s;}
+.cmp-more[open] summary::before{transform:rotate(90deg) translateX(-2px);}
+.cmp-more-in{padding-top:6px;}
+.cmp-more-in .cmp-h:first-child{margin-top:6px;}
+.cmp-chip.more{display:none;}
+.cmp-chip b{display:block;margin-top:2px;font-size:11.5px;font-weight:600;color:var(--brass);}
+.eqp-lab{font-family:var(--display);font-weight:700;font-size:15.5px;color:var(--navy);
+  margin:26px 0 2px;padding-top:18px;border-top:1px solid var(--line);}
+.eqp-body>.eqp-lab:first-child{margin-top:8px;padding-top:0;border-top:none;}
+.eqp-h i{font-style:normal;opacity:.65;font-variant-numeric:tabular-nums;}
+.eqp-note{margin:12px 0 0;font-size:13px;color:var(--ink-soft);}
+/* ЗАЯВКА.
+   Отдельный шаг, а не хвост подбора: заказчик может прийти уже зная,
+   что ему нужно, и незачем гонять его через помощника. Работы копятся
+   в списке — их добавляют и из каталога, и из подбора. */
+.rqf{max-width:820px;}
+.rqf-block{margin-bottom:20px;}
+.rqf-row{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+.rqf-lab{display:block;font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:7px;}
+.rqf input,.rqf select,.rqf textarea{width:100%;font-family:var(--sans);font-size:15px;
+  color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:var(--r);
+  padding:11px 14px;outline:none;transition:.14s;}
+.rqf textarea{resize:vertical;line-height:1.55;}
+.rqf input:focus,.rqf select:focus,.rqf textarea:focus{border-color:var(--navy);
+  box-shadow:0 0 0 3px rgba(14,42,71,.09);}
+.rqf-hint{margin:7px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink-soft);max-width:70ch;}
+.rqf-radio{display:flex;gap:20px;flex-wrap:wrap;font-size:14px;}
+.rqf-radio label{display:flex;align-items:center;gap:7px;cursor:pointer;}
+.rqf-radio input{width:auto;}
+.rqf-act{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  border-top:1px solid var(--line);padding-top:20px;}
+.rqf-act .rqf-hint{margin:0;flex:1;min-width:240px;}
+
+.rqf-picked{display:flex;flex-wrap:wrap;gap:8px;}
+.rqf-pick{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);
+  background:#fff;border-radius:20px;padding:7px 8px 7px 14px;font-size:13.5px;color:var(--ink);}
+.rqf-pick i{font-style:normal;font-size:12px;color:var(--ink-soft);}
+.rqf-pick button{border:none;background:var(--paper-2);color:var(--ink-soft);cursor:pointer;
+  width:20px;height:20px;border-radius:50%;font-size:14px;line-height:1;padding:0;}
+.rqf-pick button:hover{background:var(--brass-tint);color:var(--brass);}
+.rqf-none{font-size:13.5px;color:var(--ink-soft);}
+@media(max-width:680px){ .rqf-row{grid-template-columns:1fr;gap:0;} }
+/* Предложение оформить через кабинет */
+.rqf-auth{border:1px solid var(--line);border-left:3px solid var(--brass-soft);
+  border-radius:0 var(--r-lg) var(--r-lg) 0;background:var(--paper-2);
+  padding:20px 22px;margin-bottom:22px;}
+.rqf-auth b{display:block;font-family:var(--display);font-size:17px;color:var(--navy);
+  margin-bottom:10px;}
+.rqf-auth ul{list-style:none;margin:0 0 18px;padding:0;font-size:13.5px;line-height:1.6;}
+.rqf-auth li{position:relative;padding-left:17px;color:var(--ink);}
+.rqf-auth li::before{content:"—";position:absolute;left:0;color:var(--brass);}
+.rqf-auth-act{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.rqf-skip{border:none;background:none;padding:0;cursor:pointer;font-family:inherit;
+  font-size:13.5px;font-weight:600;color:var(--ink-soft);
+  border-bottom:1px solid var(--line);}
+.rqf-skip:hover{color:var(--navy);border-bottom-color:var(--navy);}
+.assist-note{margin:8px 0 0;font-size:13px;color:var(--ink-soft);}

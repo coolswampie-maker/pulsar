@@ -72,7 +72,7 @@
     app.innerHTML=html; window.scrollTo(0,0);
     if(mount) mount();
     applyReveal();
-    syncNav(); syncCart();
+    syncNav(); syncCabLink(); syncCart();
   }
   function applyReveal(){
     var els=qsAll('.res-card,.tile,.step,.dir-clean .d,.card-flat,.figure,.promo');
@@ -91,8 +91,12 @@
   }
   function syncNav(){
     var path=(location.hash.replace('#','')||'/').split('?')[0];
+    /* Сравниваем по первому сегменту: у разделов есть внутренние маршруты
+       (#/rnd/catalog), и на них пункт меню тоже должен гореть. */
+    var root='/'+path.split('/').filter(Boolean)[0];
     qsAll('[data-nav]').forEach(function(a){
-      a.classList.toggle('active', a.getAttribute('data-nav')===path);
+      var nav=a.getAttribute('data-nav');
+      a.classList.toggle('active', nav===path || (nav!=='/' && nav===root));
     });
   }
   window.addEventListener('pulsar:cart', syncCart);
@@ -284,7 +288,7 @@
       ['room','Лаборатории','Чистые комнаты ISO 5–7, GMP-зоны, испытательные комплексы','room-cleanroom-v'],
       ['equipment','Оборудование','Микроскопы, спектрометры, испытательные и климатические камеры','eq-vk1000'],
       ['specialist','Специалисты','Операторы приборов и инженеры под конкретную задачу','sp-bioinf'],
-      ['service','Услуги под ключ','Вы передаёте образец, получаете протокол испытаний','srv-xrd']
+      ['service','Готовые исследования','Передайте образец — получите измерения, протокол или заключение','srv-xrd']
     ];
     var featured = P.getResources().filter(function(r){
       return ['eq-massspec','eq-sem','eq-vk1000','eq-nmr','room-cleanroom-a','srv-sem'].indexOf(r.id)>=0;
@@ -298,12 +302,12 @@
            Раньше принадлежность к МГУ повторялась трижды: служебная полоса,
            логотип, герб с той же строкой в баннере. Осталось одно упоминание —
            в заголовке, где оно работает частью предложения, а не регалией. */
-        '<h1>Аренда <em>приборов и лабораторий</em> МГУ</h1>'+
+        '<h1>Приборы, лаборатории и <em>исследования</em> МГУ</h1>'+
         /* Одно предложение, и оно про читателя, а не про товар: человек должен
            узнать себя раньше, чем начнёт разбираться, что тут сдаётся.
            Перечень идёт ниже плитками — дублировать его словами незачем. */
-        '<p class="lead">Забронируйте прибор или лабораторию под свою задачу. '+
-        'Оператор подтвердит заявку и оформит договор.</p>'+
+        '<p class="lead">Забронируйте прибор или лабораторию, закажите готовое '+
+        'исследование или поставьте задачу как НИОКР.</p>'+
         /* Строка объясняет, что в поле можно писать не только название из
            каталога. Значок AI стоит в самом поле, поэтому здесь достаточно
            слова «помощник» — повторять аббревиатуру дважды подряд незачем. */
@@ -338,6 +342,12 @@
         '<div><div class="eyebrow">Каталог</div><h2 class="h-lg">Что можно забронировать</h2></div>'+
         '<a class="btn btn-outline btn-sm" href="#/catalog">Весь каталог →</a>'+
       '</div>'+
+      /* Мост в НИОКР. Без него раздел выглядит вторым сайтом внутри сайта,
+         а цепочку «готовое исследование → прибор → если решения нет → НИОКР»
+         посетителю приходится додумывать самому. */
+      '<p class="sub" style="margin:-14px 0 26px;max-width:64ch">Не нашли готовое '+
+      'исследование? <a href="#/rnd">Поставим задачу как НИОКР</a> — направления, '+
+      'оборудование и специалисты научных групп МГУ.</p>'+
       '<div class="tiles">'+tiles.map(function(t){
         return '<a class="tile" href="#/catalog?type='+t[0]+'">'+img(P.getById(t[3]),'',t[1])+
           '<span class="tile-arrow">'+arrow+'</span>'+
@@ -413,6 +423,10 @@
   var catState={ type:'room', q:'', cat:'', onlyFree:false, sort:'default' };
   function viewCatalog(query){
     if(query && query.type && P.typeMeta[query.type]) catState.type=query.type;
+    /* Направление в адресе: на такие ссылки ведут карточки компетенций
+       из раздела НИОКР. Без этого фильтр молча не применялся бы. */
+    if(query && query.cat && P.categories && P.categories[query.cat]) catState.cat=query.cat;
+    else if(query && query.type) catState.cat='';
     renderCatalog();
   }
   function renderCatalog(){
@@ -2104,7 +2118,7 @@
     P.authApi.login(email,pass).then(function(res){
       b.disabled=false; b.textContent='Войти';
       if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
-      syncNav(); toast('Вы вошли в кабинет'); location.hash='#/cabinet';
+      syncCabLink(); toast('Вы вошли в кабинет'); location.hash='#/cabinet';
     });
   }
   function doRegister(){
@@ -2118,7 +2132,7 @@
     P.authApi.register(d).then(function(res){
       b.disabled=false; b.textContent='Зарегистрировать компанию';
       if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
-      syncNav(); toast('Кабинет создан'); location.hash='#/cabinet';
+      syncCabLink(); toast('Кабинет создан'); location.hash='#/cabinet';
     });
   }
 
@@ -2131,7 +2145,7 @@
       '<div id="cabbody"><div class="muted">Загрузка…</div></div>'+
     '</div></section>', function(){
       // перечитываем профиль: оператор мог подтвердить статус
-      P.authApi.refresh().then(function(){ syncNav(); drawProfile(); });
+      P.authApi.refresh().then(function(){ syncCabLink(); drawProfile(); });
     });
   }
   function reqFilled(c){ return !!(c.ogrn||c.okved||c.founded); }
@@ -2191,14 +2205,14 @@
       P.authApi.save(d).then(function(res){
         b.disabled=false; b.textContent='Сохранить';
         if(!res.ok){ msg.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return; }
-        msg.innerHTML='<div class="form-msg ok">Сохранено.</div>'; syncNav(); toast('Профиль обновлён');
+        msg.innerHTML='<div class="form-msg ok">Сохранено.</div>'; syncCabLink(); toast('Профиль обновлён');
         // Пометка «не заполнены» осталась бы висеть над только что
         // заполненными полями — подпись, которая врёт про то, что рядом.
         var hint=qsAll('.req-block .req-hint')[0];
         if(hint && reqFilled(d)) hint.remove();
       });
     };
-    el('plogout').onclick=function(){ P.authApi.logout(); syncNav(); toast('Вы вышли из кабинета'); location.hash='#/'; };
+    el('plogout').onclick=function(){ P.authApi.logout(); syncCabLink(); toast('Вы вышли из кабинета'); location.hash='#/'; };
   }
 
   /* ---------- мои заявки ---------- */
@@ -2213,7 +2227,7 @@
     var box=el('cabbody'); if(!box) return;
     P.ordersApi.list().then(function(res){
       if(!res.ok){
-        if(res.status===401){ P.authApi.logout(); syncNav(); location.hash='#/login'; return; }
+        if(res.status===401){ P.authApi.logout(); syncCabLink(); location.hash='#/login'; return; }
         box.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return;
       }
       var list=Array.isArray(res.data)?res.data:(res.data&&res.data.results)||[];
@@ -2353,7 +2367,7 @@
     var box=el('cabbody'); if(!box) return Promise.resolve();
     return P.kpiApi.get(kpiYear).then(function(res){
       if(!res.ok){
-        if(res.status===401){ P.authApi.logout(); syncNav(); location.hash='#/login'; return; }
+        if(res.status===401){ P.authApi.logout(); syncCabLink(); location.hash='#/login'; return; }
         box.innerHTML='<div class="form-msg err">'+esc(res.msg)+'</div>'; return;
       }
       kpiYear=res.data.year;
@@ -2473,7 +2487,10 @@
   }
 
   /* ---------- навигация: показываем состояние входа ---------- */
-  function syncNav(){
+  /* Раньше называлась syncNav — так же, как функция подсветки пунктов меню
+     выше. Из двух одноимённых объявлений побеждает последнее, и подсветка
+     активного раздела не работала ни разу. */
+  function syncCabLink(){
     var a=el('cablink'); if(!a) return;
     var c=P.company();
     a.setAttribute('href', P.isLogged()?'#/cabinet':'#/login');
@@ -2481,6 +2498,603 @@
     a.classList.toggle('on', P.isLogged());
   }
   function shortName(n){ n=String(n); return n.length>22 ? n.slice(0,21)+'…' : n; }
+
+  /* ==========================================================
+     НИОКР
+
+     Раздел устроен как меню из четырёх маршрутов, а не как одна
+     длинная страница: сценарии здесь разные и одновременно человеку
+     нужен ровно один.
+
+       #/rnd          — меню
+       #/rnd/assist   — подбор по описанию задачи
+       #/rnd/catalog  — каталог исследований и испытаний
+       #/rnd/order    — заявка
+       #/rnd/comp     — направления МГУ под договор
+
+     Данные — window.PULSAR.rnd (data/rnd.js). Каталог работ и приборная
+     база партнёра лежат там же, где справочник ресурсов, чтобы источник
+     был один: карточки направлений строятся из baseResources и не могут
+     разойтись с каталогом.
+     ========================================================== */
+  var RND = (window.PULSAR && window.PULSAR.rnd) || { works:[], equip:[], tasks:{} };
+
+  /* Порядок задан руками: сначала то, с чем приходят чаще. Три последние
+     отрасли партнёр объявляет, но перечня работ по ним не публиковал. */
+  var RND_GROUPS = ['Механические испытания','Термический анализ',
+                    'Физико-химические свойства','Состав и структура',
+                    'Стойкость и старение','Неразрушающий контроль',
+                    'Технологические работы'];
+  var RND_FIELDS = ['Композиты и полимеры','Малотоннажная химия','Строительные материалы',
+                    'Текстиль','Металлургия','Проводники и полупроводники',
+                    'Нефтегазовая промышленность'];
+  RND.works.sort(function(a,b){ return RND_GROUPS.indexOf(a.g) - RND_GROUPS.indexOf(b.g); });
+
+  /* Состояние переживает переходы между маршрутами: человек кладёт работу
+     в заявку из каталога, уходит в подбор и возвращается — список должен
+     остаться. */
+  var rndPick = [];      // работы, отложенные в заявку
+  var rndSel  = null;    // {k:'f'|'g'|'l', v:'название'} — выбранная разбивка
+  var rndQ    = '';      // строка поиска по каталогу
+
+  function rndN(n, one, few, many){ return n + ' ' + plural(n, one, few, many); }
+
+  /* Убираем всё кроме букв и цифр: «ГОСТ Р 57739», «гост р57739» и просто
+     «57739» должны находить одно и то же — инженер переписывает номер из
+     чужого ТЗ как придётся. */
+  function rndNorm(s){
+    return String(s).toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/g,' ').trim();
+  }
+  /* Русский склоняется, а поиск подстрокой — нет: «клей» не находится
+     в «клеевого». Морфология тут не нужна, хватает сравнения по началу
+     слова с отброшенным окончанием. Цифры не режем — иначе «57739»
+     превратится в «577» и вытащит половину каталога. */
+  function rndStem(t){ return /^[а-яa-z]+$/.test(t) ? t.slice(0, Math.max(3, t.length-2)) : t; }
+
+  function rndHay(it){
+    return rndNorm([it.n, it.g, (it.o||[]).join(' '), it.obj||'', it.std||'', it.lab||'',
+      it.kw||'', it.cond||'', it.acc||'',
+      it.who==='cis' ? 'цисис фмт испытания сертификация протокол' : 'мгу'].join(' '));
+  }
+  function rndMatch(it, terms){
+    var h = rndHay(it), hw = h.split(' '), flat = h.replace(/ /g,'');
+    return terms.every(function(t){
+      var pref = rndStem(t);
+      for (var i=0;i<hw.length;i++){ if (hw[i].indexOf(pref)===0) return true; }
+      /* запасной проход по строке без пробелов — ловит слипшееся «гостр57739».
+         Короткие куски так не ищем: совпадут с чем угодно. */
+      return t.length >= 4 && flat.indexOf(t) >= 0;
+    });
+  }
+  function rndMark(name, terms){
+    var out = esc(name);
+    terms.forEach(function(t){
+      var pref = rndStem(t);
+      if (pref.length < 3) return;
+      var re = new RegExp('(' + pref.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '[а-яa-z]*)','ig');
+      out = out.replace(re, '<em>$1</em>');
+    });
+    return out;
+  }
+  function rndTerms(){ var r = rndNorm(rndQ); return r ? r.split(' ') : []; }
+
+  /* Лабораторию партнёра знаем только там, где он назвал её сам —
+     на странице механических испытаний. Остальное помечено как
+     невыясненное, а не разложено по догадке. */
+  function rndLab(it){
+    if (it.who === 'mgu') return it.lab;
+    return it.lab ? it.lab + ' · ЦИСИС ФМТ' : 'ЦИСИС ФМТ — лаборатория уточняется';
+  }
+  /* Названия приборов берём из справочника ресурсов по id: название
+     в двух местах не разъедется, а неизвестный id просто ничего не даст. */
+  function rndEqNames(ids){
+    if (!ids) return '';
+    return ids.map(function(id){
+      var r = P.getResources().filter(function(x){ return x.id === id; })[0];
+      return r ? r.title : '';
+    }).filter(Boolean).join(' · ');
+  }
+
+  /* Аккредитация в разрезе отрасли: значение имеет только та, что одна
+     на всю отрасль. Одной аккредитованной работы мало — в «Проводниках»
+     графитовая фольга помечена как вне области аккредитации, и общая
+     подпись стала бы неправдой. */
+  var RND_ACC = (function(){
+    var m = {}, out = {};
+    RND.works.forEach(function(it){
+      (it.o||[]).forEach(function(f){ (m[f] = m[f] || {})[it.acc || '—'] = 1; });
+    });
+    Object.keys(m).forEach(function(f){
+      var k = Object.keys(m[f]);
+      if (k.length === 1 && k[0] !== '—' && k[0].indexOf('вне') !== 0) out[f] = k[0];
+    });
+    return out;
+  })();
+
+  /* ---------- строка каталога ---------- */
+  var RND_ACT = '<div class="cat-act">'
+    + '<button class="btn btn-brass btn-sm cat-buy" type="button">Заказать</button>'
+    + '<span class="hint">Оператор согласует условия и сообщит стоимость и срок выполнения.</span>'
+    + '</div>';
+
+  function rndRow(it, terms){
+    var right = (it.cond ? '<span class="cat-cond">'+esc(it.cond)+'</span>' : '')
+      + '<span class="cat-org">'+(it.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</span>';
+    var body;
+    if (it.who === 'mgu'){
+      body = '<dl>'
+        + '<dt>Измеряемые параметры</dt><dd>'+esc(it.what)+'</dd>'
+        + '<dt>Требования к образцу</dt><dd>'+esc(it.need)+'</dd>'
+        + '<dt>Результат</dt><dd>'+esc(it.got)+'</dd>'
+        + '<dt>Исполнитель</dt><dd>'+esc(it.lab)+', МГУ</dd>'
+        /* Прибор указан там, где он назван самим методом. Где привязка
+           неочевидна, строки нет: догадка здесь дороже пробела. */
+        + (rndEqNames(it.eq) ? '<dt>Выполняется на</dt><dd>'+esc(rndEqNames(it.eq))+'</dd>' : '')
+        + '<dt>Стоимость и срок</dt><dd>определяются под конкретную задачу: зависят от '
+        + 'количества образцов, пробоподготовки и формы представления результата</dd>'
+        + '</dl>' + RND_ACT
+        + '<p class="cat-alt">Для типовых задач эта работа доступна в '
+        + '<a href="#/catalog?type=service">общем каталоге</a> с прямым бронированием, '
+        + 'без предварительного согласования.</p>';
+    } else {
+      body = '<dl>'
+        + (it.obj ? '<dt>Объект</dt><dd>'+esc(it.obj)+'</dd>' : '')
+        + (it.std ? '<dt>Стандарты</dt><dd>'+esc(it.std)+'</dd>' : '')
+        + (it.cond ? '<dt>Диапазон</dt><dd>'+esc(it.cond)+'</dd>' : '')
+        /* Аккредитация — первый вопрос того, кому протокол нужен для
+           сертификации. Пишем только там, где партнёр сказал сам. */
+        + (it.acc ? '<dt>Аккредитация</dt><dd>'+esc(it.acc)+'</dd>' : '')
+        + (it.o ? '<dt>Отрасли</dt><dd>'+esc(it.o.join(' · '))+'</dd>' : '')
+        + '<dt>Исполнитель</dt><dd>ЦИСИС ФМТ — отдельная организация-партнёр</dd>'
+        + '<dt>Исходные данные</dt><dd>материал, определяемая характеристика и назначение '
+        + 'протокола; требования к образцу центр сообщает в ответ на заявку</dd>'
+        + '<dt>Стоимость и срок</dt><dd>называет центр после разбора задачи</dd>'
+        + '</dl>' + RND_ACT;
+    }
+    /* Название кладём в атрибут: в строке оно разрезано подсветкой поиска,
+       и читать его из текста ненадёжно. */
+    return '<details class="cat-it" data-n="'+esc(it.n)+'">'
+      + '<summary>'
+      + '<svg class="cat-ar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>'
+      + '<span class="cat-n">' + rndMark(it.n, terms)
+      + (it.obj ? '<span class="cat-obj">'+esc(it.obj)+'</span>' : '') + '</span>'
+      + right + '</summary><div class="cat-body">'+body+'</div></details>';
+  }
+
+  /* ---------- экран выбора ---------- */
+  function rndPickHtml(){
+    var byG = {}, byL = {}, byF = {};
+    RND.works.forEach(function(it){
+      byG[it.g] = (byG[it.g]||0)+1;
+      var l = rndLab(it); byL[l] = (byL[l]||0)+1;
+      (it.o||[]).forEach(function(f){ byF[f] = (byF[f]||0)+1; });
+    });
+    function chip(kind, name, n){
+      /* Отрасль без работ партнёр объявляет, но перечня не давал.
+         Кнопка неактивна: нажимать не на что. */
+      if (!n) return '<button class="cpick-lab off" type="button" disabled>'
+        + esc(name)+'<i>не опубликовано</i></button>';
+      return '<button class="cpick-lab" type="button" data-k="'+kind+'" data-v="'+esc(name)+'">'
+        + esc(name)+'<i>'+n+'</i></button>';
+    }
+    return '<p class="cpick-h">По отрасли</p>'
+      + '<div class="cpick-labs">'+RND_FIELDS.map(function(f){ return chip('f',f,byF[f]); }).join('')+'</div>'
+      + '<p class="cpick-h">По виду исследования</p>'
+      + '<div class="cpick-labs">'+RND_GROUPS.filter(function(g){ return byG[g]; })
+          .map(function(g){ return chip('g',g,byG[g]); }).join('')+'</div>'
+      + '<p class="cpick-h">По лаборатории</p>'
+      + '<div class="cpick-labs">'+Object.keys(byL).sort(function(a,b){ return byL[b]-byL[a]; })
+          .map(function(l){ return chip('l',l,byL[l]); }).join('')+'</div>';
+  }
+
+  /* ---------- экран темы или поиска ---------- */
+  function rndResHtml(){
+    var terms = rndTerms();
+    var shown = RND.works.filter(function(it){
+      if (!rndMatch(it, terms)) return false;
+      if (!rndSel) return true;
+      if (rndSel.k === 'g') return it.g === rndSel.v;
+      if (rndSel.k === 'f') return !!it.o && it.o.indexOf(rndSel.v) >= 0;
+      return rndLab(it) === rndSel.v;
+    });
+    var acc = rndSel && rndSel.k === 'f' ? RND_ACC[rndSel.v] : '';
+    var head = '<div class="cat-crumb">'
+      + '<button class="cat-back" type="button" id="catback">К выбору</button>'
+      + '<b>'+esc(rndSel ? rndSel.v : 'Поиск по каталогу')+'</b>'
+      + '<em>'+(shown.length ? rndN(shown.length,'работа','работы','работ') : '')+'</em>'
+      + (acc ? '<em class="cat-acc">Область аккредитации: '+esc(acc)+'</em>' : '')
+      + '</div>';
+
+    if (!shown.length) return head + '<div class="cat-list"><div class="cat-none">'
+      + '<b>Совпадений не найдено</b>Готовой методики под этот запрос в каталоге нет. '
+      + 'Задача может быть выполнена по договору НИОКР.'
+      + '<div style="margin-top:14px"><a class="btn btn-outline btn-sm" href="#/rnd/assist">'
+      + 'Изложить задачу помощнику</a></div></div></div>';
+
+    /* Заголовки групп нужны только в результатах поиска: они объясняют,
+       почему рядом оказались непохожие работы. Внутри выбранной темы
+       группа уже названа сверху. */
+    var heads = !rndSel && terms.length, last = null;
+    var list = shown.map(function(it){
+      var h = '';
+      if (heads && it.g !== last){ last = it.g; h = '<div class="cat-h">'+esc(it.g)+'</div>'; }
+      return h + rndRow(it, terms);
+    }).join('');
+    return head + '<div class="cat-list">'+list+'</div>';
+  }
+
+  /* ---------- приборная база ---------- */
+  function rndEquipHtml(){
+    var total = RND.equip.reduce(function(n,L){
+      return n + L.groups.reduce(function(m,g){ return m + g[1].length; }, 0); }, 0);
+    return '<details class="eqp"><summary>'
+      + '<svg class="cat-ar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>'
+      + '<b>Оборудование и средства измерения</b>'
+      + '<em>'+total+' единиц в '+RND.equip.length+' перечнях, по данным партнёра</em>'
+      + '</summary><div class="eqp-body">'
+      + RND.equip.map(function(L){
+          return '<p class="eqp-lab">'+esc(L.lab)+'</p>'
+            + L.groups.map(function(g){
+                return '<p class="eqp-h">'+esc(g[0])+' <i>'+g[1].length+'</i></p><ul class="eqp-list">'
+                  + g[1].map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+              }).join('')
+            + (L.note ? '<p class="eqp-note">'+esc(L.note)+'</p>' : '');
+        }).join('')
+      + '</div></details>';
+  }
+
+  /* ---------- подбор под задачу ---------- */
+  /* Помощник обязан брать работы из того же каталога, что и поиск: иначе
+     он рано или поздно предложит то, чего у нас нет. Это и есть главное
+     ограничение — модель выбирает из списка, а не сочиняет. */
+  function rndFind(text, limit){
+    var terms = rndNorm(text).split(' ').filter(function(t){ return t.length>=3; });
+    if (!terms.length) return [];
+    var out = [];
+    RND.works.forEach(function(it){
+      var h = rndHay(it), hw = h.split(' '), flat = h.replace(/ /g,''), sc = 0;
+      terms.forEach(function(t){
+        var pref = rndStem(t);
+        if (hw.some(function(w){ return w.indexOf(pref)===0; })
+            || (t.length>=4 && flat.indexOf(t)>=0)) sc++;
+      });
+      if (sc) out.push({ it: it, sc: sc });
+    });
+    out.sort(function(a,b){ return b.sc - a.sc; });
+    return out.slice(0, limit||5).map(function(x){ return x.it; });
+  }
+
+  /* ---------- разобранный пример для подбора ----------
+     Показывается, пока человек не менял текст задачи. Все четыре работы —
+     настоящие строки каталога; объяснения написаны редактором, а не моделью,
+     и потому осторожны: метод даёт данные, вывод делает специалист. */
+  var RND_DEMO_Q = 'Покрытие подшипников быстро разрушается в морской воде, нужно понять почему и чем заменить';
+  var RND_DEMO = [
+    ['Морфология поверхности (СЭМ + EDX)','МГУ',
+     'Поможет определить характер разрушения: коррозионное растрескивание, кавитация и абразивный износ по-разному проявляются на поверхности.',''],
+    ['Элементный анализ (ICP-MS)','МГУ',
+     'Позволит определить состав продуктов разрушения и элементы, пришедшие из среды, — это отделяет коррозию от механического износа.',
+     'Центр химического анализа'],
+    ['Стойкость к агрессивным средам','ЦИСИС ФМТ',
+     'Позволит сравнить покрытия-кандидаты в среде, приближенной к рабочей.','ГОСТ 12020 (ISO 175:2010)'],
+    ['Климатическое старение','ЦИСИС ФМТ',
+     'Позволит оценить ресурс на ускоренном режиме — сколько покрытие держится до отказа.','ГОСТ 9.707']
+  ];
+  var RND_GAPS = ['Материал основы и текущего покрытия',
+                  'Режим работы узла: температура, нагрузка, скорость',
+                  'Через какое время наступает отказ сейчас',
+                  'Есть ли отработавшие образцы',
+                  'Кому принадлежат права на результат'];
+
+  function rndDemoHtml(){
+    return RND_DEMO.map(function(w){
+      return '<li><div class="ph-top"><b>'+esc(w[0])+'</b><span class="ph-org">'+esc(w[1])+'</span></div>'
+        + '<p class="ph-why">'+esc(w[2])+'</p>'
+        + (w[3] ? '<div class="ph-meta">'+esc(w[3])+'</div>' : '')+'</li>';
+    }).join('');
+  }
+
+  function rndBack(){
+    return '<button class="pane-back" type="button" onclick="location.hash=\'#/rnd\'">Все разделы</button>';
+  }
+
+  /* ---------- МЕНЮ ---------- */
+  function rndMenuHtml(){
+    var dirs = Object.keys(P.categories).filter(function(k){
+      return P.getResources().some(function(r){ return r.category === k; }); }).length;
+    function tile(go, ic, name, cnt, desc){
+      return '<a class="rm" href="#/rnd/'+go+'">'
+        + '<span class="rm-ic" aria-hidden="true">'+ic+'</span>'
+        + '<b>'+name+(cnt?'<i>'+cnt+'</i>':'')+'</b><span>'+desc+'</span></a>';
+    }
+    var icAi = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/><path d="M18.5 14l.8 2.7 2.7.8-2.7.8-.8 2.7-.8-2.7-2.7-.8 2.7-.8z"/></svg>';
+    var icFind = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
+    var icDoc = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 3h11l3 3v15H5z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>';
+    var icBox = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>';
+
+    return '<section class="page-head"><div class="wrap">'
+      + '<h1 class="h-lg">Исследования, испытания и НИОКР под вашу задачу</h1>'
+      + '<p>Найдите готовую работу в каталоге или опишите задачу своими словами — '
+      + 'ПУЛЬСАР поможет определить, какие исследования и компетенции вам нужны.</p>'
+      + '</div></section>'
+      + '<section class="section"><div class="wrap"><div class="rm-grid">'
+      + tile('assist', icAi, 'Подобрать исследования по задаче', '',
+             'Опишите задачу своими словами — помощник предложит подходящие исследования и испытания.')
+      + tile('catalog', icFind, 'Найти исследование или испытание',
+             rndN(RND.works.length,'работа','работы','работ'),
+             'Поиск по методу, измеряемому параметру или номеру стандарта.')
+      + tile('order', icDoc, 'Оставить заявку', rndPick.length ? rndN(rndPick.length,'работа','работы','работ') : '',
+             'Опишите задачу, желаемый срок и какой результат вам нужен. Оператор уточнит детали и сообщит стоимость и срок выполнения.')
+      + tile('comp', icBox, 'НИОКР под нестандартную задачу',
+             rndN(dirs,'направление','направления','направлений'),
+             'Если готовой методики нет — посмотрите доступные направления, оборудование и специалистов научных групп МГУ.')
+      + '</div></div></section>';
+  }
+
+  /* ---------- ПОДБОР ---------- */
+  function rndAssistHtml(){
+    return '<section class="section-sm"><div class="wrap">'+rndBack()
+      + '<div class="assist">'
+      + '<label class="search-cap" for="rq">Опишите задачу своими словами</label>'
+      + '<div class="assist-row"><div class="ai-field">'+aiBadge()
+      + '<input id="rq" value="'+esc(RND_DEMO_Q)+'"></div>'
+      + '<button class="btn btn-brass" id="rqgo" type="button">Подобрать</button></div>'
+      + '<p class="assist-note">Помощник подберёт подходящие исследования и испытания из каталога.</p>'
+      + '<div class="rnd-out"><div class="rnd-out-head"><h3>Рекомендуемые исследования</h3>'
+      + '<span class="ai-badge mini"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>AI</span></div>'
+      + '<ol class="ph-list" id="rqhits">'+rndDemoHtml()+'</ol>'
+      + '<div class="ph-gaps"><b>Данные для расчёта и оформления</b><ul>'
+      + RND_GAPS.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>'
+      + '<div class="ph-order"><b>Как оформить заявку</b>'
+      + '<p>Отправьте выбранные работы вместе с описанием задачи. Оператор подтвердит '
+      + 'состав работ и сообщит стоимость и срок выполнения.</p>'
+      + '<button class="btn btn-brass btn-sm" type="button" id="phsend">Отправить заявку</button>'
+      + '</div></div></div></div></section>';
+  }
+
+  /* ---------- КАТАЛОГ ---------- */
+  function rndCatalogHtml(){
+    return '<section class="section"><div class="wrap">'+rndBack()
+      + '<div class="eyebrow">Каталог работ</div>'
+      + '<h2 class="h-lg" style="margin-bottom:8px">Исследования и испытания</h2>'
+      + '<p class="sub" style="max-width:66ch;margin-bottom:22px">Ищите по названию метода, '
+      + 'измеряемому параметру или номеру стандарта.</p>'
+      + '<div class="cat-tools'+(rndQ?' has-q':'')+'" id="cattools"><label class="cat-search">'
+      + '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>'
+      + '<input id="catq" type="search" autocomplete="off" value="'+esc(rndQ)+'" '
+      + 'placeholder="Например: теплостойкость, ДСК или ГОСТ Р 57739" aria-label="Поиск по каталогу работ">'
+      + '<button class="cat-clear" id="catclear" type="button" aria-label="Очистить">&times;</button>'
+      + '</label></div>'
+      + '<div id="catbody">'+((rndQ || rndSel) ? rndResHtml() : rndPickHtml())+'</div>'
+      + rndEquipHtml()
+      + '<p class="cat-note">Стоимость и срок зависят от задачи и рассчитываются после заявки.</p>'
+      + '</div></section>';
+  }
+
+  /* ---------- ЗАЯВКА ---------- */
+  function rndPickedHtml(){
+    return rndPick.length
+      ? rndPick.map(function(w,i){
+          return '<span class="rqf-pick">'+esc(w.n)+' <i>'+(w.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</i>'
+            + '<button type="button" data-i="'+i+'" aria-label="Убрать">&times;</button></span>';
+        }).join('')
+      : '<span class="rqf-none">Работы не выбраны.</span>';
+  }
+
+  function rndOrderHtml(){
+    return '<section class="section-sm"><div class="wrap">'+rndBack()
+      + '<div class="eyebrow">Заявка</div>'
+      + '<h2 class="h-lg" style="margin-bottom:8px">Опишите вашу задачу</h2>'
+      + '<p class="sub" style="max-width:66ch;margin-bottom:24px">Можно выбрать работы из каталога '
+      + 'или просто описать, что нужно исследовать, проверить или разработать. После заявки '
+      + 'оператор уточнит состав работ, стоимость и срок.</p>'
+      + '<form class="rqf" onsubmit="return false">'
+      + '<div class="rqf-block"><div class="rqf-lab">Работы из каталога</div>'
+      + '<div class="rqf-picked" id="reqpicked">'+rndPickedHtml()+'</div>'
+      + '<p class="rqf-hint">Выбранные работы появятся здесь. Если вы ещё ничего не выбрали, '
+      + 'просто опишите задачу ниже.</p></div>'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_task">Задача</label>'
+      + '<textarea id="rq_task" rows="4" placeholder="Например: покрытие подшипника разрушается '
+      + 'в морской воде. Нужно определить причину и подобрать более стойкий материал."></textarea></div>'
+      + '<div class="rqf-row">'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_when">Желаемый срок</label>'
+      + '<input id="rq_when" type="text" placeholder="Например: до конца квартала"></div>'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_out">Форма результата</label>'
+      + '<select id="rq_out"><option value="">Не знаю — предложите подходящий вариант</option>'
+      + '<option>Протокол испытаний</option><option>Отчёт с выводами</option>'
+      + '<option>Опытная партия и технологическая карта</option>'
+      + '<option>Отчётность по этапам договора НИОКР</option></select></div></div>'
+      /* Оформление через кабинет предлагается первым и по умолчанию. Контактные
+         поля скрыты, пока человек сам не выберет второй путь: так регистрация —
+         предложение, а не барьер, но и не мелкая ссылка, которую не замечают. */
+      + '<div class="rqf-auth" id="rqauth"><b>Подать заявку через кабинет</b><ul>'
+      + '<li>Реквизиты компании сохраняются и подставляются автоматически</li>'
+      + '<li>Все заявки и переписка хранятся в одном месте</li>'
+      + '<li>Можно отслеживать статус каждой заявки</li></ul>'
+      + '<div class="rqf-auth-act"><a class="btn btn-primary btn-sm" href="#/login">Войти или зарегистрироваться</a>'
+      + '<button class="rqf-skip" type="button" id="rqskip">Оставить заявку без регистрации</button>'
+      + '</div></div>'
+      + '<div id="rqguest" hidden>'
+      + '<p class="rqf-hint" style="margin:0 0 16px">Регистрация не обязательна. Ответ придёт '
+      + 'по указанным контактам, а кабинет можно создать позже — при оформлении договора.</p>'
+      + '<div class="rqf-row">'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_org">Организация</label>'
+      + '<input id="rq_org" type="text" placeholder="Название компании"></div>'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_fio">Контактное лицо</label>'
+      + '<input id="rq_fio" type="text" placeholder="Имя и должность"></div></div>'
+      + '<div class="rqf-row">'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_mail">Электронная почта</label>'
+      + '<input id="rq_mail" type="email" placeholder="name@company.ru"></div>'
+      + '<div class="rqf-block"><label class="rqf-lab" for="rq_tel">Телефон</label>'
+      + '<input id="rq_tel" type="tel" placeholder="+7"></div></div>'
+      + '<div class="rqf-block"><div class="rqf-lab">Как удобнее связаться</div>'
+      + '<div class="rqf-radio"><label><input type="radio" name="rq_way" checked> Почта</label>'
+      + '<label><input type="radio" name="rq_way"> Телефон</label>'
+      + '<label><input type="radio" name="rq_way"> Любым способом</label></div></div>'
+      + '<div class="rqf-act"><button class="btn btn-brass" type="button" id="rqsend">Отправить заявку</button>'
+      + '<span class="rqf-hint">Заявка уходит оператору. Он подтвердит состав работ '
+      + 'и сообщит стоимость и срок выполнения.</span></div>'
+      + '</div></form></div></section>';
+  }
+
+  /* ---------- КОМПЕТЕНЦИИ ----------
+     Карточки строятся из справочника ресурсов: число направлений и состав
+     оборудования не могут разойтись с каталогом. Поле «решаемые задачи» —
+     единственное, чего в справочнике нет: это обязательство подразделения,
+     а не характеристика прибора, и придумывать его нельзя. */
+  function rndCompHtml(){
+    var R = P.getResources(), CATS = P.categories;
+    var by = {};
+    R.forEach(function(r){ if (r.category) (by[r.category] = by[r.category] || []).push(r); });
+    var TYPE = { equipment:'Приборы', room:'Площадки', specialist:'Специалисты', service:'Готовые исследования' };
+    var WORD = { equipment:['прибор','прибора','приборов'], room:['площадка','площадки','площадок'],
+                 specialist:['специалист','специалиста','специалистов'], service:['услуга','услуги','услуг'] };
+    var ORDER = ['equipment','room','specialist','service'];
+
+    var cards = Object.keys(CATS).filter(function(k){ return by[k]; }).map(function(k){
+      var items = by[k];
+      var sum = ORDER.map(function(t){
+        var n = items.filter(function(r){ return r.type===t; }).length;
+        return n ? rndN(n, WORD[t][0], WORD[t][1], WORD[t][2]) : '';
+      }).filter(Boolean).join(' · ');
+      var groups = ORDER.map(function(t){
+        var list = items.filter(function(r){ return r.type===t; });
+        if (!list.length) return '';
+        return '<p class="cmp-h">'+TYPE[t]+' <i>'+list.length+'</i></p><div class="cmp-eq">'
+          + list.map(function(r){
+              /* Сколько работ каталога выполняется на этом приборе. Метка стоит
+                 только там, где связь заведена: у прибора без работ пусто, и это
+                 видно — значит, предложить по нему нечего. */
+              var n = RND.works.filter(function(w){ return w.eq && w.eq.indexOf(r.id)>=0; }).length;
+              return '<span class="cmp-chip">'+esc(r.title.split(' — ')[0])
+                + (n ? '<b>'+rndN(n,'работа','работы','работ')+'</b>' : '')+'</span>';
+            }).join('')+'</div>';
+      }).join('');
+      var top = ORDER.slice().sort(function(x,y){
+        return items.filter(function(r){ return r.type===y; }).length
+             - items.filter(function(r){ return r.type===x; }).length; })[0];
+      var tasks = RND.tasks[k];
+      return '<div class="cmp-card"><div class="cmp-name">'+esc(CATS[k])+'</div>'
+        + '<div class="cmp-unit">'+sum+'</div>'
+        + '<p class="cmp-h">Решаемые задачи</p>'
+        + (tasks ? '<ul class="cmp-tasks">'+tasks.map(function(t){ return '<li>'+esc(t)+'</li>'; }).join('')+'</ul>'
+                 : '<p class="cmp-empty">Перечень заполняет оператор.</p>')
+        + '<details class="cmp-more"><summary>Ресурсы направления</summary>'
+        + '<div class="cmp-more-in">'+groups+'</div></details>'
+        + '<div class="cmp-foot">'
+        + '<a class="cmp-open" href="#/catalog?type='+top+'&cat='+encodeURIComponent(k)+'">Открыть в каталоге →</a>'
+        + '<a class="btn btn-outline btn-sm" href="#/rnd/order">Обсудить задачу</a>'
+        + '</div></div>';
+    }).join('');
+
+    return '<section class="section"><div class="wrap">'+rndBack()
+      + '<div class="eyebrow">Компетенции</div>'
+      + '<h2 class="h-lg" style="margin-bottom:8px">НИОКР под нестандартную задачу</h2>'
+      + '<p class="sub" style="max-width:70ch;margin-bottom:24px">Если готового метода или испытания '
+      + 'в каталоге нет, задачу можно оформить как НИОКР. Ниже — направления, оборудование '
+      + 'и специалисты МГУ, которые могут быть задействованы в работе.</p>'
+      + '<div class="cmp-grid">'+cards+'</div>'
+      + '</div></section>';
+  }
+
+  /* ---------- маршрут ---------- */
+  function rndAdd(list){
+    (list||[]).forEach(function(w){
+      /* Дубли не кладём: человек мог нажать «Заказать» дважды, и второй раз
+         он имел в виду то же самое. */
+      if (!rndPick.some(function(x){ return x.n === w.n; })) rndPick.push(w);
+    });
+    location.hash = '#/rnd/order';
+  }
+
+  function viewRnd(sub){
+    var html, mount;
+    if (sub === 'assist'){ html = rndAssistHtml(); mount = rndMountAssist; }
+    else if (sub === 'catalog'){ html = rndCatalogHtml(); mount = rndMountCatalog; }
+    else if (sub === 'order'){ html = rndOrderHtml(); mount = rndMountOrder; }
+    else if (sub === 'comp'){ html = rndCompHtml(); mount = null; }
+    else { html = rndMenuHtml(); mount = null; }
+    render(html, mount);
+  }
+
+  function rndMountCatalog(){
+    var q = el('catq'), body = el('catbody'), tools = el('cattools');
+    function redraw(){
+      tools.classList.toggle('has-q', !!rndQ);
+      body.innerHTML = (rndQ || rndSel) ? rndResHtml() : rndPickHtml();
+    }
+    q.addEventListener('input', function(){
+      rndQ = this.value;
+      /* Поиск идёт по всему каталогу, а не внутри выбранной темы: человек,
+         который начал печатать, ищет метод, а не сужает текущий список. */
+      if (rndTerms().length) rndSel = null;
+      redraw();
+    });
+    el('catclear').onclick = function(){ rndQ = ''; q.value = ''; q.focus(); redraw(); };
+    body.addEventListener('click', function(e){
+      var pick = e.target.closest('[data-k]');
+      if (pick){ rndSel = { k: pick.dataset.k, v: pick.dataset.v }; redraw(); return; }
+      if (e.target.closest('#catback')){ rndSel = null; rndQ = ''; q.value = ''; redraw(); return; }
+      var buy = e.target.closest('.cat-buy');
+      if (buy){
+        var n = buy.closest('.cat-it').dataset.n;
+        var it = RND.works.filter(function(x){ return x.n === n; })[0];
+        if (it) rndAdd([it]);
+      }
+    });
+  }
+
+  function rndMountAssist(){
+    var go = el('rqgo'), inp = el('rq'), list = el('rqhits');
+    var gaps = document.querySelector('.ph-gaps');
+    go.onclick = function(){
+      var t = inp.value.trim();
+      if (t === RND_DEMO_Q){ list.innerHTML = rndDemoHtml(); if (gaps) gaps.hidden = false; return; }
+      /* Вопросы к заказчику зависят от задачи; составить их без модели нельзя,
+         а показывать вопросы от прежнего примера — обманывать. */
+      if (gaps) gaps.hidden = true;
+      var hits = rndFind(t, 5);
+      if (!hits.length){
+        list.innerHTML = '<li class="ph-none">Готовых работ под такой запрос в каталоге нет. '
+          + 'Задачу можно поставить по договору НИОКР.</li>';
+        return;
+      }
+      list.innerHTML = hits.map(function(it){
+        var meta = [it.g, it.cond, it.std].filter(Boolean).join(' · ');
+        return '<li><div class="ph-top"><b>'+esc(it.n)+'</b><span class="ph-org">'
+          + (it.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</span></div>'
+          + (it.obj ? '<p class="ph-why">Объект: '+esc(it.obj)+'</p>' : '')
+          + '<div class="ph-meta">'+esc(meta)+'</div></li>';
+      }).join('')
+      + '<li class="ph-demo">Это предварительный подбор по словам. Состав работ '
+      + 'проверяет оператор.</li>';
+    };
+    inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go.click(); });
+    /* Подбор переносится в заявку целиком: человек уже согласился с составом,
+       заставлять его выбирать заново — терять то, ради чего он пришёл. */
+    el('phsend').onclick = function(){
+      var names = qsAll('.ph-top b', list).map(function(x){ return x.textContent.trim(); });
+      rndAdd(RND.works.filter(function(w){ return names.indexOf(w.n) >= 0; }));
+    };
+  }
+
+  function rndMountOrder(){
+    var box = el('reqpicked');
+    box.addEventListener('click', function(e){
+      var b = e.target.closest('button[data-i]');
+      if (!b) return;
+      rndPick.splice(+b.dataset.i, 1);
+      box.innerHTML = rndPickedHtml();
+    });
+    el('rqskip').onclick = function(){
+      el('rqauth').hidden = true;
+      el('rqguest').hidden = false;
+      el('rq_org').focus();
+    };
+    el('rqsend').onclick = function(){
+      toast('Заявка отправлена оператору');
+    };
+  }
 
   /* ==========================================================
      РОУТЕР
@@ -2493,6 +3107,7 @@
     if(!seg.length) return viewHome();
     switch(seg[0]){
       case 'catalog': return viewCatalog(query);
+      case 'rnd': return viewRnd(seg[1]);
       case 'resource': return viewResource(seg[1]);
       case 'cart': return viewCart();
       case 'order': return viewOrder(seg[1]);
@@ -2570,7 +3185,7 @@
   // Оба запроса идут параллельно; если бэкенд недоступен, каталог берётся из
   // data/resources.js, а бронь работает без блокировок занятых слотов.
   syncCart();
-  syncNav();
+  syncCabLink();
   var pending=2;
   function ready(){ if(--pending===0){ syncCart(); route(); } }
   P.loadCatalog(ready);
