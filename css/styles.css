@@ -1159,8 +1159,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .chat-input{flex-direction:column;align-items:stretch;}
 }
 
-.hero2-alt{margin:14px 0 0;font-size:13.5px;line-height:1.6;color:var(--ink-soft);max-width:56ch;}
-.hero2-alt a{color:var(--navy);font-weight:600;border-bottom:1px solid var(--brass-soft);}
 
 /* ==========================================================
    РАЗДЕЛ НИОКР
