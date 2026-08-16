@@ -2787,8 +2787,16 @@
   /* Пример задачи стоит подсказкой в пустом поле, а не значением:
      подставленный текст с готовым ответом читался бы как уже выполненный
      разбор, хотя ничего не происходило. */
-  var RND_HINT = 'Например: покрытие подшипников разрушается в морской воде, '
-    + 'нужно понять причину и подобрать замену';
+  var RND_HINT = 'Например: композит расслаивается, нужно проверить межслоевой сдвиг';
+
+  /* Примеры запросов вместо пустого экрана. Это не витрина: каждый из них
+     реально отрабатывает на текущем каталоге, клик подставляет текст и сразу
+     ищет. Заодно они показывают, что писать можно свойство и материал,
+     а не только название метода. */
+  var RND_EXAMPLES = ['температура стеклования полимера',
+                      'плотность и пористость композита',
+                      'проверить крепёж на вырыв',
+                      'твёрдость резины'];
 
   function rndBack(){
     return '<button class="pane-back" type="button" onclick="location.hash=\'#/rnd\'">Все разделы</button>';
@@ -2835,7 +2843,13 @@
       + '<div class="assist-row"><div class="ai-field">'+aiBadge()
       + '<input id="rq" placeholder="'+esc(RND_HINT)+'"></div>'
       + '<button class="btn btn-brass" id="rqgo" type="button">Подобрать</button></div>'
-      + '<p class="assist-note">Помощник подберёт подходящие исследования и испытания из каталога.</p>'
+      + '<p class="assist-note">Помощник подберёт подходящие исследования и испытания '
+      + 'из каталога — '+rndN(RND.works.length,'работа','работы','работ')
+      + ' МГУ и ЦИСИС ФМТ, испытания по ГОСТ, ASTM и EN.</p>'
+      + '<div class="assist-ex"><span>Например:</span>'
+      + RND_EXAMPLES.map(function(x){
+          return '<button type="button" data-q="'+esc(x)+'">'+esc(x)+'</button>'; }).join('')
+      + '</div>'
       + '<div class="rnd-out" id="rqout" hidden><div class="rnd-out-head"><h3>Рекомендуемые исследования</h3>'
       + '<span class="ai-badge mini"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>AI</span></div>'
       + '<ol class="ph-list" id="rqhits"></ol>'
@@ -3061,6 +3075,12 @@
       + 'Состав работ проверяет оператор.</li>';
     };
     inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go.click(); });
+    var ex = document.querySelector('.assist-ex');
+    if (ex) ex.addEventListener('click', function(e){
+      var b = e.target.closest('button[data-q]');
+      if (!b) return;
+      inp.value = b.dataset.q; go.click();
+    });
     /* Подбор переносится в заявку целиком: человек уже согласился с составом,
        заставлять его выбирать заново — терять то, ради чего он пришёл. */
     el('phsend').onclick = function(){

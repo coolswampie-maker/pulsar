@@ -1463,3 +1463,11 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   border-bottom:1px solid var(--line);}
 .rqf-skip:hover{color:var(--navy);border-bottom-color:var(--navy);}
 .assist-note{margin:8px 0 0;font-size:13px;color:var(--ink-soft);}
+/* Примеры запросов: заполняют пустой экран настоящими сценариями,
+   а не рекламой. Каждый отрабатывает на текущем каталоге. */
+.assist-ex{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.assist-ex>span{font-size:13px;color:var(--ink-soft);}
+.assist-ex button{border:1px solid var(--line);background:#fff;border-radius:20px;
+  padding:7px 14px;font-family:var(--sans);font-size:13.5px;color:var(--ink);
+  cursor:pointer;transition:.14s;}
+.assist-ex button:hover{border-color:var(--navy);color:var(--navy);background:var(--paper-2);}
