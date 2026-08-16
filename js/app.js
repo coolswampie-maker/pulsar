@@ -2745,52 +2745,50 @@
   /* Помощник обязан брать работы из того же каталога, что и поиск: иначе
      он рано или поздно предложит то, чего у нас нет. Это и есть главное
      ограничение — модель выбирает из списка, а не сочиняет. */
+  /* Служебные слова выкидываем: «нужно», «понять», «чем» есть почти в каждом
+     описании задачи и ни на что не указывают. */
+  var RND_STOP = ('и в на с по для от до из за не что как это нужно надо хочу хочется '
+    + 'понять определить сделать провести есть был быть очень наш ваш мой их его её '
+    + 'который которая которые если или либо при про то так уже ещё чем чтобы').split(' ');
+
   function rndFind(text, limit){
-    var terms = rndNorm(text).split(' ').filter(function(t){ return t.length>=3; });
+    var terms = rndNorm(text).split(' ').filter(function(t){
+      return t.length >= 3 && RND_STOP.indexOf(t) < 0;
+    });
     if (!terms.length) return [];
     var out = [];
     RND.works.forEach(function(it){
-      var h = rndHay(it), hw = h.split(' '), flat = h.replace(/ /g,''), sc = 0;
+      /* Совпадение в названии и в ключевых словах весит больше, чем в номере
+         стандарта или в названии лаборатории: там слова попадают случайно. */
+      var strong = rndNorm(it.n + ' ' + (it.kw||'') + ' ' + (it.obj||'')).split(' ');
+      var all = rndHay(it).split(' ');
+      var flat = rndHay(it).replace(/ /g,'');
+      var sc = 0, hit = 0, strongHit = 0;
       terms.forEach(function(t){
-        var pref = rndStem(t);
-        if (hw.some(function(w){ return w.indexOf(pref)===0; })
-            || (t.length>=4 && flat.indexOf(t)>=0)) sc++;
+        var pref = rndStem(t), w = 0;
+        /* Совпадение по началу слова, но длина кандидата ограничена: иначе
+           «воде» цепляет «водопоглощение», а «сдвиг» — что угодно на «сдв».
+           Родственные формы («клей» → «клеевого») в запас укладываются. */
+        function ok(list){ return list.some(function(x){
+          return x.indexOf(pref) === 0 && x.length <= t.length + 4; }); }
+        if (ok(strong)) w = 3;
+        else if (ok(all)) w = 1;
+        else if (t.length >= 5 && flat.indexOf(t) >= 0) w = 1;
+        if (w){ sc += w; hit++; if (w === 3) strongHit++; }
       });
-      if (sc) out.push({ it: it, sc: sc });
+      /* Одного совпадения хватает, если оно в названии или ключевых словах.
+         Случайных попаданий в номер стандарта должно быть хотя бы два. */
+      if (strongHit || hit >= 2) out.push({ it: it, sc: sc });
     });
     out.sort(function(a,b){ return b.sc - a.sc; });
     return out.slice(0, limit||5).map(function(x){ return x.it; });
   }
 
-  /* ---------- разобранный пример для подбора ----------
-     Показывается, пока человек не менял текст задачи. Все четыре работы —
-     настоящие строки каталога; объяснения написаны редактором, а не моделью,
-     и потому осторожны: метод даёт данные, вывод делает специалист. */
-  var RND_DEMO_Q = 'Покрытие подшипников быстро разрушается в морской воде, нужно понять почему и чем заменить';
-  var RND_DEMO = [
-    ['Морфология поверхности (СЭМ + EDX)','МГУ',
-     'Поможет определить характер разрушения: коррозионное растрескивание, кавитация и абразивный износ по-разному проявляются на поверхности.',''],
-    ['Элементный анализ (ICP-MS)','МГУ',
-     'Позволит определить состав продуктов разрушения и элементы, пришедшие из среды, — это отделяет коррозию от механического износа.',
-     'Центр химического анализа'],
-    ['Стойкость к агрессивным средам','ЦИСИС ФМТ',
-     'Позволит сравнить покрытия-кандидаты в среде, приближенной к рабочей.','ГОСТ 12020 (ISO 175:2010)'],
-    ['Климатическое старение','ЦИСИС ФМТ',
-     'Позволит оценить ресурс на ускоренном режиме — сколько покрытие держится до отказа.','ГОСТ 9.707']
-  ];
-  var RND_GAPS = ['Материал основы и текущего покрытия',
-                  'Режим работы узла: температура, нагрузка, скорость',
-                  'Через какое время наступает отказ сейчас',
-                  'Есть ли отработавшие образцы',
-                  'Кому принадлежат права на результат'];
-
-  function rndDemoHtml(){
-    return RND_DEMO.map(function(w){
-      return '<li><div class="ph-top"><b>'+esc(w[0])+'</b><span class="ph-org">'+esc(w[1])+'</span></div>'
-        + '<p class="ph-why">'+esc(w[2])+'</p>'
-        + (w[3] ? '<div class="ph-meta">'+esc(w[3])+'</div>' : '')+'</li>';
-    }).join('');
-  }
+  /* Пример задачи стоит подсказкой в пустом поле, а не значением:
+     подставленный текст с готовым ответом читался бы как уже выполненный
+     разбор, хотя ничего не происходило. */
+  var RND_HINT = 'Например: покрытие подшипников разрушается в морской воде, '
+    + 'нужно понять причину и подобрать замену';
 
   function rndBack(){
     return '<button class="pane-back" type="button" onclick="location.hash=\'#/rnd\'">Все разделы</button>';
@@ -2835,14 +2833,12 @@
       + '<div class="assist">'
       + '<label class="search-cap" for="rq">Опишите задачу своими словами</label>'
       + '<div class="assist-row"><div class="ai-field">'+aiBadge()
-      + '<input id="rq" value="'+esc(RND_DEMO_Q)+'"></div>'
+      + '<input id="rq" placeholder="'+esc(RND_HINT)+'"></div>'
       + '<button class="btn btn-brass" id="rqgo" type="button">Подобрать</button></div>'
       + '<p class="assist-note">Помощник подберёт подходящие исследования и испытания из каталога.</p>'
-      + '<div class="rnd-out"><div class="rnd-out-head"><h3>Рекомендуемые исследования</h3>'
+      + '<div class="rnd-out" id="rqout" hidden><div class="rnd-out-head"><h3>Рекомендуемые исследования</h3>'
       + '<span class="ai-badge mini"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>AI</span></div>'
-      + '<ol class="ph-list" id="rqhits">'+rndDemoHtml()+'</ol>'
-      + '<div class="ph-gaps"><b>Данные для расчёта и оформления</b><ul>'
-      + RND_GAPS.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>'
+      + '<ol class="ph-list" id="rqhits"></ol>'
       + '<div class="ph-order"><b>Как оформить заявку</b>'
       + '<p>Отправьте выбранные работы вместе с описанием задачи. Оператор подтвердит '
       + 'состав работ и сообщит стоимость и срок выполнения.</p>'
@@ -3043,15 +3039,12 @@
   }
 
   function rndMountAssist(){
-    var go = el('rqgo'), inp = el('rq'), list = el('rqhits');
-    var gaps = document.querySelector('.ph-gaps');
+    var go = el('rqgo'), inp = el('rq'), list = el('rqhits'), out = el('rqout');
     go.onclick = function(){
       var t = inp.value.trim();
-      if (t === RND_DEMO_Q){ list.innerHTML = rndDemoHtml(); if (gaps) gaps.hidden = false; return; }
-      /* Вопросы к заказчику зависят от задачи; составить их без модели нельзя,
-         а показывать вопросы от прежнего примера — обманывать. */
-      if (gaps) gaps.hidden = true;
+      if (!t){ out.hidden = true; inp.focus(); return; }
       var hits = rndFind(t, 5);
+      out.hidden = false;
       if (!hits.length){
         list.innerHTML = '<li class="ph-none">Готовых работ под такой запрос в каталоге нет. '
           + 'Задачу можно поставить по договору НИОКР.</li>';
@@ -3064,8 +3057,8 @@
           + (it.obj ? '<p class="ph-why">Объект: '+esc(it.obj)+'</p>' : '')
           + '<div class="ph-meta">'+esc(meta)+'</div></li>';
       }).join('')
-      + '<li class="ph-demo">Это предварительный подбор по словам. Состав работ '
-      + 'проверяет оператор.</li>';
+      + '<li class="ph-demo">Подбор предварительный: совпадение найдено по описанию. '
+      + 'Состав работ проверяет оператор.</li>';
     };
     inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go.click(); });
     /* Подбор переносится в заявку целиком: человек уже согласился с составом,
