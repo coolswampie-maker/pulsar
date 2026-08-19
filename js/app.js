@@ -3049,12 +3049,19 @@
       + '<button class="rsel-all" type="button" id="facreset">Сбросить всё</button></div>';
   }
 
+  /* Заголовок плашки со значком ИИ. Значок стоит отдельной колонкой справа,
+     а не внутри <b>: там он лип к первому слову, набирался заголовочным
+     шрифтом и съезжал, как только заголовок переносился на вторую строку. */
+  function rndBanHead(text, badge){
+    return '<div class="rban-h"><b>'+text+'</b>'+(badge ? aiBadge('mini') : '')+'</div>';
+  }
+
   function rndAiHtml(){
     /* Молчание дольше секунды человек читает как поломку, поэтому ждём
        вслух и говорим, среди чего именно ищем. */
     if (rndAiBusy)
-      return '<div class="rban busy"><b>'+aiBadge('mini')
-        + 'Подбираем под вашу задачу…</b>'
+      return '<div class="rban busy">'
+        + rndBanHead('Подбираем под вашу задачу…', true)
         + '<p>Смотрим, какие из '+RND.works.length+' работ каталога закрывают то, '
         + 'что вы описали. Обычно это занимает несколько секунд.</p>'
         + '<div class="rban-skel"><i></i><i></i><i></i></div></div>';
@@ -3062,7 +3069,8 @@
     /* Отказ модели не должен уносить каталог: список остаётся на экране,
        фильтры работают, повторить можно одной кнопкой. */
     if (rndAiErr)
-      return '<div class="rban zero"><b>Не удалось подобрать по описанию</b>'
+      return '<div class="rban zero">'
+        + rndBanHead('Не удалось подобрать по описанию', false)
         + '<p>'+esc(rndAiErr)+' Каталог и фильтры при этом работают.</p>'
         + '<button class="rban-off" type="button" id="airetry">Повторить</button></div>';
 
@@ -3072,19 +3080,20 @@
     /* Тема требует разрешений — к модели запрос не уходил, и подменять
        ответ поиском по словам тут нельзя. */
     if (rndAi.mode === 'licensed')
-      return '<div class="rban zero"><b>Такая задача решается только через оператора</b>'
+      return '<div class="rban zero">'
+        + rndBanHead('Такая задача решается только через оператора', false)
         + '<p>'+esc(rndAi.reply)+'</p>'
         + '<div class="rban-act"><a class="btn btn-brass btn-sm" href="#/rnd/request">Описать задачу</a>'
         + '<button class="rban-off" type="button" id="aioff">Сбросить подбор</button></div></div>';
 
     var head, note;
     if (rndAi.n){
-      head = '<b>'+(ai?aiBadge('mini'):'')+'Подобрано по описанию: «'+esc(rndAi.q)+'»</b>'
+      head = rndBanHead('Подобрано по описанию: «'+esc(rndAi.q)+'»', ai)
         + (rndAi.reply ? '<p class="rban-say">'+esc(rndAi.reply)+'</p>' : '')
         + '<p>'+rndN(rndAi.n,'работа','работы','работ')+' поднято наверх списка. '
         + 'Фильтры не применялись — остальные работы остались ниже.</p>';
     } else {
-      head = '<b>'+(ai?aiBadge('mini'):'')+'По описанию ничего не нашлось</b>'
+      head = rndBanHead('По описанию ничего не нашлось', ai)
         + '<p>'+esc(rndAi.reply || 'Готовой методики под такую формулировку в каталоге нет. '
           + 'Попробуйте назвать материал и измеряемую характеристику.')+'</p>';
     }

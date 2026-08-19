@@ -1447,8 +1447,10 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   background:var(--brass-tint);border-radius:0 var(--r-lg) var(--r-lg) 0;
   padding:16px 18px;margin-bottom:16px;}
 .rban.zero{border-color:var(--line);border-left-color:var(--ink-soft);background:var(--paper-2);}
-.rban b{display:block;font-family:var(--display);font-size:16px;color:var(--navy);
-  margin-bottom:5px;}
+.rban-h{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  margin-bottom:6px;}
+.rban-h b{font-family:var(--display);font-size:16px;line-height:1.3;color:var(--navy);}
+.rban-h .ai-badge{flex:none;align-self:flex-start;}
 .rban p{margin:0;font-size:13.5px;line-height:1.6;color:var(--ink);}
 .rban-note{margin-top:8px !important;font-size:12.5px !important;color:var(--ink-soft) !important;}
 .rban-extra{margin-top:12px;padding-top:12px;border-top:1px solid var(--brass-soft);
@@ -1558,7 +1560,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 /* Ожидание вслух: молчание дольше секунды читается как поломка.
    Полосы-заготовки, а не крутилка — они показывают, что появится список. */
 .rban.busy{border-color:var(--line);border-left-color:var(--navy);background:var(--paper-2);}
-.rban.busy b{display:flex;align-items:center;gap:9px;}
 .rban-skel{margin-top:14px;display:flex;flex-direction:column;gap:9px;}
 .rban-skel i{display:block;height:11px;border-radius:3px;
   background:linear-gradient(90deg,var(--line-2),var(--line),var(--line-2));
@@ -1571,7 +1572,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .rban-say{margin-bottom:6px !important;font-size:14px !important;color:var(--ink) !important;}
 .rban-act{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px;}
 .rban-act .rban-off{margin-top:0;}
-.rban .ai-badge{flex:none;}
 
 /* Пояснение модели к строке каталога. Стоит на месте объекта испытания:
    пока идёт подбор, «почему подошло» важнее, чем «что испытывают». */
