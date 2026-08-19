@@ -1594,3 +1594,9 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   color:var(--ink-soft);width:66px;}
 .rqf-pick b{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--ink-soft);}
 @media(max-width:760px){ .cat-code{width:auto;} }
+/* Запасной путь из блока подбора: строкой, а не кнопкой — он не равен
+   подбору по значимости и не должен спорить с ним за внимание. */
+.rask-alt{display:block;margin-top:14px;padding-top:12px;
+  border-top:1px solid var(--line);font-size:12.5px;line-height:1.5;
+  color:var(--ink-soft);}
+.rask-alt:hover{color:var(--navy);}
