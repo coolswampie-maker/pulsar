@@ -1381,16 +1381,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .qbar-filters i{font-style:normal;margin-left:7px;background:var(--navy);color:#fff;
   border-radius:20px;padding:1px 7px;font-size:12px;font-variant-numeric:tabular-nums;}
 .qbar-hint{margin:8px 0 0;font-size:12.5px;color:var(--ink-soft);}
-/* Примеры задач: заполняют пустое поле настоящими сценариями, а не
-   рекламой. Три из четырёх описывают дефект или цель, а не название
-   метода — иначе неоткуда узнать, что писать можно и так. */
-.qbar-ex{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:14px;}
-.qbar-ex[hidden]{display:none;}
-.qbar-ex>span{font-size:12.5px;color:var(--ink-soft);}
-.qbar-ex button{border:1px solid var(--line);background:#fff;border-radius:20px;
-  padding:5px 12px;font-family:var(--sans);font-size:12.5px;color:var(--ink);
-  cursor:pointer;transition:.14s;text-align:left;}
-.qbar-ex button:hover{border-color:var(--navy);color:var(--navy);background:var(--paper-2);}
 
 .rnd-grid{display:grid;grid-template-columns:262px 1fr;gap:28px;align-items:start;}
 .rnd-main{min-width:0;}
@@ -1530,7 +1520,9 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
      съедали бы экран, ради которого всё и затевалось. «Подобрать»
      появляется только в режиме подбора и уходит на вторую строку. */
   .qbar-in{flex-wrap:wrap;gap:8px;}
-  .qbar-field{flex:1 1 auto;min-width:0;order:1;padding-left:4px;}
+  /* basis 0, а не auto: с auto основой становится длина подсказки, поле
+     перестаёт влезать рядом с «Фильтрами» и уносит их на вторую строку. */
+  .qbar-field{flex:1 1 0;min-width:0;order:1;padding-left:4px;}
   .qbar-filters{order:2;flex:none;padding:11px 13px;}
   .qbar-go{order:3;flex:1 0 100%;}
   .qbar-mode{font-size:11px;padding:5px 9px;}
@@ -1549,20 +1541,19 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
    метода не знает. Справа — потому что это второй по частоте сценарий,
    но первый по беспомощности: человек с дефектом на руках не может даже
    начать искать по каталогу. */
-.rnd-top{display:grid;grid-template-columns:1fr 420px;gap:40px;align-items:start;}
+.rnd-top{display:grid;grid-template-columns:1fr 380px;gap:44px;align-items:start;}
 .rnd-top-l p{max-width:56ch;}
-.rask{background:#fff;border:1px solid var(--line);border-left:3px solid var(--brass);
-  border-radius:0 var(--r-lg) var(--r-lg) 0;padding:20px 22px;box-shadow:var(--shadow-md);}
-.rask-h{display:flex;align-items:flex-start;gap:10px;font-family:var(--display);
-  font-weight:700;font-size:17px;color:var(--navy);margin-bottom:6px;}
-.rask-s{margin:0 0 14px;font-size:13.5px;line-height:1.55;color:var(--ink-soft);}
+.rask{background:var(--paper-2);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:18px 20px 20px;}
+.rask-h{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:10px;}
+.rask-h b{font-family:var(--display);font-weight:700;font-size:16px;color:var(--navy);}
 .rask textarea{width:100%;font-family:var(--sans);font-size:14.5px;line-height:1.5;
-  color:var(--ink);background:var(--paper-2);border:1px solid var(--line);
+  color:var(--ink);background:#fff;border:1px solid var(--line);
   border-radius:var(--r);padding:11px 13px;outline:none;resize:vertical;transition:.14s;}
-.rask textarea:focus{background:#fff;border-color:var(--navy);
-  box-shadow:0 0 0 3px rgba(14,42,71,.09);}
-.rask-act{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px;}
-.rask-n{font-size:12.5px;color:var(--ink-soft);}
+.rask textarea::placeholder{color:var(--ink-soft);}
+.rask textarea:focus{border-color:var(--navy);box-shadow:0 0 0 3px rgba(14,42,71,.09);}
+.rask .btn{margin-top:12px;}
 
 /* Ожидание вслух: молчание дольше секунды читается как поломка.
    Полосы-заготовки, а не крутилка — они показывают, что появится список. */
@@ -1592,12 +1583,10 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .rask{max-width:640px;}
 }
 @media(max-width:680px){
-  .rask{padding:16px 18px;border-radius:0 var(--r) var(--r) 0;}
-  .rask-h{font-size:16px;}
-  /* На узком экране подсказка занимает четыре строки и обрезалась —
-     человек видел половину примера и не понимал, что от него хотят. */
-  .rask textarea{font-size:16px;min-height:132px;}
-  .rask-act .btn{flex:1 0 100%;justify-content:center;}
+  .rask{padding:16px 18px 18px;}
+  /* 16px — порог, ниже которого Safari зумит страницу при фокусе */
+  .rask textarea{font-size:16px;}
+  .rask .btn{width:100%;justify-content:center;}
 }
 /* Код работы. Моноширинный и приглушённый: его называют оператору и
    вставляют в переписку, но читают строку всё-таки по названию. */
