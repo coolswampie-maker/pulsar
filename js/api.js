@@ -145,6 +145,33 @@
     }
   };
 
+  /* ---------- подбор исследований и испытаний (раздел «Исследования») ----------
+     Отдельный эндпойнт, а не параметр к /assist/: там подбираются позиции
+     для брони с ценой и часами, здесь — работы под ключ, у которых цены нет
+     ни у одной. Ответ и правила отбора у них разные. */
+  P.rndApi = {
+    /* Ожидание ограничено и повторяется один раз. Без потолка страница
+       висит в состоянии «подбираем» сколько угодно: fetch сам не отваливается,
+       а человек к тому времени уже решил, что сайт сломался. Один повтор —
+       потому что обрыв обычно единичный, а второй заход к модели стоит денег
+       и времени. Повторяем только сетевую неудачу: 429 и ошибки сервера
+       повтором не лечатся. */
+    ask:function(query){
+      var TIMEOUT = 20000;
+      function once(){
+        var ctl = window.AbortController ? new AbortController() : null;
+        var t = setTimeout(function(){ if (ctl) ctl.abort(); }, TIMEOUT);
+        return P.apiFetch('/rnd/assist/', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({query:query}), signal:ctl ? ctl.signal : undefined
+        }).then(parse).then(function(r){ clearTimeout(t); return r; },
+                function(e){ clearTimeout(t); throw e; });
+      }
+      return once().catch(function(){ return once(); })
+        .catch(function(){ return {ok:false, msg:'Подбор недоступен'}; });
+    }
+  };
+
   /* ---------- индивидуальная заявка на подбор ---------- */
   P.customRequestApi = {
     send:function(d){ return postJson('/custom-request/', d); }

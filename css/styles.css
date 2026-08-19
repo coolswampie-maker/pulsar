@@ -1381,14 +1381,15 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .qbar-filters i{font-style:normal;margin-left:7px;background:var(--navy);color:#fff;
   border-radius:20px;padding:1px 7px;font-size:12px;font-variant-numeric:tabular-nums;}
 .qbar-hint{margin:8px 0 0;font-size:12.5px;color:var(--ink-soft);}
-/* Примеры запросов: заполняют пустую строку настоящими сценариями,
-   а не рекламой. Каждый отрабатывает на текущем каталоге. */
-.qbar-ex{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+/* Примеры задач: заполняют пустое поле настоящими сценариями, а не
+   рекламой. Три из четырёх описывают дефект или цель, а не название
+   метода — иначе неоткуда узнать, что писать можно и так. */
+.qbar-ex{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:14px;}
 .qbar-ex[hidden]{display:none;}
 .qbar-ex>span{font-size:12.5px;color:var(--ink-soft);}
 .qbar-ex button{border:1px solid var(--line);background:#fff;border-radius:20px;
-  padding:6px 13px;font-family:var(--sans);font-size:13px;color:var(--ink);
-  cursor:pointer;transition:.14s;}
+  padding:5px 12px;font-family:var(--sans);font-size:12.5px;color:var(--ink);
+  cursor:pointer;transition:.14s;text-align:left;}
 .qbar-ex button:hover{border-color:var(--navy);color:var(--navy);background:var(--paper-2);}
 
 .rnd-grid{display:grid;grid-template-columns:262px 1fr;gap:28px;align-items:start;}
@@ -1540,3 +1541,67 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .rbar{gap:12px;font-size:13px;padding:10px 14px;}
 }
 .rsort.fix{color:var(--ink-soft);font-size:12.5px;}
+
+/* ==========================================================
+   ШАПКА РАЗДЕЛА И БЛОК «ОПИШИТЕ ЗАДАЧУ»
+   ========================================================== */
+/* Две колонки: слева что это за раздел, справа вход для того, кто названия
+   метода не знает. Справа — потому что это второй по частоте сценарий,
+   но первый по беспомощности: человек с дефектом на руках не может даже
+   начать искать по каталогу. */
+.rnd-top{display:grid;grid-template-columns:1fr 420px;gap:40px;align-items:start;}
+.rnd-top-l p{max-width:56ch;}
+.rask{background:#fff;border:1px solid var(--line);border-left:3px solid var(--brass);
+  border-radius:0 var(--r-lg) var(--r-lg) 0;padding:20px 22px;box-shadow:var(--shadow-md);}
+.rask-h{display:flex;align-items:flex-start;gap:10px;font-family:var(--display);
+  font-weight:700;font-size:17px;color:var(--navy);margin-bottom:6px;}
+.rask-s{margin:0 0 14px;font-size:13.5px;line-height:1.55;color:var(--ink-soft);}
+.rask textarea{width:100%;font-family:var(--sans);font-size:14.5px;line-height:1.5;
+  color:var(--ink);background:var(--paper-2);border:1px solid var(--line);
+  border-radius:var(--r);padding:11px 13px;outline:none;resize:vertical;transition:.14s;}
+.rask textarea:focus{background:#fff;border-color:var(--navy);
+  box-shadow:0 0 0 3px rgba(14,42,71,.09);}
+.rask-act{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px;}
+.rask-n{font-size:12.5px;color:var(--ink-soft);}
+
+/* Ожидание вслух: молчание дольше секунды читается как поломка.
+   Полосы-заготовки, а не крутилка — они показывают, что появится список. */
+.rban.busy{border-color:var(--line);border-left-color:var(--navy);background:var(--paper-2);}
+.rban.busy b{display:flex;align-items:center;gap:9px;}
+.rban-skel{margin-top:14px;display:flex;flex-direction:column;gap:9px;}
+.rban-skel i{display:block;height:11px;border-radius:3px;
+  background:linear-gradient(90deg,var(--line-2),var(--line),var(--line-2));
+  background-size:200% 100%;animation:rskel 1.4s ease-in-out infinite;}
+.rban-skel i:nth-child(2){width:82%;animation-delay:.15s;}
+.rban-skel i:nth-child(3){width:64%;animation-delay:.3s;}
+@keyframes rskel{0%{background-position:100% 0;}100%{background-position:-100% 0;}}
+/* Движение отключаем тем, кто попросил его не показывать */
+@media(prefers-reduced-motion:reduce){ .rban-skel i{animation:none;} }
+.rban-say{margin-bottom:6px !important;font-size:14px !important;color:var(--ink) !important;}
+.rban-act{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px;}
+.rban-act .rban-off{margin-top:0;}
+.rban .ai-badge{flex:none;}
+
+/* Пояснение модели к строке каталога. Стоит на месте объекта испытания:
+   пока идёт подбор, «почему подошло» важнее, чем «что испытывают». */
+.cat-why{display:block;margin-top:3px;font-weight:400;font-size:12.5px;
+  line-height:1.45;color:var(--brass);}
+
+@media(max-width:1023px){
+  .rnd-top{grid-template-columns:1fr;gap:26px;}
+  .rask{max-width:640px;}
+}
+@media(max-width:680px){
+  .rask{padding:16px 18px;border-radius:0 var(--r) var(--r) 0;}
+  .rask-h{font-size:16px;}
+  /* На узком экране подсказка занимает четыре строки и обрезалась —
+     человек видел половину примера и не понимал, что от него хотят. */
+  .rask textarea{font-size:16px;min-height:132px;}
+  .rask-act .btn{flex:1 0 100%;justify-content:center;}
+}
+/* Код работы. Моноширинный и приглушённый: его называют оператору и
+   вставляют в переписку, но читают строку всё-таки по названию. */
+.cat-code{flex:none;font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;
+  color:var(--ink-soft);width:66px;}
+.rqf-pick b{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--ink-soft);}
+@media(max-width:760px){ .cat-code{width:auto;} }

@@ -2539,9 +2539,14 @@
 
   /* Состояние каталога. Целиком выводится из адреса и целиком в него
      пишется — второго источника правды здесь нет. */
-  var rndState = { q:'', mode:'exact', f:[], g:[], std:[], lab:[], sort:'g' };
-  var rndLock  = false;  // режим переключён руками — не пересчитывать
-  var rndAi    = null;   // результат подбора по описанию
+  var rndState = { q:'', ask:'', f:[], g:[], std:[], lab:[], sort:'g' };
+  /* Результат подбора по описанию: {q, rank, why, extra, mode, reply, n}.
+     mode приходит с сервера и решает, как подписать выдачу — «подобрал ИИ»
+     или «нашлось поиском по словам». Врать здесь нельзя: человек примет
+     совпадение по буквам за разбор задачи и поверит ему. */
+  var rndAi    = null;
+  var rndAiBusy = false;   // запрос к модели в пути
+  var rndAiErr  = '';      // не получилось — текст для плашки
   var rndOpen  = false;  // шторка фасетов на узком экране
   var rndFold  = {};     // свёрнутые оси фильтра
 
@@ -2560,7 +2565,7 @@
   function rndStem(t){ return /^[а-яa-z]+$/.test(t) ? t.slice(0, Math.max(3, t.length-2)) : t; }
 
   function rndHay(it){
-    return rndNorm([it.n, it.g, (it.o||[]).join(' '), it.obj||'', it.std||'', it.lab||'',
+    return rndNorm([it.c||'', it.n, it.g, (it.o||[]).join(' '), it.obj||'', it.std||'', it.lab||'',
       it.kw||'', it.cond||'', it.acc||'',
       it.who==='cis' ? 'цисис фмт испытания сертификация протокол' : 'мгу'].join(' '));
   }
@@ -2664,7 +2669,7 @@
   function rndHash(){
     var p = [];
     if (rndState.q) p.push('q=' + encodeURIComponent(rndState.q));
-    if (rndState.mode !== 'exact') p.push('mode=' + rndState.mode);
+    if (rndState.ask) p.push('ask=' + encodeURIComponent(rndState.ask));
     RND_AX.forEach(function(a){
       if (rndState[a.k].length)
         p.push(a.p + '=' + rndState[a.k].map(encodeURIComponent).join(','));
@@ -2684,12 +2689,12 @@
   function rndFromHash(){
     var o = parseQuery((location.hash.replace('#','').split('?')[1]) || '');
     rndState.q = o.q || '';
+    rndState.ask = o.ask || '';
     rndState.sort = o.sort === 'name' ? 'name' : 'g';
-    rndState.mode = o.mode === 'ai' ? 'ai' : 'exact';
     RND_AX.forEach(function(a){
       rndState[a.k] = o[a.p] ? String(o[a.p]).split(',').filter(Boolean) : [];
     });
-    rndLock = false; rndAi = null; rndOpen = false; rndFold = {};
+    rndAi = null; rndAiBusy = false; rndAiErr = ''; rndOpen = false; rndFold = {};
   }
 
   /* ---------- отбор ---------- */
@@ -2698,10 +2703,7 @@
      нельзя. skip — ось, которую при подсчёте счётчиков не учитываем,
      иначе выбранное значение всегда показывало бы само себя. */
   function rndPass(it, skip){
-    /* В режиме подбора строка не фильтрует список: описание задачи не
-       обязано встречаться в названии работы, и фильтрация по нему
-       оставила бы пустой экран вместо каталога. */
-    if (rndState.mode === 'exact' && !rndMatch(it, rndTerms())) return false;
+    if (!rndMatch(it, rndTerms())) return false;
     for (var i=0;i<RND_AX.length;i++){
       var a = RND_AX[i];
       if (a.k === skip) continue;
@@ -2748,7 +2750,7 @@
       /* Подбор не фильтрует, а поднимает: найденное идёт наверх в порядке
          релевантности, остальное остаётся ниже и никуда не исчезает. */
       out = out.slice().sort(function(x,y){
-        var a = rndAi.rank[x.n], b = rndAi.rank[y.n];
+        var a = rndAi.rank[x.c], b = rndAi.rank[y.c];
         if (a == null && b == null) return 0;
         if (a == null) return 1;
         if (b == null) return -1;
@@ -2767,12 +2769,15 @@
     + '</div>';
 
   function rndRow(it, terms){
-    var has = rndPick.some(function(x){ return x.n === it.n; });
+    var has = rndPick.some(function(x){ return x.c === it.c; });
+    /* Пояснение модели к конкретной работе. Показываем только его —
+       своих объяснений не сочиняем: их неоткуда взять. */
+    var why = rndAi && rndAi.why ? (rndAi.why[it.c] || '') : '';
     var right = (it.cond ? '<span class="cat-cond">'+esc(it.cond)+'</span>' : '')
       + '<span class="cat-org">'+(it.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</span>'
       /* Кнопка в строке: положить работу в заявку, не раскрывая её. Тот,
          кто пришёл по номеру ГОСТ, уже знает, что ему нужно. */
-      + '<button class="cat-add'+(has?' on':'')+'" type="button" data-add="'+esc(it.n)+'" '
+      + '<button class="cat-add'+(has?' on':'')+'" type="button" data-add="'+esc(it.c)+'" '
       + 'aria-label="'+(has?'Уже в заявке':'Добавить в заявку')+'">'
       + (has ? '&#10003;' : '+') + '</button>';
     var body;
@@ -2806,13 +2811,16 @@
         + '<dt>Стоимость и срок</dt><dd>называет центр после разбора задачи</dd>'
         + '</dl>' + RND_ACT;
     }
-    /* Название кладём в атрибут: в строке оно разрезано подсветкой поиска,
-       и читать его из текста ненадёжно. */
-    return '<details class="cat-it" data-n="'+esc(it.n)+'">'
+    /* Ключ строки — код работы, а не название: «Определение рН» есть в
+       каталоге пять раз для разной продукции, и по названию мы клали бы
+       в заявку не то. Код заодно видно — его можно назвать оператору. */
+    return '<details class="cat-it" data-n="'+esc(it.c)+'">'
       + '<summary>'
       + '<svg class="cat-ar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>'
+      + '<span class="cat-code">'+esc(it.c)+'</span>'
       + '<span class="cat-n">' + rndMark(it.n, terms)
-      + (it.obj ? '<span class="cat-obj">'+esc(it.obj)+'</span>' : '') + '</span>'
+      + (why ? '<span class="cat-why">'+esc(why)+'</span>'
+             : (it.obj ? '<span class="cat-obj">'+esc(it.obj)+'</span>' : '')) + '</span>'
       + right + '</summary><div class="cat-body">'+body+'</div></details>';
   }
 
@@ -2888,63 +2896,112 @@
      стеклования» — два слова без глагола, точный поиск по ней даёт ноль,
      а подбор находит ДСК. Правило: есть хоть одно совпадение — точный
      поиск, нет — подбор по описанию. */
-  function rndExactHits(){
-    var t = rndTerms();
-    if (!t.length) return RND.works.length;
-    return RND.works.filter(function(it){ return rndMatch(it, t); }).length;
-  }
-  function rndAutoMode(){
-    if (!rndState.q.trim()) return 'exact';
-    return rndExactHits() ? 'exact' : 'ai';
-  }
-  function rndRunAi(){
-    var q = rndState.q.trim();
-    if (!q){ rndAi = null; return; }
+  /* Подбор по описанию. Работы выбирает модель на сервере из того же
+     каталога — она видит пронумерованный список и возвращает номера,
+     а сервер сверяет их с каталогом и выбрасывает всё, чего в нём нет.
+
+     Если сервера нет (статическая сборка, обрыв связи) или он не ответил,
+     ищем в браузере по словам — но подписываем результат честно: выдавать
+     совпадение по буквам за разбор задачи нельзя. */
+  function rndLocalAi(q){
     var hits = rndFind(q, 24), rank = {}, extra = [], n = 0;
     hits.forEach(function(x, i){
-      if (x.kind === 'work'){ if (rank[x.w.n] == null){ rank[x.w.n] = i; n++; } }
-      else extra.push(x);
+      if (x.kind === 'work'){ if (rank[x.w.c] == null){ rank[x.w.c] = i; n++; } }
+      else extra.push({ r:x.r, kind:x.kind, why:'' });
     });
-    rndAi = { q:q, rank:rank, n:n, extra:extra.slice(0,6) };
+    return { q:q, rank:rank, why:{}, extra:extra.slice(0,4), n:n,
+             mode:'local', reply:'' };
   }
 
-  /* Примеры запросов. Не витрина: каждый реально отрабатывает на текущем
-     каталоге. Последний описывает дефект, а не метод — иначе неоткуда
-     узнать, что так тоже можно. */
-  var RND_EXAMPLES = ['температура стеклования полимера',
-                      'плотность и пористость композита',
-                      'проверить крепёж на вырыв',
-                      'покрытие отслаивается после морской воды'];
+  function rndRunAi(q, done){
+    q = (q || '').trim();
+    if (!q){ rndAi = null; rndAiErr = ''; done && done(); return; }
+    rndAiBusy = true; rndAiErr = ''; rndAi = null;
+    done && done();
+    P.rndApi.ask(q).then(function(res){
+      /* Ответ на прошлый запрос, пока человек уже спрашивает другое,
+         показывать нельзя — он будет описывать не то, что в поле. */
+      if (rndState.ask !== q) return;
+      rndAiBusy = false;
+      var d = (res && res.ok) ? (res.data || {}) : null;
+      if (!d){
+        /* 429 — упёрлись в ограничение частоты. Молча подменять ответ
+           поиском нельзя: человек решит, что подбор поглупел. */
+        if (res && res.status === 429){
+          rndAiErr = 'Слишком много запросов подряд. Подождите минуту и попробуйте снова.';
+          done && done();
+          return;
+        }
+        rndAi = rndLocalAi(q);
+        done && done();
+        return;
+      }
+      /* Считаем только те названия, которые действительно есть в каталоге.
+         Сервер их и так сверяет, но число в плашке обязано совпадать с тем,
+         что человек увидит в списке: «поднято 3 работы» над одной строкой —
+         это не мелкая неточность, это повод перестать верить подбору. */
+      var rank = {}, why = {}, n = 0;
+      (d.works || []).forEach(function(w, i){
+        if (!w || !w.code || rank[w.code] != null) return;
+        rank[w.code] = i; why[w.code] = w.why || '';
+        if (RND.works.some(function(x){ return x.c === w.code; })) n++;
+      });
+      var extra = (d.items || []).map(function(x){
+        var r = P.getResources().filter(function(y){ return y.id === x.id; })[0];
+        return r ? { r:r, kind:r.type, why:x.why || '' } : null;
+      }).filter(Boolean);
+      rndAi = { q:q, rank:rank, why:why, extra:extra, n:n,
+                mode:d.mode || 'local', reply:d.reply || '' };
+      done && done();
+    });
+  }
+
+  var RND_EXAMPLES = ['покрытие отслаивается после морской воды',
+                      'нужно узнать температуру стеклования полимера',
+                      'композит расслаивается под нагрузкой',
+                      'проверить крепёж на вырыв'];
 
   /* ---------- блоки страницы каталога ---------- */
-  var RND_MODES = { exact:'Точный поиск', ai:'Подбор по описанию' };
-
+  /* Строка над списком — фильтр по каталогу, а не разговор с помощником.
+     Разговор идёт в блоке «Опишите задачу» в шапке: это разные действия,
+     и одно поле на оба сразу прятало бы приглашение описать задачу — самое
+     важное, что тут есть, — за плашкой режима. Результат при этом один:
+     подбор не открывает своего экрана, он поднимает работы в этом же списке. */
   function rndQbarHtml(){
-    var ai = rndState.mode === 'ai';
     return '<div class="qbar" id="qbar"><div class="wrap"><div class="qbar-in">'
-      + '<div class="qbar-field">'
-      + '<button class="qbar-mode'+(ai?' ai':'')+'" type="button" id="qmode" '
-      + 'title="Переключить режим" aria-label="Режим поиска: '+RND_MODES[rndState.mode]
-      + '. Нажмите, чтобы переключить">'+RND_MODES[rndState.mode]+'</button>'
+      + '<label class="qbar-field">'
+      + '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>'
       + '<input id="catq" type="search" autocomplete="off" value="'+esc(rndState.q)+'" '
-      + 'placeholder="Название метода, параметр, номер стандарта или описание задачи" '
-      + 'aria-label="Поиск по каталогу работ">'
+      + 'placeholder="Фильтр: название, параметр или номер стандарта" '
+      + 'aria-label="Фильтр по каталогу работ">'
       + '<button class="qbar-clear" id="catclear" type="button" aria-label="Очистить">&times;</button>'
-      + '</div>'
-      + '<button class="btn btn-brass qbar-go" id="qgo" type="button"'+(ai?'':' hidden')+'>Подобрать</button>'
+      + '</label>'
       + '<button class="qbar-filters" id="qfilters" type="button">Фильтры'
       + '<i'+(rndSelCount()?'':' hidden')+'>'+rndSelCount()+'</i></button>'
-      + '</div>'
-      + '<p class="qbar-hint" id="qhint"'+(ai?'':' hidden')+'>Точных совпадений нет — '
-      + 'нажмите Enter, и подбор поищет по описанию задачи.</p>'
-      + '</div></div>';
+      + '</div></div></div>';
   }
 
-  /* Примеры стоят под липкой строкой, а не внутри неё: на телефоне четыре
-     длинные фразы занимают три строки, и вместе с полем ввода залипшая
-     шапка съедала бы треть экрана. */
+  /* Блок «Опишите задачу». Стоит в шапке раздела, а не под каталогом:
+     человек, который не знает названия метода, должен увидеть его первым,
+     до списка из семидесяти шести строк. */
+  function rndAskHtml(){
+    return '<div class="rask" id="rask">'
+      + '<div class="rask-h">Не знаете, какое испытание нужно?'+aiBadge('mini')+'</div>'
+      + '<p class="rask-s">Опишите задачу своими словами — что происходит с материалом '
+      + 'или что требуется выяснить. Помощник подберёт подходящие работы из каталога.</p>'
+      + '<textarea id="askq" rows="3" aria-label="Описание задачи" '
+      + 'placeholder="Например: покрытие подшипника разрушается в морской воде, '
+      + 'нужно найти причину и подобрать более стойкий материал">'+esc(rndState.ask)+'</textarea>'
+      + '<div class="rask-act">'
+      + '<button class="btn btn-brass" id="askgo" type="button">Подобрать</button>'
+      + '<span class="rask-n">'+rndN(RND.works.length,'работа','работы','работ')
+      + ' МГУ и ЦИСИС ФМТ</span></div>'
+      + rndExHtml()
+      + '</div>';
+  }
+
   function rndExHtml(){
-    return '<div class="qbar-ex" id="qex"'+(rndState.q?' hidden':'')+'><span>Например:</span>'
+    return '<div class="qbar-ex" id="qex"><span>Например:</span>'
       + RND_EXAMPLES.map(function(x){
           return '<button type="button" data-q="'+esc(x)+'">'+esc(x)+'</button>'; }).join('')
       + '</div>';
@@ -3000,19 +3057,53 @@
   }
 
   function rndAiHtml(){
+    /* Молчание дольше секунды человек читает как поломку, поэтому ждём
+       вслух и говорим, среди чего именно ищем. */
+    if (rndAiBusy)
+      return '<div class="rban busy"><b>'+aiBadge('mini')
+        + 'Подбираем под вашу задачу…</b>'
+        + '<p>Смотрим, какие из '+RND.works.length+' работ каталога закрывают то, '
+        + 'что вы описали. Обычно это занимает несколько секунд.</p>'
+        + '<div class="rban-skel"><i></i><i></i><i></i></div></div>';
+
+    /* Отказ модели не должен уносить каталог: список остаётся на экране,
+       фильтры работают, повторить можно одной кнопкой. */
+    if (rndAiErr)
+      return '<div class="rban zero"><b>Не удалось подобрать по описанию</b>'
+        + '<p>'+esc(rndAiErr)+' Каталог и фильтры при этом работают.</p>'
+        + '<button class="rban-off" type="button" id="airetry">Повторить</button></div>';
+
     if (!rndAi) return '';
+    var ai = rndAi.mode === 'ai';
+
+    /* Тема требует разрешений — к модели запрос не уходил, и подменять
+       ответ поиском по словам тут нельзя. */
+    if (rndAi.mode === 'licensed')
+      return '<div class="rban zero"><b>Такая задача решается только через оператора</b>'
+        + '<p>'+esc(rndAi.reply)+'</p>'
+        + '<div class="rban-act"><a class="btn btn-brass btn-sm" href="#/rnd/request">Описать задачу</a>'
+        + '<button class="rban-off" type="button" id="aioff">Сбросить подбор</button></div></div>';
+
     var head, note;
     if (rndAi.n){
-      head = '<b>Подобрано по описанию: «'+esc(rndAi.q)+'»</b>'
+      head = '<b>'+(ai?aiBadge('mini'):'')+'Подобрано по описанию: «'+esc(rndAi.q)+'»</b>'
+        + (rndAi.reply ? '<p class="rban-say">'+esc(rndAi.reply)+'</p>' : '')
         + '<p>'+rndN(rndAi.n,'работа','работы','работ')+' поднято наверх списка. '
         + 'Фильтры не применялись — остальные работы остались ниже.</p>';
     } else {
-      head = '<b>По описанию ничего не нашлось</b>'
-        + '<p>Готовой методики под такую формулировку в каталоге нет. Попробуйте назвать '
-        + 'материал и измеряемую характеристику — или поставьте задачу как НИОКР.</p>';
+      head = '<b>'+(ai?aiBadge('mini'):'')+'По описанию ничего не нашлось</b>'
+        + '<p>'+esc(rndAi.reply || 'Готовой методики под такую формулировку в каталоге нет. '
+          + 'Попробуйте назвать материал и измеряемую характеристику — или поставьте '
+          + 'задачу как НИОКР.')+'</p>';
     }
-    note = '<p class="rban-note">Подбор предварительный: совпадение найдено по описанию. '
-         + 'Состав работ проверяет оператор.</p>';
+    /* Подпись обязана зависеть от того, кто отвечал. Значок ИИ над выдачей,
+       собранной поиском по буквам, — это неправда, за которую человек
+       заплатит поездкой и временем. */
+    note = ai
+      ? '<p class="rban-note">Подбор предварительный: работы выбрала языковая модель '
+        + 'из каталога. Состав работ проверяет оператор.</p>'
+      : '<p class="rban-note">Модель не ответила — это результат поиска по словам '
+        + 'вашего описания, а не разбор задачи. Состав работ проверяет оператор.</p>';
     /* Приборы и площадки показываем отдельно от работ: их не заказывают
        заявкой, их бронируют в общем каталоге, и смешивать их со списком
        работ значит обещать не то. */
@@ -3070,7 +3161,7 @@
   }
 
   function rndListHtml(){
-    var shown = rndResult(), terms = rndState.mode === 'exact' ? rndTerms() : [];
+    var shown = rndResult(), terms = rndTerms();
     if (!shown.length) return rndZeroHtml();
     /* Заголовки вида исследования — только в порядке по умолчанию: после
        сортировки по релевантности или по алфавиту они разрежут список
@@ -3134,15 +3225,19 @@
     var n = {};
     RND.works.forEach(function(it){ rndStdSet(it).forEach(function(f){ n[f] = (n[f]||0)+1; }); });
     var stds = Object.keys(n).sort(function(a,b){ return n[b]-n[a]; });
-    return '<section class="page-head rnd-head"><div class="wrap">'
+    return '<section class="page-head rnd-head"><div class="wrap rnd-top">'
+      + '<div class="rnd-top-l">'
       + '<h1 class="h-lg">Исследования и испытания</h1>'
-      + '<p>Готовые методики МГУ и центра ЦИСИС ФМТ. Найдите работу по названию, '
-      + 'параметру или номеру стандарта — или опишите задачу словами.</p>'
+      + '<p>Готовые методики МГУ и центра ЦИСИС ФМТ: испытания по ГОСТ, ISO и ASTM, '
+      + 'анализ состава и структуры, технологические работы. Стоимость и срок '
+      + 'считаются под задачу.</p>'
       + '<p class="rnd-meta">'+rndN(RND.works.length,'работа','работы','работ')
       + ' · '+esc(stds.join(', '))+' · исполнители МГУ и ЦИСИС ФМТ</p>'
+      + '</div>'
+      + rndAskHtml()
       + '</div></section>'
       + rndQbarHtml()
-      + '<section class="section-sm"><div class="wrap">'+rndExHtml()
+      + '<section class="section-sm"><div class="wrap">'
       + '<div class="rnd-grid">'
       + rndFacetsHtml()
       + '<div class="rnd-main" id="catbody">'+rndBodyHtml()+'</div>'
@@ -3168,7 +3263,8 @@
   function rndPickedHtml(){
     return rndPick.length
       ? rndPick.map(function(w,i){
-          return '<span class="rqf-pick">'+esc(w.n)+' <i>'+(w.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</i>'
+          return '<span class="rqf-pick"><b>'+esc(w.c)+'</b> '+esc(w.n)
+            + ' <i>'+(w.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</i>'
             + '<button type="button" data-i="'+i+'" aria-label="Убрать">&times;</button></span>';
         }).join('')
       : '<span class="rqf-none">Работы не выбраны.</span>';
@@ -3297,7 +3393,7 @@
     (list||[]).forEach(function(w){
       /* Дубли не кладём: человек мог нажать «Заказать» дважды, и второй раз
          он имел в виду то же самое. */
-      if (!rndPick.some(function(x){ return x.n === w.n; })) rndPick.push(w);
+      if (!rndPick.some(function(x){ return x.c === w.c; })) rndPick.push(w);
     });
     if (go) location.hash = '#/rnd/request';
   }
@@ -3311,15 +3407,15 @@
       var qs = (location.hash.split('?')[1]) || '';
       var to = RND_OLD[sub];
       /* #/rnd/assist?q=X был отдельным экраном подбора — сохраняем намерение:
-         тот же запрос, но уже в строке каталога и в режиме подбора. */
-      if (sub === 'assist' && qs) to = '#/rnd?' + qs + (/(^|&)mode=/.test(qs) ? '' : '&mode=ai');
+         тот же текст, но уже в поле «Опишите задачу» на странице каталога. */
+      if (sub === 'assist' && /(^|&)q=/.test(qs))
+        to = '#/rnd?ask=' + (qs.split(/(?:^|&)q=/)[1] || '').split('&')[0];
       try { history.replaceState(null, '', to); } catch(e){ location.replace(to); return; }
       sub = to.indexOf('#/rnd/') === 0 ? to.slice(6).split('?')[0] : undefined;
     }
     if (sub === 'custom') return render(rndCustomHtml(), null);
     if (sub === 'request') return render(rndRequestHtml(), rndMountRequest);
     rndFromHash();
-    if (rndState.mode === 'ai' && rndState.q) rndRunAi();
     render(rndCatalogHtml(), rndMountCatalog);
   }
 
@@ -3334,16 +3430,6 @@
     was.parentNode.replaceChild(box.firstChild, was);
     var btn = el('qfilters'), f = btn && btn.querySelector('i');
     if (f){ f.textContent = rndSelCount(); f.hidden = !rndSelCount(); }
-  }
-  function rndDrawMode(){
-    var b = el('qmode'); if (!b) return;
-    var ai = rndState.mode === 'ai';
-    b.textContent = RND_MODES[rndState.mode];
-    b.classList.toggle('ai', ai);
-    b.setAttribute('aria-label', 'Режим поиска: ' + RND_MODES[rndState.mode]
-      + '. Нажмите, чтобы переключить');
-    el('qgo').hidden = !ai;
-    el('qhint').hidden = !ai;
   }
   function rndRedraw(push){ rndDrawBody(); rndDrawFac(); rndSync(push); }
   /* Поставить и снять значение оси — одна операция: чип в панели, крестик
@@ -3360,17 +3446,26 @@
   }
   function rndClearQ(){
     var q = el('catq');
-    rndState.q = ''; rndState.mode = 'exact'; rndAi = null; rndLock = false;
+    rndState.q = '';
     if (q) q.value = '';
-    var ex = el('qex'); if (ex) ex.hidden = false;
-    rndDrawMode(); rndRedraw(true);
+    rndRedraw(true);
     if (q) q.focus();
   }
-  function rndAsk(){
-    var q = el('catq');
-    if (!rndState.q.trim()){ if (q) q.focus(); return; }
-    rndRunAi(); rndRedraw(true);
-    var b = el('catbody'); if (b) b.scrollIntoView({ block:'start' });
+  /* Сброс подбора убирает и описание задачи: плашки нет, а текст в поле
+     остался бы — и человек не понял бы, почему список обычный. */
+  function rndAskReset(){
+    rndState.ask = ''; rndAi = null; rndAiBusy = false; rndAiErr = '';
+    var t = el('askq'); if (t) t.value = '';
+    rndRedraw(true);
+  }
+  function rndAskGo(text){
+    var t = el('askq');
+    if (text != null && t) t.value = text;
+    rndState.ask = (t ? t.value : (text || '')).trim();
+    if (!rndState.ask){ if (t) t.focus(); return; }
+    rndRunAi(rndState.ask, function(){ rndDrawBody(); rndSync(true); });
+    var box = el('catbody');
+    if (box) box.scrollIntoView({ block:'start' });
   }
 
   /* Слушатель один на всё приложение: экран каталога пересоздаётся при
@@ -3393,17 +3488,22 @@
     }
     var ax = t.closest('[data-ax][data-v]');
     if (ax){ if (!ax.hasAttribute('aria-disabled')) rndAxToggle(ax.dataset.ax, ax.dataset.v); return; }
-    if (t.closest('#aioff')){ rndClearQ(); return; }
+    if (t.closest('#aioff')){ rndAskReset(); return; }
+    if (t.closest('#airetry')){ rndAskGo(); return; }
     if (t.closest('#zeroai')){
-      rndLock = true; rndState.mode = 'ai'; rndRunAi(); rndDrawMode(); rndRedraw(true); return;
+      /* Из нулевой выдачи фильтра — прямо в подбор: строка каталога и есть
+         описание задачи, просто в каталоге такого названия нет. */
+      var q = rndState.q;
+      rndState.q = ''; var f = el('catq'); if (f) f.value = '';
+      rndAskGo(q); return;
     }
     var add = t.closest('[data-add]');
     if (add){
       /* Кнопка стоит внутри <summary>: без отмены действия по умолчанию
          строка заодно раскроется, хотя человек просил не этого. */
       e.preventDefault();
-      var w1 = RND.works.filter(function(x){ return x.n === add.dataset.add; })[0];
-      if (w1 && !rndPick.some(function(x){ return x.n === w1.n; })){
+      var w1 = RND.works.filter(function(x){ return x.c === add.dataset.add; })[0];
+      if (w1 && !rndPick.some(function(x){ return x.c === w1.c; })){
         rndAdd([w1]);
         add.classList.add('on'); add.innerHTML = '&#10003;';
         add.setAttribute('aria-label','Уже в заявке');
@@ -3414,7 +3514,7 @@
     var buy = t.closest('.cat-buy');
     if (buy){
       var n = buy.closest('.cat-it').dataset.n;
-      var w2 = RND.works.filter(function(x){ return x.n === n; })[0];
+      var w2 = RND.works.filter(function(x){ return x.c === n; })[0];
       if (w2) rndAdd([w2], true);
     }
   });
@@ -3423,41 +3523,30 @@
     var q = el('catq');
     q.addEventListener('input', function(){
       rndState.q = this.value;
-      el('qex').hidden = !!rndState.q;
-      /* Пока человек печатает, режим пересчитывается сам — но если он
-         переключил его руками, чужое мнение не навязываем. */
-      if (!rndLock) rndState.mode = rndAutoMode();
-      /* Прежний подбор относился к прежней фразе. Оставить его — значит
-         показывать выдачу, к которой строка уже не имеет отношения. */
-      if (rndAi && rndAi.q !== rndState.q.trim()) rndAi = null;
-      rndDrawMode(); rndRedraw(false);
+      rndRedraw(false);
     });
-    q.addEventListener('keydown', function(e){
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      if (rndState.mode === 'ai') rndAsk();
-    });
-    el('qgo').onclick = rndAsk;
+    q.addEventListener('keydown', function(e){ if (e.key === 'Enter') e.preventDefault(); });
     el('catclear').onclick = rndClearQ;
-    el('qmode').onclick = function(){
-      rndLock = true;
-      rndState.mode = rndState.mode === 'ai' ? 'exact' : 'ai';
-      if (rndState.mode === 'exact') rndAi = null;
-      rndDrawMode(); rndRedraw(true); q.focus();
-    };
+
+    el('askgo').onclick = function(){ rndAskGo(); };
+    /* Ctrl+Enter, а не просто Enter: поле многострочное, и абзац в описании
+       задачи — нормальное дело. */
+    el('askq').addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); rndAskGo(); }
+    });
     el('qex').addEventListener('click', function(e){
       var b = e.target.closest('button[data-q]');
       if (!b) return;
-      rndState.q = b.dataset.q; q.value = rndState.q;
-      rndLock = false; rndState.mode = rndAutoMode();
-      if (rndState.mode === 'ai') rndRunAi(); else rndAi = null;
-      el('qex').hidden = true;
-      rndDrawMode(); rndRedraw(true);
+      rndAskGo(b.dataset.q);
     });
     el('catbody').addEventListener('change', function(e){
       if (e.target.id !== 'rsort') return;
       rndState.sort = e.target.value; rndRedraw(false);
     });
+    /* Адрес с описанием задачи открывается сразу с подбором: ссылку могли
+       переслать коллеге, и пустой экран вместо обещанного разбора —
+       не то, чего от неё ждут. */
+    if (rndState.ask) rndRunAi(rndState.ask, rndDrawBody);
     rndBarSync();
   }
 

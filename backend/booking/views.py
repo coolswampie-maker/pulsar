@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from . import chat, formal, market, querylog
 from . import review as reviewer
 from .assist import assist
+from .rnd_assist import rnd_assist
 from . import compose as composer
 from .compose import FORMATS, missing_for
 from .models import (KPI_KEYS, MAX_BUDGET_QTY, PROFILE_LABELS, BusySlot,
@@ -150,6 +151,47 @@ class AssistView(APIView):
                 'why': why,
             } for r, why in picked],
         })
+
+
+
+class RndAssistView(APIView):
+    """POST /api/rnd/assist/ — подбор исследований и испытаний по описанию задачи.
+
+    Принимает {"query": "покрытие отслаивается после морской воды"} и
+    возвращает работы каталога с коротким обоснованием, а при запросе про
+    оборудование — ещё и приборы. Поле "mode" говорит, чем подобрано:
+    "ai" — моделью, "local" — поиском по словам (модель не настроена или не
+    ответила), "licensed" — тема требует разрешений и к модели не уходила.
+    Интерфейс подписывает выдачу по этому полю: выдавать поиск по словам за
+    работу модели нельзя.
+
+    Работы возвращаются по коду (MEC-014, PCH-046): по нему фронт находит
+    строку в каталоге. Названия для этого не годятся — «Определение рН» есть
+    в каталоге пять раз для разной продукции. Название тоже отдаём: оно
+    нужно, чтобы показать ответ, не сверяясь с каталогом.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [AssistThrottle]
+
+    def post(self, request):
+        query = request.data.get('query') if isinstance(request.data, dict) else None
+        query = (query or '').strip()
+        if not query:
+            return Response({'detail': 'Опишите задачу.'}, status=400)
+
+        resources = list(Resource.objects.filter(is_active=True))
+        works, items, mode, reply = rnd_assist(query, resources)
+        # запись в журнал не должна влиять на ответ — внутри всё погашено
+        querylog.record(query, mode, len(works) + len(items))
+        return Response({
+            'mode': mode,
+            'reply': reply,
+            'works': [{'code': w.get('c'), 'n': w.get('n'), 'why': why}
+                      for w, why in works],
+            'items': [{'id': r.slug, 'type': r.type, 'title': r.title,
+                       'lab': r.lab, 'why': why} for r, why in items],
+        })
+
 
 
 # ---------- заявки ----------
