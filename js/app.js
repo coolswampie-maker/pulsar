@@ -2751,37 +2751,67 @@
     + 'понять определить сделать провести есть был быть очень наш ваш мой их его её '
     + 'который которая которые если или либо при про то так уже ещё чем чтобы').split(' ');
 
+  /* Единый пул поиска: работы каталога плюс приборы, площадки и специалисты
+     из справочника ресурсов. Раньше подбор искал только по работам, и запрос
+     «растровый электронный микроскоп» не находил ничего, хотя микроскоп
+     в каталоге есть. Услуги из справочника в пул не берём: те же четыре
+     работы уже описаны в каталоге НИОКР подробнее. */
+  function rndPool(){
+    var pool = RND.works.map(function(w){ return { kind:'work', w:w }; });
+    P.getResources().forEach(function(r){
+      if (r.type === 'service') return;
+      pool.push({ kind:r.type, r:r });
+    });
+    return pool;
+  }
+
+  function rndPoolText(x){
+    if (x.kind === 'work') return { strong: x.w.n + ' ' + (x.w.kw||'') + ' ' + (x.w.obj||''),
+                                    all: rndHay(x.w) };
+    var r = x.r;
+    var cat = (P.categories && P.categories[r.category]) || '';
+    return { strong: r.title + ' ' + cat,
+             all: rndNorm([r.title, r.lab||'', cat, (r.specs||[]).join(' '),
+                           r.description||''].join(' ')) };
+  }
+
+  var RND_KIND = { work:'Исследование', equipment:'Оборудование',
+                   room:'Лаборатория', specialist:'Специалист' };
+
   function rndFind(text, limit){
     var terms = rndNorm(text).split(' ').filter(function(t){
       return t.length >= 3 && RND_STOP.indexOf(t) < 0;
     });
     if (!terms.length) return [];
     var out = [];
-    RND.works.forEach(function(it){
-      /* Совпадение в названии и в ключевых словах весит больше, чем в номере
-         стандарта или в названии лаборатории: там слова попадают случайно. */
-      var strong = rndNorm(it.n + ' ' + (it.kw||'') + ' ' + (it.obj||'')).split(' ');
-      var all = rndHay(it).split(' ');
-      var flat = rndHay(it).replace(/ /g,'');
+    rndPool().forEach(function(x){
+      var txt = rndPoolText(x);
+      var strong = rndNorm(txt.strong).split(' ');
+      var all = txt.all.split(' ');
+      var flat = txt.all.replace(/ /g, '');
       var sc = 0, hit = 0, strongHit = 0;
       terms.forEach(function(t){
         var pref = rndStem(t), w = 0;
         /* Совпадение по началу слова, но длина кандидата ограничена: иначе
            «воде» цепляет «водопоглощение», а «сдвиг» — что угодно на «сдв».
            Родственные формы («клей» → «клеевого») в запас укладываются. */
-        function ok(list){ return list.some(function(x){
-          return x.indexOf(pref) === 0 && x.length <= t.length + 4; }); }
+        function ok(list){ return list.some(function(y){
+          return y.indexOf(pref) === 0 && y.length <= t.length + 4; }); }
         if (ok(strong)) w = 3;
         else if (ok(all)) w = 1;
         else if (t.length >= 5 && flat.indexOf(t) >= 0) w = 1;
         if (w){ sc += w; hit++; if (w === 3) strongHit++; }
       });
       /* Одного совпадения хватает, если оно в названии или ключевых словах.
-         Случайных попаданий в номер стандарта должно быть хотя бы два. */
-      if (strongHit || hit >= 2) out.push({ it: it, sc: sc });
+         Случайных попаданий в описание должно быть хотя бы два. */
+      if (strongHit || hit >= 2){
+        /* При равном счёте готовая работа идёт выше прибора: заказчику нужен
+           результат, а не доступ к установке. */
+        out.push({ x:x, sc: sc * 10 + (x.kind === 'work' ? 1 : 0) });
+      }
     });
     out.sort(function(a,b){ return b.sc - a.sc; });
-    return out.slice(0, limit||5).map(function(x){ return x.it; });
+    return out.slice(0, limit || 12).map(function(v){ return v.x; });
   }
 
   /* Пример задачи стоит подсказкой в пустом поле, а не значением:
@@ -2850,8 +2880,9 @@
       + RND_EXAMPLES.map(function(x){
           return '<button type="button" data-q="'+esc(x)+'">'+esc(x)+'</button>'; }).join('')
       + '</div>'
-      + '<div class="rnd-out" id="rqout" hidden><div class="rnd-out-head"><h3>Рекомендуемые исследования</h3>'
+      + '<div class="rnd-out" id="rqout" hidden><div class="rnd-out-head"><h3>Результаты подбора</h3>'
       + '<span class="ai-badge mini"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>AI</span></div>'
+      + '<div class="ph-tabs" id="rqtabs"></div>'
       + '<ol class="ph-list" id="rqhits"></ol>'
       + '<div class="ph-order"><b>Как оформить заявку</b>'
       + '<p>Отправьте выбранные работы вместе с описанием задачи. Оператор подтвердит '
@@ -3053,27 +3084,67 @@
   }
 
   function rndMountAssist(){
-    var go = el('rqgo'), inp = el('rq'), list = el('rqhits'), out = el('rqout');
+    var go = el('rqgo'), inp = el('rq'), list = el('rqhits'),
+        out = el('rqout'), tabs = el('rqtabs');
+    var found = [], tab = 'all';
+
+    /* Тип объекта — маленький бейдж в строке, а не отдельный раздел.
+       Заказчику нужен ответ на задачу; чем он окажется — готовым испытанием,
+       прибором или специалистом — вопрос второй. */
+    function card(x){
+      var badge = '<span class="ph-kind ' + x.kind + '">' + RND_KIND[x.kind] + '</span>';
+      if (x.kind === 'work'){
+        var w = x.w, meta = [w.g, w.cond, w.std].filter(Boolean).join(' · ');
+        return '<li><div class="ph-top">' + badge + '<b>' + esc(w.n) + '</b>'
+          + '<span class="ph-org">' + (w.who === 'mgu' ? 'МГУ' : 'ЦИСИС ФМТ') + '</span></div>'
+          + (w.obj ? '<p class="ph-why">Объект: ' + esc(w.obj) + '</p>' : '')
+          + '<div class="ph-meta">' + esc(meta) + '</div></li>';
+      }
+      var r = x.r, cat = (P.categories && P.categories[r.category]) || '';
+      return '<li><div class="ph-top">' + badge
+        + '<b><a href="#/resource/' + esc(r.id) + '">' + esc(r.title) + '</a></b>'
+        + (cat ? '<span class="ph-org">' + esc(cat) + '</span>' : '') + '</div>'
+        + (r.lab ? '<p class="ph-why">' + esc(r.lab) + '</p>' : '')
+        + ((r.specs && r.specs.length)
+            ? '<div class="ph-meta">' + esc(r.specs.slice(0, 2).join(' · ')) + '</div>' : '')
+        + '</li>';
+    }
+
+    function draw(){
+      var shown = tab === 'all' ? found : found.filter(function(x){ return x.kind === tab; });
+      var by = {};
+      found.forEach(function(x){ by[x.kind] = (by[x.kind] || 0) + 1; });
+      tabs.innerHTML = ['all'].concat(Object.keys(RND_KIND)).map(function(k){
+        var n = k === 'all' ? found.length : (by[k] || 0);
+        if (!n) return '';
+        return '<button type="button" data-t="' + k + '" aria-pressed="' + (tab === k) + '">'
+          + (k === 'all' ? 'Все' : RND_KIND[k]) + '<i>' + n + '</i></button>';
+      }).join('');
+      list.innerHTML = shown.map(card).join('')
+        + '<li class="ph-demo">Подбор предварительный: совпадение найдено по описанию. '
+        + 'Состав работ проверяет оператор.</li>';
+    }
+
     go.onclick = function(){
       var t = inp.value.trim();
       if (!t){ out.hidden = true; inp.focus(); return; }
-      var hits = rndFind(t, 5);
+      found = rndFind(t, 12); tab = 'all';
       out.hidden = false;
-      if (!hits.length){
-        list.innerHTML = '<li class="ph-none">Готовых работ под такой запрос в каталоге нет. '
+      if (!found.length){
+        tabs.innerHTML = '';
+        list.innerHTML = '<li class="ph-none">Ничего похожего в каталоге нет. '
           + 'Задачу можно поставить по договору НИОКР.</li>';
         return;
       }
-      list.innerHTML = hits.map(function(it){
-        var meta = [it.g, it.cond, it.std].filter(Boolean).join(' · ');
-        return '<li><div class="ph-top"><b>'+esc(it.n)+'</b><span class="ph-org">'
-          + (it.who==='mgu'?'МГУ':'ЦИСИС ФМТ')+'</span></div>'
-          + (it.obj ? '<p class="ph-why">Объект: '+esc(it.obj)+'</p>' : '')
-          + '<div class="ph-meta">'+esc(meta)+'</div></li>';
-      }).join('')
-      + '<li class="ph-demo">Подбор предварительный: совпадение найдено по описанию. '
-      + 'Состав работ проверяет оператор.</li>';
+      draw();
     };
+
+    tabs.addEventListener('click', function(e){
+      var b = e.target.closest('button[data-t]');
+      if (!b) return;
+      tab = b.dataset.t; draw();
+    });
+
     inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go.click(); });
     var ex = document.querySelector('.assist-ex');
     if (ex) ex.addEventListener('click', function(e){
@@ -3081,11 +3152,12 @@
       if (!b) return;
       inp.value = b.dataset.q; go.click();
     });
-    /* Подбор переносится в заявку целиком: человек уже согласился с составом,
-       заставлять его выбирать заново — терять то, ради чего он пришёл. */
+
+    /* В заявку уходят только работы: приборы и площадки бронируются
+       в каталоге, у них своя механика со сменами и часами. */
     el('phsend').onclick = function(){
-      var names = qsAll('.ph-top b', list).map(function(x){ return x.textContent.trim(); });
-      rndAdd(RND.works.filter(function(w){ return names.indexOf(w.n) >= 0; }));
+      rndAdd(found.filter(function(x){ return x.kind === 'work'; })
+                  .map(function(x){ return x.w; }));
     };
   }
 
