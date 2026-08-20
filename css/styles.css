@@ -1166,26 +1166,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
    форма заявки и страница НИОКР. Имена классов проверены на
    пересечение с остальным файлом — совпадений нет.
    ========================================================== */
-/* карточка компетенции: та же сетка, что у каталога, но без фотографии —
-   у лаборатории нет «внешнего вида», её описывают задачи и методы */
-.cmp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px;}
-.cmp-card{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);
-  padding:22px 22px 18px;display:flex;flex-direction:column;transition:.16s;}
-.cmp-card:hover{border-color:var(--navy);box-shadow:var(--shadow-md);}
-.cmp-dir{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--brass);margin-bottom:7px;}
-.cmp-name{font-family:var(--display);font-weight:700;font-size:18px;line-height:1.25;
-  color:var(--navy);margin-bottom:6px;}
-.cmp-unit{font-size:13px;color:var(--ink-soft);margin-bottom:14px;}
-.cmp-h{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--ink-soft);margin:0 0 7px;}
-.cmp-tasks{list-style:none;margin:0 0 15px;padding:0;font-size:14px;line-height:1.55;}
-.cmp-tasks li{padding-left:15px;position:relative;color:var(--ink);}
-.cmp-tasks li::before{content:"—";position:absolute;left:0;color:var(--brass);}
-.cmp-eq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
-.cmp-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;
-  gap:10px;border-top:1px solid var(--line-2);padding-top:14px;flex-wrap:wrap;}
-.cmp-open{font-size:13.5px;font-weight:600;color:var(--navy);white-space:nowrap;}
 .cat-acc{font-size:12.5px;font-weight:600;color:var(--ok);}
 /* Парк оборудования: свёрнутый справочник под каталогом */
 .eqp{margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);}
@@ -1271,23 +1251,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--navy);}
 .pane-back::before{content:"← ";color:var(--brass);}
 .pane-back:hover{color:var(--brass);}
-.cmp-chip{display:inline-block;border:1px solid var(--line);border-radius:20px;
-  padding:5px 11px;font-size:12.5px;color:var(--ink);background:#fff;}
-.cmp-chip.more{border-style:dashed;color:var(--ink-soft);}
-.cmp-h i{font-style:normal;font-weight:600;opacity:.6;font-variant-numeric:tabular-nums;}
-.cmp-empty{margin:0 0 15px;font-size:13.5px;color:var(--ink-soft);}
-/* Раскрывающийся состав направления */
-.cmp-more{margin-bottom:14px;}
-.cmp-more summary{display:inline-flex;align-items:center;gap:7px;cursor:pointer;
-  list-style:none;font-size:13.5px;font-weight:600;color:var(--navy);}
-.cmp-more summary::-webkit-details-marker{display:none;}
-.cmp-more summary::before{content:"";width:0;height:0;border:5px solid transparent;
-  border-left-color:var(--brass);transition:transform .16s;}
-.cmp-more[open] summary::before{transform:rotate(90deg) translateX(-2px);}
-.cmp-more-in{padding-top:6px;}
-.cmp-more-in .cmp-h:first-child{margin-top:6px;}
-.cmp-chip.more{display:none;}
-.cmp-chip b{display:block;margin-top:2px;font-size:11.5px;font-weight:600;color:var(--brass);}
 .eqp-lab{font-family:var(--display);font-weight:700;font-size:15.5px;color:var(--navy);
   margin:26px 0 2px;padding-top:18px;border-top:1px solid var(--line);}
 .eqp-body>.eqp-lab:first-child{margin-top:8px;padding-top:0;border-top:none;}
@@ -1340,14 +1303,12 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   border-bottom:1px solid var(--line);}
 .rqf-skip:hover{color:var(--navy);border-bottom-color:var(--navy);}
 .ph-kind.work{background:var(--brass-tint);color:var(--brass);}
-
 /* ==========================================================
    КАТАЛОГ РАБОТ: шапка, строка запроса, фасеты
    ========================================================== */
 .rnd-head p{max-width:70ch;}
 .rnd-meta{margin-top:10px;font-family:var(--mono);font-size:12px;letter-spacing:.03em;
   color:var(--ink-soft);}
-
 /* Строка запроса липнет под навигацией: список длинный, и уходить за
    новым запросом наверх страницы человеку незачем. Высота навигации — 68px
    плюс её нижняя граница. */
@@ -1381,10 +1342,8 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .qbar-filters i{font-style:normal;margin-left:7px;background:var(--navy);color:#fff;
   border-radius:20px;padding:1px 7px;font-size:12px;font-variant-numeric:tabular-nums;}
 .qbar-hint{margin:8px 0 0;font-size:12.5px;color:var(--ink-soft);}
-
 .rnd-grid{display:grid;grid-template-columns:262px 1fr;gap:28px;align-items:start;}
 .rnd-main{min-width:0;}
-
 /* Панель фасетов. На широком экране — колонка слева, на узком — шторка
    снизу: пять осей рядом со списком на 375px не помещаются. */
 .fac{position:sticky;top:150px;}
@@ -1421,7 +1380,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .fchip.none{display:block;border:1px dashed var(--line);background:transparent;
   border-radius:14px;padding:6px 12px;font-size:13px;color:var(--ink-soft);}
 .fchip.none i{display:block;font-style:normal;font-size:11.5px;opacity:.85;margin-top:1px;}
-
 /* Строка выбранного — единственное место со сбросом */
 .rsel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .rsel>span{font-size:13px;color:var(--ink-soft);}
@@ -1433,14 +1391,12 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .rsel-all{border:none;background:none;padding:0;cursor:pointer;font-family:inherit;
   font-size:13px;font-weight:600;color:var(--navy);border-bottom:1px solid var(--brass-soft);}
 .rsel-all:hover{color:var(--brass);}
-
 .rstat{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
 .rstat>b{font-family:var(--display);font-size:17px;color:var(--navy);}
 .rsort{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:13px;
   color:var(--ink-soft);}
 .rsort select{font-family:var(--sans);font-size:13px;color:var(--ink);background:#fff;
   border:1px solid var(--line);border-radius:var(--r);padding:6px 9px;cursor:pointer;}
-
 /* Плашка подбора. Подбор не фильтрует, а поднимает — и об этом сказано
    прямо, иначе «найдено 76» под заголовком «подобрано» выглядит поломкой. */
 .rban{border:1px solid var(--brass-soft);border-left:3px solid var(--brass);
@@ -1465,7 +1421,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   font-family:inherit;font-size:13px;font-weight:600;color:var(--navy);
   border-bottom:1px solid var(--brass-soft);}
 .rban-off:hover{color:var(--brass);}
-
 /* Кнопка «в заявку» прямо в строке: тому, кто пришёл по номеру ГОСТ,
    раскрывать описание незачем. */
 .cat-add{flex:none;width:28px;height:28px;border:1px solid var(--line);background:#fff;
@@ -1473,7 +1428,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   padding:0;transition:.14s;}
 .cat-add:hover{border-color:var(--brass);color:var(--brass);background:var(--brass-tint);}
 .cat-add.on{border-color:var(--ok);color:var(--ok);background:#fff;cursor:default;}
-
 /* Хвост каталога и нулевая выдача: путь для того, кому готовая методика
    не подошла. Без него нулевой экран — тупик. */
 .rtail{margin-top:22px;border:1px solid var(--line);border-radius:var(--r-lg);
@@ -1484,14 +1438,12 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .rtail-act{display:flex;gap:12px;flex-wrap:wrap;}
 .cat-none .rtail{text-align:left;}
 .cat-none p{margin:0 0 14px;font-size:14px;line-height:1.6;}
-
 /* Плашка заявки. Появляется, только когда в заявке что-то есть:
    постоянная полоса на пустой заявке отнимает высоту ни за что. */
 .rbar{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;align-items:center;
   justify-content:center;gap:18px;background:var(--navy);color:#fff;padding:12px 20px;
   font-size:14px;box-shadow:0 -2px 18px rgba(14,42,71,.18);}
 .rbar[hidden]{display:none;}
-
 @media(max-width:1023px){
   .rnd-grid{grid-template-columns:1fr;}
   .qbar-filters{display:block;}
@@ -1535,7 +1487,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .rbar{gap:12px;font-size:13px;padding:10px 14px;}
 }
 .rsort.fix{color:var(--ink-soft);font-size:12.5px;}
-
 /* ==========================================================
    ШАПКА РАЗДЕЛА И БЛОК «ОПИШИТЕ ЗАДАЧУ»
    ========================================================== */
@@ -1556,7 +1507,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .rask textarea::placeholder{color:var(--ink-soft);}
 .rask textarea:focus{border-color:var(--navy);box-shadow:0 0 0 3px rgba(14,42,71,.09);}
 .rask .btn{margin-top:12px;}
-
 /* Ожидание вслух: молчание дольше секунды читается как поломка.
    Полосы-заготовки, а не крутилка — они показывают, что появится список. */
 .rban.busy{border-color:var(--line);border-left-color:var(--navy);background:var(--paper-2);}
@@ -1566,18 +1516,21 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   background-size:200% 100%;animation:rskel 1.4s ease-in-out infinite;}
 .rban-skel i:nth-child(2){width:82%;animation-delay:.15s;}
 .rban-skel i:nth-child(3){width:64%;animation-delay:.3s;}
-@keyframes rskel{0%{background-position:100% 0;}100%{background-position:-100% 0;}}
+@keyframes rskel{
+  0%{background-position:100% 0;}
+  100%{background-position:-100% 0;}
+}
 /* Движение отключаем тем, кто попросил его не показывать */
-@media(prefers-reduced-motion:reduce){ .rban-skel i{animation:none;} }
+@media(prefers-reduced-motion:reduce){
+  .rban-skel i{animation:none;}
+}
 .rban-say{margin-bottom:6px !important;font-size:14px !important;color:var(--ink) !important;}
 .rban-act{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px;}
 .rban-act .rban-off{margin-top:0;}
-
 /* Пояснение модели к строке каталога. Стоит на месте объекта испытания:
    пока идёт подбор, «почему подошло» важнее, чем «что испытывают». */
 .cat-why{display:block;margin-top:3px;font-weight:400;font-size:12.5px;
   line-height:1.45;color:var(--brass);}
-
 @media(max-width:1023px){
   .rnd-top{grid-template-columns:1fr;gap:26px;}
   .rask{max-width:640px;}
@@ -1593,7 +1546,9 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .cat-code{flex:none;font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;
   color:var(--ink-soft);width:66px;}
 .rqf-pick b{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--ink-soft);}
-@media(max-width:760px){ .cat-code{width:auto;} }
+@media(max-width:760px){
+  .cat-code{width:auto;}
+}
 /* Запасной путь из блока подбора: строкой, а не кнопкой — он не равен
    подбору по значимости и не должен спорить с ним за внимание. */
 .rask-alt{display:block;margin-top:14px;padding-top:12px;

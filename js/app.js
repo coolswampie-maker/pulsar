@@ -92,7 +92,7 @@
   function syncNav(){
     var path=(location.hash.replace('#','')||'/').split('?')[0];
     /* Сравниваем по первому сегменту: у разделов есть внутренние маршруты
-       (#/rnd/custom), и на них пункт меню тоже должен гореть. */
+       (#/rnd/request), и на них пункт меню тоже должен гореть. */
     var root='/'+path.split('/').filter(Boolean)[0];
     qsAll('[data-nav]').forEach(function(a){
       var nav=a.getAttribute('data-nav');
@@ -346,7 +346,7 @@
       '<p class="sub" style="margin:-14px 0 26px;max-width:64ch">Нужно не оборудование, '+
       'а результат? В разделе <a href="#/rnd">«Исследования»</a> — готовые методики '+
       'и испытания МГУ и ЦИСИС ФМТ, а под нестандартную задачу '+
-      '<a href="#/rnd/custom">поставим НИОКР</a>.</p>'+
+      '<a href="#/rnd/request">поставим НИОКР</a>.</p>'+
       '<div class="tiles">'+tiles.map(function(t){
         return '<a class="tile" href="#/catalog?type='+t[0]+'">'+img(P.getById(t[3]),'',t[1])+
           '<span class="tile-arrow">'+arrow+'</span>'+
@@ -2508,7 +2508,6 @@
      фасеты и подбор по описанию работают над одним и тем же списком.
 
        #/rnd          — каталог работ (поиск, фасеты, список)
-       #/rnd/custom   — НИОКР под нестандартную задачу
        #/rnd/request  — заявка
 
      Старые адреса переписываются на новые: ссылки могли уйти в письма
@@ -3122,7 +3121,6 @@
       ? '<button class="rban-off" type="button" id="aioff">Сбросить подбор</button>'
       : '<div class="rban-act">'
         + '<a class="btn btn-brass btn-sm" href="#/rnd/request">Описать задачу</a>'
-        + '<a class="btn btn-outline btn-sm" href="#/rnd/custom">Направления НИОКР →</a>'
         + '<button class="rban-off" type="button" id="aioff">Сбросить подбор</button></div>';
     return '<div class="rban'+(rndAi.n?'':' zero')+'">'+head+note+extra+out+'</div>';
   }
@@ -3132,12 +3130,18 @@
   function rndTailHtml(){
     /* Про бесплатную консультацию здесь ничего не сказано: такого
        обязательства нам никто не давал, а обещание, которого исполнитель
-       не знает, дороже пустого места. */
+       не знает, дороже пустого места.
+
+       Действие одно. Второй кнопкой стояли «Направления» — отдельная
+       страница про то же самое, что и ось «Отрасль» слева и категории
+       общего каталога. Ссылка на приборы и людей осталась там, где они
+       и лежат, — в каталоге. */
     return '<div class="rtail"><b>Готовой методики нет?</b>'
-      + '<p>Задачу можно поставить как НИОКР — направления, оборудование и научные '
-      + 'группы МГУ. Опишите, что нужно выяснить или разработать: оператор разберёт '
-      + 'заявку и предложит состав работ.</p>'
-      + '<div class="rtail-act"><a class="btn btn-outline btn-sm" href="#/rnd/custom">Направления →</a>'
+      + '<p>Задачу можно поставить как НИОКР: опишите, что нужно выяснить или '
+      + 'разработать, — оператор разберёт заявку и предложит состав работ. '
+      + 'Приборы, площадки и специалистов научных групп МГУ можно посмотреть '
+      + 'в <a href="#/catalog">общем каталоге</a>.</p>'
+      + '<div class="rtail-act">'
       + '<a class="btn btn-brass btn-sm" href="#/rnd/request">Описать задачу</a></div></div>';
   }
 
@@ -3262,8 +3266,10 @@
   /* Плашка заявки внизу экрана. Появляется только когда в заявке что-то
      есть — постоянная полоса на пустой заявке отнимает высоту ни за что. */
   function rndBarHtml(){
-    return '<div class="rbar" id="rbar"'+(rndPick.length?'':' hidden')+'>'
-      + '<span id="rbarn">'+(rndPick.length ? 'В заявке '
+    /* id не rbar: он занят строкой результатов в общем каталоге.
+       Одинаковые id на двух экранах рано или поздно встречаются. */
+    return '<div class="rbar" id="rndbar"'+(rndPick.length?'':' hidden')+'>'
+      + '<span id="rndbarn">'+(rndPick.length ? 'В заявке '
       + rndN(rndPick.length,'работа','работы','работ') : '')+'</span>'
       + '<a class="btn btn-brass btn-sm" href="#/rnd/request">Оформить →</a></div>';
   }
@@ -3336,72 +3342,6 @@
       + '</div></form></div></section>';
   }
 
-  /* ---------- НИОКР ----------
-     Карточки строятся из справочника ресурсов: число направлений и состав
-     оборудования не могут разойтись с каталогом. Поле «решаемые задачи» —
-     единственное, чего в справочнике нет: это обязательство подразделения,
-     а не характеристика прибора, и придумывать его нельзя. */
-  function rndCustomHtml(){
-    var R = P.getResources(), CATS = P.categories;
-    var by = {};
-    R.forEach(function(r){ if (r.category) (by[r.category] = by[r.category] || []).push(r); });
-    var TYPE = { equipment:'Приборы', room:'Площадки', specialist:'Специалисты', service:'Готовые исследования' };
-    var WORD = { equipment:['прибор','прибора','приборов'], room:['площадка','площадки','площадок'],
-                 specialist:['специалист','специалиста','специалистов'], service:['услуга','услуги','услуг'] };
-    var ORDER = ['equipment','room','specialist','service'];
-
-    /* Направления с заполненными задачами идут первыми. Иначе первый экран
-       страницы — четыре карточки подряд с «Перечень заполняет оператор», и
-       человек уходит, не долистав до тех трёх, где написано по делу. */
-    var cards = Object.keys(CATS).filter(function(k){ return by[k]; })
-      .sort(function(a,b){ return (RND.tasks[b]?1:0) - (RND.tasks[a]?1:0); })
-      .map(function(k){
-      var items = by[k];
-      var sum = ORDER.map(function(t){
-        var n = items.filter(function(r){ return r.type===t; }).length;
-        return n ? rndN(n, WORD[t][0], WORD[t][1], WORD[t][2]) : '';
-      }).filter(Boolean).join(' · ');
-      var groups = ORDER.map(function(t){
-        var list = items.filter(function(r){ return r.type===t; });
-        if (!list.length) return '';
-        return '<p class="cmp-h">'+TYPE[t]+' <i>'+list.length+'</i></p><div class="cmp-eq">'
-          + list.map(function(r){
-              /* Сколько работ каталога выполняется на этом приборе. Метка стоит
-                 только там, где связь заведена: у прибора без работ пусто, и это
-                 видно — значит, предложить по нему нечего. */
-              var n = RND.works.filter(function(w){ return w.eq && w.eq.indexOf(r.id)>=0; }).length;
-              return '<span class="cmp-chip">'+esc(r.title.split(' — ')[0])
-                + (n ? '<b>'+rndN(n,'работа','работы','работ')+'</b>' : '')+'</span>';
-            }).join('')+'</div>';
-      }).join('');
-      var top = ORDER.slice().sort(function(x,y){
-        return items.filter(function(r){ return r.type===y; }).length
-             - items.filter(function(r){ return r.type===x; }).length; })[0];
-      var tasks = RND.tasks[k];
-      return '<div class="cmp-card"><div class="cmp-name">'+esc(CATS[k])+'</div>'
-        + '<div class="cmp-unit">'+sum+'</div>'
-        + '<p class="cmp-h">Решаемые задачи</p>'
-        + (tasks ? '<ul class="cmp-tasks">'+tasks.map(function(t){ return '<li>'+esc(t)+'</li>'; }).join('')+'</ul>'
-                 : '<p class="cmp-empty">Перечень заполняет оператор.</p>')
-        + '<details class="cmp-more"><summary>Ресурсы направления</summary>'
-        + '<div class="cmp-more-in">'+groups+'</div></details>'
-        + '<div class="cmp-foot">'
-        + '<a class="cmp-open" href="#/catalog?type='+top+'&cat='+encodeURIComponent(k)+'">Открыть в каталоге →</a>'
-        + '<a class="btn btn-outline btn-sm" href="#/rnd/request">Обсудить задачу</a>'
-        + '</div></div>';
-    }).join('');
-
-    return '<section class="section"><div class="wrap">'
-      + '<button class="pane-back" type="button" onclick="location.hash=\'#/rnd\'">К каталогу</button>'
-      + '<div class="eyebrow">Компетенции</div>'
-      + '<h2 class="h-lg" style="margin-bottom:8px">НИОКР под нестандартную задачу</h2>'
-      + '<p class="sub" style="max-width:70ch;margin-bottom:24px">Если готового метода или испытания '
-      + 'в каталоге нет, задачу можно оформить как НИОКР. Ниже — направления, оборудование '
-      + 'и специалисты МГУ, которые могут быть задействованы в работе.</p>'
-      + '<div class="cmp-grid">'+cards+'</div>'
-      + '</div></section>';
-  }
-
   /* ---------- маршрут ---------- */
   function rndAdd(list, go){
     (list||[]).forEach(function(w){
@@ -3415,7 +3355,12 @@
   /* Старые адреса переписываем в новые до отрисовки. replaceState, а не
      pushState: иначе «Назад» возвращает на старый адрес, тот снова
      редиректит, и кнопка перестаёт работать. */
-  var RND_OLD = { catalog:'#/rnd', assist:'#/rnd', comp:'#/rnd/custom', order:'#/rnd/request' };
+  /* comp и custom вели на отдельную страницу направлений. Её больше нет:
+     направления стоят осью фильтра на самой странице каталога, а ресурсы
+     по каждому — в общем каталоге. Третье место про то же самое только
+     заставляло выбирать, куда идти. */
+  var RND_OLD = { catalog:'#/rnd', assist:'#/rnd', comp:'#/rnd/request',
+                  custom:'#/rnd/request', order:'#/rnd/request' };
   function viewRnd(sub){
     if (RND_OLD[sub]){
       var qs = (location.hash.split('?')[1]) || '';
@@ -3427,7 +3372,6 @@
       try { history.replaceState(null, '', to); } catch(e){ location.replace(to); return; }
       sub = to.indexOf('#/rnd/') === 0 ? to.slice(6).split('?')[0] : undefined;
     }
-    if (sub === 'custom') return render(rndCustomHtml(), null);
     if (sub === 'request') return render(rndRequestHtml(), rndMountRequest);
     rndFromHash();
     render(rndCatalogHtml(), rndMountCatalog);
@@ -3560,9 +3504,9 @@
   }
 
   function rndBarSync(){
-    var bar = el('rbar'); if (!bar) return;
+    var bar = el('rndbar'); if (!bar) return;
     bar.hidden = !rndPick.length;
-    var s = el('rbarn');
+    var s = el('rndbarn');
     if (s) s.textContent = rndPick.length
       ? 'В заявке ' + rndN(rndPick.length,'работа','работы','работ') : '';
   }
