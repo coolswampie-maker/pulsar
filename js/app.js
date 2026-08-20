@@ -465,6 +465,7 @@
           '<button class="clearf" id="fclear">Сбросить фильтры</button>'+
         '</aside>'+
         '<div>'+
+          '<div id="cattasks"></div>'+
           '<div class="result-bar" id="rbar"></div>'+
           '<div class="res-grid" id="rgrid"></div>'+
         '</div>'+
@@ -672,6 +673,7 @@
     if(catState.sort==='price-asc') list.sort(function(a,b){ return a.priceValue-b.priceValue; });
     if(catState.sort==='price-desc') list.sort(function(a,b){ return b.priceValue-a.priceValue; });
     var grid=el('rgrid'), bar=el('rbar'); if(!grid) return;
+    drawCatTasks();
     bar.innerHTML='Найдено: <strong style="color:var(--navy)">'+list.length+'</strong>'+
       (q ? ' <span class="cline-meta">· по всему каталогу</span>' : '');
     grid.innerHTML = list.length ? list.map(resCard).join('')
@@ -680,6 +682,25 @@
         noMatchHtml('Нужного нет в каталоге?')+'</div>';
     // кнопка заявки живёт и в пустом результате обычного поиска
     if(!list.length) bindPick(q);
+  }
+
+  /* Какие задачи берёт направление. Показывается только при выбранном
+     направлении и только там, где перечень действительно есть: это
+     обязательство подразделения, а не характеристика прибора, и прочерк
+     вместо него был бы обещанием, которого никто не давал.
+
+     Стоит над списком приборов, а не отдельной страницей: человек уже
+     выбрал направление и смотрит на его ресурсы — здесь и уместно
+     сказать, с чем в него приходят. */
+  function drawCatTasks(){
+    var box=el('cattasks'); if(!box) return;
+    var t=(window.PULSAR.rnd&&window.PULSAR.rnd.tasks||{})[catState.cat];
+    if(!catState.cat || !t || !t.length){ box.innerHTML=''; return; }
+    box.innerHTML='<div class="cattasks"><p class="cattasks-h">С чем приходят в направление '+
+      '«'+esc(P.categories[catState.cat]||catState.cat)+'»</p><ul>'+
+      t.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>'+
+      '<p class="cattasks-n">Задача шире перечня — <a href="#/rnd/request">опишите её</a>, '+
+      'оператор предложит состав работ.</p></div>';
   }
 
   /* ==========================================================
