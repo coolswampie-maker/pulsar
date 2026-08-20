@@ -368,16 +368,19 @@
         '<div class="figure-cap">Кластер «Ломоносов» · ИНТЦ МГУ «Воробьёвы горы»</div></div>'+
     '</div></div></section>'+
 
-    /* ---- КАК РАБОТАЕМ (компактно) ---- */
-    '<section class="section section-invert"><div class="wrap">'+
-      // надзаголовок «Как работаем» говорил ровно то же, что заголовок под ним
-      '<h2 class="h-lg" style="margin-bottom:34px">Как проходит бронирование</h2>'+
-      '<div class="steps">'+[
-        ['Найдите нужное','Каталог приборов, помещений, специалистов и услуг'],
-        ['Соберите заявку','Выберите дату и время — специалист добавится сам, если он нужен'],
-        ['Дождитесь подтверждения','Оператор согласует бронирование и договор'],
-        ['Работайте на объекте','Инструктаж, пропуск и дежурный специалист на площадке']
-      ].map(function(s){ return stepHtml(s, 3); }).join('')+'</div>'+
+    /* ---- КАК РАБОТАЕМ ----
+       Шаги отсюда убраны. Они были, и на отдельной странице «Как проходит
+       бронирование» стояли другие четыре: там про договор и инструктаж,
+       здесь про выбор дат. Два ответа на один вопрос, оба на сайте —
+       человек не знает, какому верить. Порядок один, и он на своей
+       странице; здесь ссылка. */
+    '<section class="section section-invert"><div class="wrap how-line">'+
+      '<div>'+
+        '<h2 class="h-lg" style="margin-bottom:8px">Как проходит бронирование</h2>'+
+        '<p style="color:rgba(255,255,255,.72);max-width:56ch;margin:0">Заявка, договор, '+
+        'инструктаж, работа на объекте — четыре шага, все через одного оператора.</p>'+
+      '</div>'+
+      '<a class="btn btn-brass" href="#/how">Порядок работы →</a>'+
     '</div></section>'+
 
     /* ---- РЕЗИДЕНТАМ (лёгкая полоса) ---- */
@@ -2557,7 +2560,11 @@
 
   /* Состояние каталога. Целиком выводится из адреса и целиком в него
      пишется — второго источника правды здесь нет. */
-  var rndState = { q:'', ask:'', f:[], g:[], std:[], lab:[], sort:'g' };
+  var rndState = { q:'', ask:'', f:[], g:[], std:[], lab:[], sort:'g', page:1 };
+  /* Двадцать строк — примерно экран на ноутбуке и не бесконечная лента
+     на телефоне. Все семьдесят шесть сразу — пятнадцать экранов прокрутки,
+     в которых теряется и хвост каталога, и приборная база под ним. */
+  var RND_PER = 20;
   /* Результат подбора по описанию: {q, rank, why, extra, mode, reply, n}.
      mode приходит с сервера и решает, как подписать выдачу — «подобрал ИИ»
      или «нашлось поиском по словам». Врать здесь нельзя: человек примет
@@ -2693,6 +2700,7 @@
         p.push(a.p + '=' + rndState[a.k].map(encodeURIComponent).join(','));
     });
     if (rndState.sort !== 'g') p.push('sort=' + rndState.sort);
+    if (rndState.page > 1) p.push('page=' + rndState.page);
     return '#/rnd' + (p.length ? '?' + p.join('&') : '');
   }
   /* Смена фасета — replaceState: перебор фильтров не должен превращать
@@ -2709,6 +2717,7 @@
     rndState.q = o.q || '';
     rndState.ask = o.ask || '';
     rndState.sort = o.sort === 'name' ? 'name' : 'g';
+    rndState.page = Math.max(1, parseInt(o.page, 10) || 1);
     RND_AX.forEach(function(a){
       rndState[a.k] = o[a.p] ? String(o[a.p]).split(',').filter(Boolean) : [];
     });
@@ -3196,9 +3205,36 @@
     return '<div class="cat-none"><b>По вашим условиям работ нет</b>'+why+'</div>'+rndTailHtml();
   }
 
+  function rndPages(){ return Math.max(1, Math.ceil(rndResult().length / RND_PER)); }
+
+  /* Номера страниц с многоточиями: при четырёх страницах показываем все,
+     при большем числе — первую, последнюю и соседей текущей. */
+  function rndPagerHtml(){
+    var total = rndPages();
+    if (total < 2) return '';
+    var cur = Math.min(rndState.page, total), out = [], last = 0;
+    function btn(n){
+      return '<button class="pg-n'+(n===cur?' on':'')+'" type="button" data-pg="'+n+'"'
+        + (n===cur?' aria-current="page"':'')+'>'+n+'</button>';
+    }
+    for (var i=1;i<=total;i++){
+      if (i===1 || i===total || Math.abs(i-cur)<=1){
+        if (last && i-last > 1) out.push('<span class="pg-gap">…</span>');
+        out.push(btn(i)); last = i;
+      }
+    }
+    return '<nav class="pg" aria-label="Страницы каталога">'
+      + '<button class="pg-a" type="button" data-pg="'+(cur-1)+'"'+(cur<=1?' disabled':'')+'>← Назад</button>'
+      + '<div class="pg-nums">'+out.join('')+'</div>'
+      + '<button class="pg-a" type="button" data-pg="'+(cur+1)+'"'+(cur>=total?' disabled':'')+'>Вперёд →</button>'
+      + '</nav>';
+  }
+
   function rndListHtml(){
-    var shown = rndResult(), terms = rndTerms();
-    if (!shown.length) return rndZeroHtml();
+    var all = rndResult(), terms = rndTerms();
+    if (!all.length) return rndZeroHtml();
+    var total = rndPages(), cur = Math.min(rndState.page, total);
+    var shown = all.slice((cur-1)*RND_PER, cur*RND_PER);
     /* Заголовки вида исследования — только в порядке по умолчанию: после
        сортировки по релевантности или по алфавиту они разрежут список
        на куски по одной строке и объяснять ничего не будут. */
@@ -3208,14 +3244,19 @@
       if (heads && it.g !== last){ last = it.g; h = '<div class="cat-h">'+esc(it.g)+'</div>'; }
       return h + rndRow(it, terms);
     }).join('');
-    return '<div class="cat-list">'+list+'</div>';
+    return '<div class="cat-list">'+list+'</div>' + rndPagerHtml();
   }
 
   function rndStatHtml(){
     var n = rndResult().length;
     var acc = rndState.f.length === 1 ? RND_ACC[rndState.f[0]] : '';
+    /* Со страницами «найдено: 76» без указания, что видно из них, читается
+       как поломка: на экране двадцать строк, а обещано семьдесят шесть. */
+    var cur = Math.min(rndState.page, rndPages());
+    var from = (cur-1)*RND_PER + 1, to = Math.min(cur*RND_PER, n);
+    var range = n > RND_PER ? '<em class="rstat-r">показаны '+from+'–'+to+'</em>' : '';
     return '<div class="rstat"><b>'+(n===RND.works.length ? 'Все '+n+' работ'
-        : 'Найдено: '+n)+'</b>'
+        : 'Найдено: '+n)+'</b>'+range
       + (acc ? '<em class="cat-acc">Область аккредитации: '+esc(acc)+'</em>' : '')
       /* Пока подбор активен, порядок задаёт он, и выпадающий список с другим
          значением врал бы. Показываем действующий порядок словами. */
@@ -3410,7 +3451,25 @@
     var btn = el('qfilters'), f = btn && btn.querySelector('i');
     if (f){ f.textContent = rndSelCount(); f.hidden = !rndSelCount(); }
   }
-  function rndRedraw(push){ rndDrawBody(); rndDrawFac(); rndSync(push); }
+  /* Любое изменение условий возвращает на первую страницу: остаться на
+     четвёртой, когда после фильтра работ осталось двенадцать, значит
+     показать пустоту. Перелистывание — единственное, что страницу
+     сохраняет, поэтому оно и просит keepPage. */
+  function rndRedraw(push, keepPage){
+    if (!keepPage) rndState.page = 1;
+    rndDrawBody(); rndDrawFac(); rndSync(push);
+  }
+  function rndGoPage(n){
+    var total = rndPages();
+    n = Math.min(Math.max(1, n), total);
+    if (n === rndState.page) return;
+    rndState.page = n;
+    rndRedraw(false, true);
+    /* Возвращаем к началу списка, а не к началу страницы: шапка с полем
+       и фасеты остаются на месте, меняется только список. */
+    var b = el('catbody');
+    if (b) b.scrollIntoView({ block:'start' });
+  }
   /* Поставить и снять значение оси — одна операция: чип в панели, крестик
      в строке «Выбрано» и кнопка в нулевой выдаче делают одно и то же. */
   function rndAxToggle(k, v){
@@ -3465,6 +3524,8 @@
       fold.parentNode.classList.toggle('fold');
       return;
     }
+    var pg = t.closest('[data-pg]');
+    if (pg){ if (!pg.disabled) rndGoPage(parseInt(pg.dataset.pg, 10)); return; }
     var ax = t.closest('[data-ax][data-v]');
     if (ax){ if (!ax.hasAttribute('aria-disabled')) rndAxToggle(ax.dataset.ax, ax.dataset.v); return; }
     if (t.closest('#aioff')){ rndAskReset(); return; }

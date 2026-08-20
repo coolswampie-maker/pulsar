@@ -1567,3 +1567,29 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
 .cattasks li::before{content:"—";position:absolute;left:0;color:var(--brass);}
 .cattasks-n{margin:10px 0 0;font-size:12.5px;color:var(--ink-soft);}
 .cattasks-n a{color:var(--navy);border-bottom:1px solid var(--brass-soft);}
+
+/* Строка «как проходит бронирование» на главной: текст слева, переход
+   справа. Раньше здесь стояли четыре шага, противоречившие странице
+   «Как проходит бронирование». */
+.how-line{display:flex;align-items:center;justify-content:space-between;gap:28px;
+  flex-wrap:wrap;}
+@media(max-width:680px){ .how-line .btn{width:100%;justify-content:center;} }
+
+/* Страницы каталога работ */
+.pg{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  margin-top:16px;flex-wrap:wrap;}
+.pg-nums{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.pg-a,.pg-n{border:1px solid var(--line);background:#fff;border-radius:var(--r);
+  font-family:var(--sans);font-size:13.5px;color:var(--ink);cursor:pointer;
+  transition:.14s;padding:8px 13px;}
+.pg-n{min-width:36px;padding:8px 9px;text-align:center;font-variant-numeric:tabular-nums;}
+.pg-a:hover:not(:disabled),.pg-n:hover{border-color:var(--navy);color:var(--navy);}
+.pg-a:disabled{color:var(--ink-soft);border-color:var(--line-2);cursor:default;opacity:.6;}
+.pg-n.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600;}
+.pg-gap{color:var(--ink-soft);padding:0 3px;}
+.rstat-r{font-style:normal;font-size:12.5px;color:var(--ink-soft);}
+@media(max-width:680px){
+  .pg{gap:10px;}
+  .pg-a{flex:1 1 auto;text-align:center;}
+  .pg-nums{order:-1;flex:1 0 100%;justify-content:center;}
+}
