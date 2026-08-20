@@ -3350,7 +3350,12 @@
                  specialist:['специалист','специалиста','специалистов'], service:['услуга','услуги','услуг'] };
     var ORDER = ['equipment','room','specialist','service'];
 
-    var cards = Object.keys(CATS).filter(function(k){ return by[k]; }).map(function(k){
+    /* Направления с заполненными задачами идут первыми. Иначе первый экран
+       страницы — четыре карточки подряд с «Перечень заполняет оператор», и
+       человек уходит, не долистав до тех трёх, где написано по делу. */
+    var cards = Object.keys(CATS).filter(function(k){ return by[k]; })
+      .sort(function(a,b){ return (RND.tasks[b]?1:0) - (RND.tasks[a]?1:0); })
+      .map(function(k){
       var items = by[k];
       var sum = ORDER.map(function(t){
         var n = items.filter(function(r){ return r.type===t; }).length;
