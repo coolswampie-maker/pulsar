@@ -380,7 +380,7 @@
         '<p style="color:rgba(255,255,255,.72);max-width:56ch;margin:0">Заявка, договор, '+
         'инструктаж, работа на объекте — четыре шага, все через одного оператора.</p>'+
       '</div>'+
-      '<a class="btn btn-brass" href="#/how">Порядок работы →</a>'+
+      '<a class="btn btn-brass" href="#/about?to=how">Порядок работы →</a>'+
     '</div></section>'+
 
     /* ---- РЕЗИДЕНТАМ (лёгкая полоса) ---- */
@@ -1282,7 +1282,14 @@
     '</div></div></section>');
   }
 
-  function viewAbout(){
+  /* Порядок бронирования живёт здесь, а не отдельной страницей: это часть
+     ответа на вопрос «что такое ПУЛЬСАР», и человек, который открыл «О
+     платформе», как раз его и задаёт. Отдельная страница /how была никак
+     не связана с меню и попасть на неё было неоткуда.
+
+     query.to === 'how' — переход прямо к порядку работы: с главной и из
+     подвала ведут именно туда, а не в начало страницы. */
+  function viewAbout(query){
     render(pageHead('О платформе','Чем занимается ПУЛЬСАР','Единый оператор доступа к научной инфраструктуре МГУ и ИНТЦ МГУ «Воробьёвы горы».')+
     '<section class="section"><div class="wrap"><div class="grid-2">'+
       '<div class="prose">'+
@@ -1292,7 +1299,26 @@
       '</div>'+
       '<div class="figure">'+img({img:'about',title:'ИНТЦ МГУ'},'','ИНТЦ МГУ')+'<div class="figure-cap">ИНТЦ МГУ «Воробьёвы горы» · кластер «Ломоносов»</div></div>'+
     '</div></div></section>'+
-    '<section class="section" style="background:#fff;border-top:1px solid var(--line)"><div class="wrap">'+
+
+    /* ---- ПОРЯДОК РАБОТЫ ---- */
+    '<section class="section" id="howsteps" style="background:#fff;border-top:1px solid var(--line)"><div class="wrap">'+
+      '<div class="eyebrow">Как работаем</div>'+
+      '<h2 class="h-lg" style="margin-bottom:10px">Как проходит бронирование</h2>'+
+      '<p class="sub" style="max-width:62ch;margin-bottom:32px">От заявки до работы на объекте — '+
+      'четыре шага, все через одного оператора.</p>'+
+      '<div class="steps">'+[
+        ['Оставьте заявку','Соберите ресурсы в каталоге и отправьте бронирование — или опишите задачу, мы подберём ресурс'],
+        ['Подпишем договор','Типовой договор аренды или технологического хостинга — подготовим и согласуем'],
+        ['Пройдите инструктаж','Вводный инструктаж по объекту, безопасности и регламентам чистых зон'],
+        ['Работайте на объекте','На площадке дежурит специалист. По итогам работ выдаём отчёт об использовании оборудования']
+      ].map(function(x){ return stepHtml(x, 3); }).join('')+'</div>'+
+      '<p class="how-note">Сложные приборы бронируются вместе со специалистом автоматически — '+
+      'отдельно искать оператора не нужно. Готовые исследования снимают работу с прибором '+
+      'целиком: вы передаёте образец и получаете протокол.</p>'+
+      '<div style="margin-top:26px"><a class="btn btn-brass" href="#/catalog">Перейти в каталог</a></div>'+
+    '</div></section>'+
+
+    '<section class="section" style="border-top:1px solid var(--line)"><div class="wrap">'+
       '<div class="eyebrow">Резидентам ИНТЦ</div><h2 class="h-lg" style="margin-bottom:32px">Что получают резиденты ИНТЦ МГУ «Воробьёвы горы»</h2>'+
       '<div class="cards-3">'+[
         ['Налоги и патенты','Консультации по налогам и регистрация прав на разработки'],
@@ -1303,22 +1329,10 @@
         ['Договоры','Подготовка договоров и NDA, техзадания на НИР, согласование с МГУ и ИНТЦ']
       ].map(function(c,i){ return '<div class="card-flat"><div class="card-num">0'+(i+1)+'</div><h3>'+c[0]+'</h3><p>'+c[1]+'</p></div>'; }).join('')+'</div>'+
     '</div></section>');
-  }
-  function viewHow(){
-    render(pageHead('Как работаем','Как проходит бронирование','От заявки до работы на объекте — четыре шага, все через одного оператора.')+
-    '<section class="section"><div class="wrap">'+
-      '<div class="steps">'+[
-        ['Оставьте заявку','Соберите ресурсы в каталоге и отправьте бронирование — или опишите задачу, мы подберём ресурс'],
-        ['Подпишем договор','Типовой договор аренды или технологического хостинга — подготовим и согласуем'],
-        ['Пройдите инструктаж','Вводный инструктаж по объекту, безопасности и регламентам чистых зон'],
-        ['Работайте на объекте','На площадке дежурит специалист. По итогам работ выдаём отчёт об использовании оборудования']
-      ].map(function(s){ return stepHtml(s, 2); }).join('')+'</div>'+
-      '<div style="margin-top:44px;text-align:center"><a class="btn btn-brass" href="#/catalog">Перейти в каталог</a></div>'+
-    '</div></section>'+
-    '<section class="section" style="background:var(--navy-deep)"><div class="wrap text-center">'+
-      '<h2 class="h-lg" style="color:#fff;margin-bottom:12px">Бронирование по модели «с оператором»</h2>'+
-      '<p style="color:rgba(255,255,255,.72);max-width:640px;margin:0 auto">Сложные приборы бронируются вместе со специалистом автоматически — вам не нужно отдельно искать оператора. Готовые исследования снимают работу с прибором целиком: вы передаёте образец и получаете протокол.</p>'+
-    '</div></section>');
+    if (query && query.to === 'how'){
+      var t = el('howsteps');
+      if (t) t.scrollIntoView({ block:'start' });
+    }
   }
   function viewContacts(){
     var items=[
@@ -3637,8 +3651,10 @@
         return viewCabinet();
       case 'admin': return viewAdmin();
       case 'privacy': return viewPrivacy();
-      case 'about': return viewAbout();
-      case 'how': return viewHow();
+      case 'about': return viewAbout(query);
+      /* Старый адрес порядка работы. Оставлен рабочим: ссылка могла быть
+         в закладках, а упереться в пустую страницу человеку неоткуда понять. */
+      case 'how': location.replace('#/about?to=how'); return;
       case 'contacts': return viewContacts();
       default: return viewHome();
     }

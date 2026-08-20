@@ -1593,3 +1593,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible,
   .pg-a{flex:1 1 auto;text-align:center;}
   .pg-nums{order:-1;flex:1 0 100%;justify-content:center;}
 }
+/* Примечание под шагами бронирования */
+.how-note{margin:26px 0 0;padding:16px 18px;border-left:3px solid var(--brass-soft);
+  background:var(--brass-tint);border-radius:0 var(--r) var(--r) 0;
+  font-size:13.5px;line-height:1.6;color:var(--ink);max-width:76ch;}
